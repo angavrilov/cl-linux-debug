@@ -13,6 +13,9 @@
   :components ((:module
                 "src"
                 :components ((:file "package")
+                             (:file "utils" :depends-on ("package"))
+                             (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))
+                             (:file "bea-engine" :depends-on ("bea-engine-grovel"))
                              (cffi-grovel:grovel-file "ptrace-grovel" :depends-on ("package"))
                              (:file "ptrace" :depends-on ("package" "ptrace-grovel"))))))
 
