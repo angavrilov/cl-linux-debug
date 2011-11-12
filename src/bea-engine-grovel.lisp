@@ -238,7 +238,7 @@
   ((:AT-SYNTAX "ATSyntax"))
   ((:PREFIXED-NUMERAL "PrefixedNumeral"))
   ((:SUFFIXED-NUMERAL "SuffixedNumeral"))
-  ((:ShowSegmentRegs "ShowSegmentRegs")))
+  ((:SHOW-SEGMENT-REGS "ShowSegmentRegs")))
 
 (cstruct Disasm "DISASM"
   (eip "EIP" :type :pointer)

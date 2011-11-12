@@ -17,16 +17,16 @@
 (defcfun "Disasm" :int
   (dstruct :pointer))
 
-(def (structure e) bea-argument
+(def (structure e) x86-argument
   mnemonic size access-write?)
 
-(def (structure e) (bea-argument-register (:include bea-argument))
+(def (structure e) (x86-argument-register (:include x86-argument))
   id high?)
 
-(def (structure e) (bea-argument-constant (:include bea-argument))
+(def (structure e) (x86-argument-constant (:include x86-argument))
   relative?)
 
-(def (structure e) (bea-argument-memory (:include bea-argument))
+(def (structure e) (x86-argument-memory (:include x86-argument))
   base-reg index-reg scale displacement segment-reg)
 
 (defun rename-bea-register (reg-id reg-type)
@@ -62,7 +62,7 @@
       (ecase (foreign-enum-keyword 'arg-type-mode (logand arg-type (lognot #x0FFFFFFF)))
         (:NO_ARGUMENT NIL)
         (:REGISTER_TYPE
-         (make-bea-argument-register
+         (make-x86-argument-register
           :mnemonic mnemonic :size arg-size :access-write? (eq access-mode :write)
           :id (decode-register-type arg-type)
           :high? (and (= arg-size 8) (eq arg-position :high))))
@@ -70,18 +70,18 @@
          (with-foreign-slots ((base-register index-register scale displacement)
                               memory MemoryType)
            (flet ((no-none (x) (if (eq x :none) nil x)))
-             (make-bea-argument-memory
+             (make-x86-argument-memory
               :mnemonic mnemonic :size arg-size :access-write? (eq access-mode :write)
               :base-reg (no-none base-register) :index-reg (no-none index-register)
               :scale scale :displacement displacement
               :segment-reg segment-reg))))
         (:CONSTANT_TYPE
-         (make-bea-argument-constant
+         (make-x86-argument-constant
           :mnemonic mnemonic :size arg-size :access-write? nil
           :relative? (eq (foreign-enum-keyword 'arg-type-mode (logand arg-type #xFFFFFFF))
                          :RELATIVE_MODE)))))))
 
-(def (structure e) bea-instruction
+(def (structure e) x86-instruction
   (length 0 :type uint8)
   (text nil)
   ;; General information
@@ -135,7 +135,7 @@
              (function (foreign-enum-keyword 'category-function
                                              (logand category #x0000FFFF)))
              ((:values prefixes rex-prefix) (decode-bea-prefixes prefix)))
-        (make-bea-instruction :length length
+        (make-x86-instruction :length length
                               :text (foreign-string-to-lisp instr-text :max-chars 64)
                               :category-subset subset :category-function function
                               :opcode opcode
@@ -152,7 +152,7 @@
                               :argument3 (decode-bea-argument argument3)
                               :prefixes prefixes :rex-prefix rex-prefix)))))
 
-(def (function e) bea-disassemble (byte-vector offset &key option-list end real-eip arch (errorp t))
+(def (function e) x86-disassemble (byte-vector offset &key option-list end real-eip arch (errorp t))
   (declare (type (vector uint8) byte-vector))
   (with-foreign-objects ((disasm-obj 'disasm)
                          (buffer :uint8 16))
