@@ -21,5 +21,6 @@
                              (:file "ptrace" :depends-on ("package" "utils" "ptrace-grovel"))
                              (:file "proc" :depends-on ("package" "utils"))
                              (:file "tasks" :depends-on ("package" "utils"))
-                             (:file "debug-process" :depends-on ("package" "ptrace" "proc"))))))
+                             (:file "classes" :depends-on ("package" "utils" "tasks"))
+                             (:file "debug-process" :depends-on ("package" "classes" "ptrace" "proc"))))))
 

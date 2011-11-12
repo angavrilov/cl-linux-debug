@@ -19,8 +19,8 @@
    (exit-unwinds nil :accessor t)
    (cur-wait-queue nil :accessor t)
    (held-locks nil :accessor t)
-   (return-values nil :reader t)
-   (signalled-condition nil :reader t)
+   (return-values :reader t)
+   (signalled-condition :reader t)
    (finish-condition (make-condition-variable
                       :name "DEBUG-TASK FINISH CONDITION") :reader t)
    (finish-wait-queue (make-instance 'debug-task-wait-queue
@@ -176,9 +176,10 @@
   (with-unique-names (unwind)
     `(let ((,unwind (lambda () ,@unwinds)))
        (add-task-unwind ,unwind)
-       ,form
-       (remove-task-unwind ,unwind)
-       (funcall ,unwind))))
+       (prog1
+           ,form
+        (remove-task-unwind ,unwind)
+        (funcall ,unwind)))))
 
 (def class* debug-task-r/w-lock ()
   ((name nil :reader t)
@@ -217,7 +218,8 @@
 
 (def-debug-task lock-r/w-lock (lock mode)
   (awhen (task-holds-lock? lock *cur-debug-task*)
-    (if (eq it mode)
+    (if (or (eq it mode)
+            (and (eq it :write) (eq mode :read)))
         (return-from lock-r/w-lock :already-locked)
         (error "Cannot re-lock ~S as ~S: already ~S"
                lock mode it)))

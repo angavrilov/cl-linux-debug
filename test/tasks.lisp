@@ -110,7 +110,7 @@
                      (setf task3-pos 1)
                      (cl-linux-debug::wait-on-queue barrier)
                      (with-r/w-lock-held (lock :write)
-                       (with-r/w-lock-held (lock :write)
+                       (with-r/w-lock-held (lock :read)
                          (setf task3-pos 4)
                          (cl-linux-debug::wait-on-queue barrier))
                        (setf task3-pos 5)

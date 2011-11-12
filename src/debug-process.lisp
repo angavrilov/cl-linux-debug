@@ -2,99 +2,69 @@
 
 (in-package :cl-linux-debug)
 
-(def (class* e) debug-thread-state ()
-  ((thread :reader t)))
+;; Thread and scheduler
 
-(def (class* e) debug-thread-state-running (debug-thread-state)
-  ())
+(defvar *debug-process-lock* (make-recursive-lock "DEBUG-PROCESS LOCK"))
+(defvar *debug-worker-thread* nil)
+(defvar *debug-event-channel* (make-instance 'unbounded-channel))
+(defvar *debug-task-scheduler* (make-instance 'debug-task-scheduler :name "DEBUG"))
 
-(def (class* e) debug-thread-state-dead (debug-thread-state)
-  ())
+(defvar *debugged-processes* nil)
 
-(def (class* e) debug-thread-state-exited (debug-thread-state-dead)
-  ((return-code :reader t)))
-
-(def (class* e) debug-thread-state-killed (debug-thread-state-dead)
-  ((signal-id :reader t)
-   (dumped? :reader t)))
-
-(def (class* e) debug-thread-state-stopped (debug-thread-state)
-  ())
-
-(def (class* e) debug-thread-state-paused (debug-thread-state-stopped)
-  ())
-
-(def (class* e) debug-thread-state-trapped (debug-thread-state-stopped)
-  ((ptrace-event :reader-t)))
-
-(def (class* e) debug-thread-state-forked (debug-thread-state-trapped)
-  ((new-child-pid :reader t)
-   (thread :reader t)))
-
-(def (class* e) debug-thread-state-about-to-exec (debug-thread-state-trapped)
-  ())
-
-(def (class* e) debug-thread-state-signalled (debug-thread-state-stopped)
-  ((signal-id :reader t)))
-
-(def (class* e) debug-thread ()
-  ((process :reader t)
-   (thread-id :reader t)
-   (confirmed-state :reader t)
-   (pending-state :reader t)
-   (stop-pending? :accessor t)))
-
-(def (class* e) debug-process ()
-  ((process-id :reader t)
-   (lock (make-recursive-lock "DEBUG-PROCESS LOCK") :reader t)
-   (worker-thread :reader t)
-   (event-channel (make-instance 'unbounded-channel) :reader t)
-   (threads nil :reader t)
-   (exclusive-task nil :reader t)))
-
-(defgeneric is-running? (obj)
-  (:method ((obj debug-thread))
-    (typep (confirmed-state-of obj) 'debug-thread-state-running))
-  (:method ((obj debug-process))
-    (some #'is-running? (threads-of obj))))
-
-(defparameter *debugged-process* nil)
-(defparameter *in-debug-process-lock* nil)
-
-(defun in-debugger-thread? (process)
-  (eq process *debugged-process*))
-
-(defmacro with-debug-process-lock ((process) &body code)
-  `(with-recursive-lock-held ((lock-of ,process))
-     (let ((*in-debug-process-lock* t))
-       ,@code)))
-
-(defun debug-worker-thread (process)
+(defun debug-worker-thread ()
   "The thread that executes all ptrace requests for the debugger."
-  (let ((*debugged-process* process))
-    (catch 'quit-worker-thread
-      (loop
-         (let ((message (recv (event-channel-of process))))
-           (with-debug-process-lock (process)
-             (with-simple-restart (abort "Abort executing ~S" message)
-               (apply (first message) (rest message))))
-           (format t "Handled ~S~%" message))))))
+  (catch 'quit-worker-thread
+    (loop
+       (let ((message (recv *debug-event-channel*)))
+         (with-recursive-lock-held (*debug-process-lock*)
+           (with-simple-restart (abort "Abort executing ~S" message)
+             (apply (first message) (rest message))))
+         (format t "Handled ~S~%" message)))))
 
-(defun %submit-debug-command (process command &rest args)
-  (send (event-channel-of process) (list* command args)))
-
-(def (function e) start-debug (process-id)
-  (let ((process (make-instance 'debug-process
-                                :process-id process-id)))
-    (setf (slot-value process 'worker-thread)
-          (make-thread (lambda () (debug-worker-thread process))
+(defun %submit-debug-command (command &rest args)
+  (when (null *debug-worker-thread*)
+    (setf *debug-worker-thread*
+          (make-thread #'debug-worker-thread
                        :name "DEBUG-PROCESS WORKER"
                        :initial-bindings `((*standard-output* . ,*standard-output*)
-                                           (*error-output* . ,*error-output*))))
-    (%submit-debug-command process 'attach-to-process)
-    process))
+                                           (*error-output* . ,*error-output*)))))
+  (send *debug-event-channel* (list* command args)))
 
-(defun %register-debug-chld-handler (process thread)
+(defun run-scheduled-debug-tasks ()
+  (run-scheduled-tasks *debug-task-scheduler*)
+  (when (has-scheduled-tasks? *debug-task-scheduler*)
+    (%submit-debug-command #'run-scheduled-debug-tasks)))
+
+(defun run-new-debug-task (task)
+  (initial-schedule-task *debug-task-scheduler* task)
+  (run-scheduled-debug-tasks))
+
+(defun spawn-debug-task (command &rest args)
+  (let ((task (make-task (list* command args))))
+    (%submit-debug-command #'run-new-debug-task task)
+    task))
+
+(defun/cc wait-debug-task (task &key (on-abort nil on-abortp))
+  (if (in-task-context?)
+      (loop while (not (task-finished? task))
+         do (wait-on-queue (finish-wait-queue-of task)))
+      (without-call/cc
+        (with-recursive-lock-held (*debug-process-lock*)
+          (loop while (not (task-finished? task))
+             do (condition-wait (finish-condition-of task) *debug-process-lock*)))))
+  (if (slot-boundp task 'signalled-condition)
+      (let ((scond (signalled-condition-of task)))
+        (cond (on-abortp (values on-abort scond))
+              (scond     (signal scond))
+              (t         (error "Task aborted: ~A" (name-of task)))))
+      (values-list (return-values-of task))))
+
+(defun/cc call-debug-task (command &rest args)
+  (wait-debug-task (apply #'spawn-debug-task command args)))
+
+;; SIGCHLD event dispatch
+
+(defun %register-debug-chld-handler (thread)
   (flet ((thread-chld-handler (pid status code)
            (unless (= pid (thread-id-of thread))
              (format t "PID mismatch: ~A != ~A" pid (thread-id-of thread)))
@@ -125,93 +95,171 @@
                                        :thread thread :signal-id status)))))
              (when (typep it 'debug-thread-state-dead)
                (set-sigchld-handler pid nil))
-             (with-debug-process-lock (process)
+             (with-recursive-lock-held (*debug-process-lock*)
                (setf (slot-value thread 'pending-state) it)
-               (%submit-debug-command process 'process-thread-state-change thread it)))))
+               (%submit-debug-command 'process-thread-state-change thread it)))))
     (set-sigchld-handler (thread-id-of thread) #'thread-chld-handler)))
 
 (defun %add-debug-thread (process thread-id &key initial-state)
+  (assert (not (member thread-id (threads-of process) :key #'thread-id-of)))
   (let* ((thread (make-instance 'debug-thread
                                 :process process :thread-id thread-id))
-         (state (make-instance (or initial-state 'debug-thread-state-stopped) :thread thread)))
+         (state (make-instance (or initial-state 'debug-thread-state-stopped)
+                               :thread thread)))
     (setf (slot-value thread 'confirmed-state) state
           (slot-value thread 'pending-state) state)
-    (with-debug-process-lock (process)
-      (assert (not (member thread-id (threads-of process) :key #'thread-id-of)))
-      (%register-debug-chld-handler process thread)
-      (push thread (slot-value process 'threads))
-      thread)))
+    (%register-debug-chld-handler thread)
+    (push thread (slot-value process 'threads))
+    thread))
+
+(defun %set-thread-state (thread state-type)
+  (with-slots (confirmed-state pending-state) thread
+    (let ((new-state (make-instance state-type :thread thread)))
+      (setf confirmed-state new-state))))
 
 (defun %resume-thread (thread &key deliver-signal)
-  (with-slots (confirmed-state pending-state) thread
-    (assert (and (in-debugger-thread? (process-of thread))
-                 (typep confirmed-state 'debug-thread-state-stopped)))
+  (with-slots (confirmed-state) thread
+    (assert (typep confirmed-state 'debug-thread-state-stopped))
     (when (ptrace-continue (thread-id-of thread)
                            (cond ((integerp deliver-signal) deliver-signal)
                                  ((and deliver-signal
                                        (typep confirmed-state 'debug-thread-state-signalled))
                                   (signal-id-of confirmed-state))
                                  (t 0)))
-      (let ((new-state (make-instance 'debug-thread-state-running :thread thread)))
-        (setf confirmed-state new-state
-              pending-state new-state)))))
+      (%set-thread-state thread 'debug-thread-state-running))))
 
-(defun %resume-continuation (callback new-state old-state)
-  (with-simple-restart (abort "Abort resuming the task.")
-    (catch 'cancel-task
-      (funcall callback new-state old-state))))
+(defun %suspend-thread (thread)
+  (with-slots (confirmed-state) thread
+    (assert (typep confirmed-state 'debug-thread-state-running))
+    (unless (typep confirmed-state 'debug-thread-state-stopping)
+      (kill-thread (process-id-of (process-of thread))
+                   (thread-id-of thread)
+                   SIGSTOP)
+      (%set-thread-state thread 'debug-thread-state-stopping)
+      t)))
 
 (defun process-thread-state-change (thread state)
-  (let ((cur-state (confirmed-state-of thread))
+  (let ((process (process-of thread))
+        (cur-state (confirmed-state-of thread))
         (new-state (pending-state-of thread)))
     (when (eq state new-state)
       (typecase new-state
         ;; Eat spurious stops
         (debug-thread-state-paused
-         (if (stop-pending? thread)
-             (setf (stop-pending? thread) nil)
-             (progn
-               (%resume-thread thread)
-               (return-from process-thread-state-change))))
+         (unless (typep cur-state 'debug-thread-state-stopping)
+           (%resume-thread thread)
+           (return-from process-thread-state-change)))
         ;; Handle forks
         (debug-thread-state-trapped
          (case (ptrace-event-of new-state)
            ((:PTRACE_EVENT_FORK :PTRACE_EVENT_VFORK :PTRACE_EVENT_CLONE)
             (let* ((new-pid (ptrace-get-event-msg (thread-id-of thread)))
-                   (tgid (process-id-of *debugged-process*))
-                   (thread? (member new-pid (process-thread-ids tgid))))
+                   (tgid (process-id-of process))
+                   (thread? (member new-pid (process-thread-ids tgid)))
+                   (thread-process (if thread?
+                                       process
+                                       (make-instance 'debug-process :process-id new-pid))))
               (change-class new-state 'debug-thread-state-forked
                             :new-child-pid new-pid
-                            :thread (when thread?
-                                      (%add-debug-thread *debugged-process* new-pid)))))
+                            :thread (%add-debug-thread thread-process new-pid))))
            (:PTRACE_EVENT_EXEC
             (change-class new-state 'debug-thread-state-about-to-exec)))))
       ;; Deliver the state change
-      (setf (slot-value thread 'confirmed-state) new-state)
-      (with-slots (exclusive-task) *debugged-process*
-        (awhen exclusive-task
-          (setf exclusive-task nil)
-          (%resume-continuation it new-state cur-state))))))
+      (setf (slot-value thread 'confirmed-state) new-state
+            (slot-value process 'last-changed-thread) thread)
+      ;; Wake up tasks
+      (wake-up-tasks (event-condition-of process))
+      (wake-up-tasks (event-condition-of thread))
+      (run-scheduled-debug-tasks))))
 
-(defun/cc wait-state-change ()
-  (let/cc callback
-    (assert (and *debugged-process*
-                 (null (exclusive-task-of *debugged-process*))))
-    (setf (slot-value *debugged-process* 'exclusive-task) callback)))
+;; Event waiting
 
-(defun/cc attach-to-process ()
-  (flet ((start-attach-to-thread (id)
-           (let* ((thread (%add-debug-thread *debugged-process* id
-                                             :initial-state 'debug-thread-state-running)))
-             (when (ptrace-attach id)
-               (setf (slot-value thread 'stop-pending?) t)))))
-    (start-attach-to-thread (process-id-of *debugged-process*))
-    (loop while (is-running? *debugged-process*)
-       do (progn
-            (wait-state-change)
-            (let ((ids (process-thread-ids (process-id-of *debugged-process*)))
-                  (known (mapcar #'thread-id-of (threads-of *debugged-process*))))
-              (dolist (id (set-difference ids known))
-                (start-attach-to-thread id)))))
-    (print "attach complete")))
+(def-debug-task read-recent-state (process-or-thread)
+  (with-global-control (process-or-thread :exclusive? nil)
+    (most-recent-state-of process-or-thread)))
+
+(def-debug-task wait-for-state (process-or-thread
+                                &key
+                                (type t) (filter (constantly t))
+                                (new? (typep process-or-thread 'debug-process)))
+  (flet ((match-state (state)
+           (print state)
+           (and (typep state type) (funcall filter type))))
+    (let ((cur-state (read-recent-state process-or-thread)))
+      (loop for state = (read-recent-state process-or-thread)
+         do (progn
+              (when (and (match-state state)
+                         (not (and new? (eq cur-state state))))
+                (return-from wait-for-state state))
+              (wait-on-queue (event-condition-of process-or-thread)))))))
+
+(def-debug-task suspend-threads (process threads)
+  (let ((we-stopped nil))
+    (loop for thread-list = (if (eq threads :all)
+                                (threads-of process)
+                                threads)
+       while (some #'is-running? thread-list)
+       do (loop
+             for thread in thread-list
+             for state = (most-recent-state-of thread)
+             do (when (and (typep state 'debug-thread-state-running)
+                           (%suspend-thread thread))
+                  (pushnew thread we-stopped)))
+       do (wait-for-state process))
+    we-stopped))
+
+(def-debug-task resume-threads (thread-list)
+  (loop
+     for thread in thread-list
+     for state = (most-recent-state-of thread)
+     do (when (typep state 'debug-thread-state-paused)
+          (%resume-thread thread))))
+
+(defmacro with-threads-suspended ((process threads) &body code)
+  (with-unique-names (we-suspended)
+    (once-only (process threads)
+      `(with-global-control (,process :exclusive? (eq ,threads :all))
+         (let ((,we-suspended (suspend-threads ,process ,threads)))
+           (with-exit-unwind
+               (progn ,@code)
+             (resume-threads ,we-suspended)))))))
+
+(def-debug-task terminate-debug (process)
+  (with-threads-suspended (process :all)
+    (dolist (thread (threads-of process))
+      (without-call/cc (ptrace-detach (thread-id-of thread) SIGCONT))
+      (%set-thread-state thread 'debug-thread-state-detached))
+    (removef *debugged-processes* process)))
+
+(def-debug-task initialize-debug (process)
+  (with-global-control (process :exclusive? t)
+    (flet ((start-attach-to-thread (id)
+             (let* ((thread (%add-debug-thread process id
+                                               :initial-state 'debug-thread-state-running)))
+               (if (ptrace-attach id)
+                   (%set-thread-state thread 'debug-thread-state-stopping)
+                   (%set-thread-state thread 'debug-thread-state-detached))
+               thread)))
+      (let* ((pid (process-id-of process))
+             (main-thread (start-attach-to-thread pid)))
+        (unless main-thread
+          (abort-task "Could not attach to main thread: ~A" pid))
+        (setf (slot-value process 'main-thread) main-thread
+              (slot-value process 'last-changed-thread) main-thread)
+        (push process *debugged-processes*)
+        (loop while (is-running? process)
+           do (progn
+                (wait-for-state process)
+                (let ((ids (process-thread-ids pid))
+                      (known (mapcar #'thread-id-of (threads-of process))))
+                  (dolist (id (set-difference ids known))
+                    (start-attach-to-thread id))))))
+      (values process (length (threads-of process))))))
+
+(defun/cc start-debug (process-id)
+  (let ((process (make-instance 'debug-process :process-id process-id)))
+    (call-debug-task 'initialize-debug process)))
+
+(defun/cc stop-debug (process)
+  (call-debug-task 'terminate-debug process))
 
