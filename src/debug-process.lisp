@@ -112,10 +112,14 @@
     (push thread (slot-value process 'threads))
     thread))
 
-(defun %set-thread-state (thread state-type)
+(defun %set-thread-state (thread state)
   (with-slots (confirmed-state pending-state) thread
-    (let ((new-state (make-instance state-type :thread thread)))
-      (setf confirmed-state new-state))))
+    (let ((new-state (if (symbolp state)
+                         (make-instance state :thread thread)
+                         state)))
+      (setf confirmed-state new-state)
+      (when (typep new-state 'debug-thread-state-inactive)
+        (removef (slot-value (process-of thread) 'threads) thread)))))
 
 (defun %resume-thread (thread &key deliver-signal)
   (with-slots (confirmed-state) thread
@@ -165,8 +169,8 @@
            (:PTRACE_EVENT_EXEC
             (change-class new-state 'debug-thread-state-about-to-exec)))))
       ;; Deliver the state change
-      (setf (slot-value thread 'confirmed-state) new-state
-            (slot-value process 'last-changed-thread) thread)
+      (%set-thread-state thread new-state)
+      (setf (slot-value process 'last-changed-thread) thread)
       ;; Wake up tasks
       (wake-up-tasks (event-condition-of process))
       (wake-up-tasks (event-condition-of thread))
@@ -228,6 +232,7 @@
   (with-threads-suspended (process :all)
     (dolist (thread (threads-of process))
       (without-call/cc (ptrace-detach (thread-id-of thread) SIGCONT))
+      (set-sigchld-handler (thread-id-of thread) nil)
       (%set-thread-state thread 'debug-thread-state-detached))
     (removef *debugged-processes* process)))
 
@@ -253,7 +258,9 @@
                 (let ((ids (process-thread-ids pid))
                       (known (mapcar #'thread-id-of (threads-of process))))
                   (dolist (id (set-difference ids known))
-                    (start-attach-to-thread id))))))
+                    (start-attach-to-thread id)))))
+        (setf (main-mapping-of process)
+              (select-main-executable (process-memory-maps pid))))
       (values process (length (threads-of process))))))
 
 (defun/cc start-debug (process-id)

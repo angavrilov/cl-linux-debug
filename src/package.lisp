@@ -10,7 +10,8 @@
         :hu.dwim.defclass-star
         :bordeaux-threads
         :cont
-        :chanl)
+        :chanl
+        :cl-ppcre)
   (:shadowing-import-from #:bordeaux-threads
                           #:current-thread
                           #:thread-alive-p

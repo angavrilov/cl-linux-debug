@@ -7,16 +7,22 @@
 (def (class* e) debug-thread-state ()
   ((thread :reader t)))
 
-(def (class* e) debug-thread-state-detached (debug-thread-state)
+(def (class* e) debug-thread-state-inactive (debug-thread-state)
   ())
 
-(def (class* e) debug-thread-state-running (debug-thread-state)
+(def (class* e) debug-thread-state-detached (debug-thread-state-inactive)
+  ())
+
+(def (class* e) debug-thread-state-active (debug-thread-state)
+  ())
+
+(def (class* e) debug-thread-state-running (debug-thread-state-active)
   ())
 
 (def (class* e) debug-thread-state-stopping (debug-thread-state-running)
   ())
 
-(def (class* e) debug-thread-state-dead (debug-thread-state)
+(def (class* e) debug-thread-state-dead (debug-thread-state-inactive)
   ())
 
 (def (class* e) debug-thread-state-exited (debug-thread-state-dead)
@@ -26,7 +32,7 @@
   ((signal-id :reader t)
    (dumped? :reader t)))
 
-(def (class* e) debug-thread-state-stopped (debug-thread-state)
+(def (class* e) debug-thread-state-stopped (debug-thread-state-active)
   ())
 
 (def (class* e) debug-thread-state-paused (debug-thread-state-stopped)
@@ -58,6 +64,8 @@
   ((process-id :reader t)
    (main-thread nil :reader t)
    (threads nil :reader t)
+   (main-mapping nil :accessor t)
+   (injected-mappings nil :accessor t)
    (last-changed-thread nil :reader t)
    (event-condition (make-instance 'debug-task-wait-queue :name "Global Event")
                            :reader t)

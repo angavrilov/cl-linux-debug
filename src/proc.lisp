@@ -13,3 +13,46 @@
             (parse-integer (car (last (pathname-directory path)))))
           (directory (merge-pathnames #P"task/*/mem"
                                       (process-proc-dir process)))))
+
+(def (structure e) memory-mapping
+  (start-addr 0)
+  (end-addr 0)
+  (readable? nil)
+  (writable? nil)
+  (executable? nil)
+  (shared? nil)
+  (file-offset 0)
+  (file-path nil))
+
+(defun process-memory-maps (process)
+  (with-open-file (stream (merge-pathnames #P"maps"
+                                           (process-proc-dir process)))
+    (loop for line = (read-line stream nil nil)
+       while line
+       collect (register-groups-bind (start end r w x p offset path)
+                   ("^([0-9a-f]+)-([0-9a-f]+)\\s+(r|-)(w|-)(x|-)(p|s)\\s+([0-9a-f]+)\\s+[0-9a-f]+:[0-9a-f]+\\s+[0-9]+\\s+(\\S.*\\S)?"
+                    line)
+                 (check-type start string)
+                 (check-type end string)
+                 (check-type offset string)
+                 (make-memory-mapping :start-addr (parse-integer start :radix 16)
+                                      :end-addr (parse-integer end :radix 16)
+                                      :readable? (equal r "r")
+                                      :writable? (equal w "w")
+                                      :executable? (equal x "x")
+                                      :shared? (equal p "s")
+                                      :file-offset (parse-integer offset :radix 16)
+                                      :file-path path)))))
+
+(defparameter *default-linux-start-address* #x08048000)
+
+(defun select-main-executable (mappings)
+  (let ((execs (remove-if-not (lambda (map)
+                                (and (memory-mapping-executable? map)
+                                     (aand (memory-mapping-file-path map)
+                                           (not (equal it "[vdso]")))))
+                              mappings)))
+    (or (find-if (lambda (map) (= (memory-mapping-start-addr map)
+                             *default-linux-start-address*)) execs)
+        (find-if (lambda (map) (not (ends-with-subseq ".so" (memory-mapping-file-path map)))) execs)
+        (first execs))))
