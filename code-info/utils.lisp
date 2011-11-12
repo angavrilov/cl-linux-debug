@@ -1,6 +1,6 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
-(in-package :cl-linux-debug)
+(in-package :cl-linux-debug.code-info)
 
 (deftype uint8 () '(unsigned-byte 8))
 (deftype uint16 () '(unsigned-byte 16))

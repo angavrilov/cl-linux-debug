@@ -1,6 +1,6 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
-(in-package :cl-linux-debug)
+(in-package :cl-linux-debug.code-info)
 
 (cc-flags "-I" #.(directory-namestring
                   (merge-pathnames #P"lib/"

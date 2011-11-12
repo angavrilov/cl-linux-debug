@@ -9,9 +9,9 @@
         :hu.dwim.def
         :hu.dwim.defclass-star
         :bordeaux-threads
-        :cont
-        :chanl
-        :cl-ppcre)
+        :cont :chanl
+        :cl-ppcre
+        :cl-linux-debug.code-info)
   (:shadowing-import-from #:bordeaux-threads
                           #:current-thread
                           #:thread-alive-p

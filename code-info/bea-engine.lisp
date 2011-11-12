@@ -1,6 +1,6 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
-(in-package :cl-linux-debug)
+(in-package :cl-linux-debug.code-info)
 
 (define-foreign-library libBeaEngine
   (t (:default "libBeaEngine")))
