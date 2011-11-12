@@ -22,5 +22,6 @@
                              (:file "proc" :depends-on ("package" "utils"))
                              (:file "tasks" :depends-on ("package" "utils"))
                              (:file "classes" :depends-on ("package" "utils" "tasks"))
-                             (:file "debug-process" :depends-on ("package" "classes" "ptrace" "proc"))))))
+                             (:file "debug-process" :depends-on ("package" "classes" "ptrace" "proc"))
+                             (:file "code-injection" :depends-on ("debug-process"))))))
 

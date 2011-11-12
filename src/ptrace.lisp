@@ -6,11 +6,14 @@
 
 (defcvar "errno" :int)
 
+(defcfun "strerror" :string
+  (errno :int))
+
 (defun check-errno (function rv)
   (let ((errno *errno*))
     (if (= rv -1)
         (cerror "ignore" "~A failed: ~A (~A)"
-                function (foreign-funcall "strerror" :int errno :string) errno)
+                function (strerror errno) errno)
         rv)))
 
 (defmacro with-errno (call)

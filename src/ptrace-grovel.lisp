@@ -8,6 +8,7 @@
 (include "sys/syscall.h")
 (include "sys/types.h")
 (include "sys/user.h")
+(include "sys/mman.h")
 
 ;; Signals
 
@@ -30,6 +31,13 @@
 (constant (SIGCONT "SIGCONT"))
 
 (constant (SYS_tgkill "SYS_tgkill"))
+
+(constant (PROT_READ "PROT_READ"))
+(constant (PROT_WRITE "PROT_WRITE"))
+(constant (PROT_EXEC "PROT_EXEC"))
+
+(constant (MAP_PRIVATE "MAP_PRIVATE"))
+(constant (MAP_ANONYMOUS "MAP_ANONYMOUS"))
 
 ;; Ptrace
 

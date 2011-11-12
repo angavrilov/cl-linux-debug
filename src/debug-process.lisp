@@ -184,11 +184,13 @@
 
 (def-debug-task wait-for-state (process-or-thread
                                 &key
-                                (type t) (filter (constantly t))
+                                (type t) (not-type nil)
+                                (filter (constantly t))
                                 (new? (typep process-or-thread 'debug-process)))
   (flet ((match-state (state)
            (print state)
-           (and (typep state type) (funcall filter type))))
+           (and (typep state type) (not (typep state not-type))
+                (funcall filter state))))
     (let ((cur-state (read-recent-state process-or-thread)))
       (loop for state = (read-recent-state process-or-thread)
          do (progn
@@ -227,6 +229,35 @@
            (with-exit-unwind
                (progn ,@code)
              (resume-threads ,we-suspended)))))))
+
+(def-debug-task suspend-thread (thread &key (wait? t))
+  (let* ((state (read-recent-state thread))
+         (we-suspend? (and (typep state 'debug-thread-state-running)
+                           (%suspend-thread thread))))
+    (when wait?
+      (wait-for-state thread :not-type 'debug-thread-state-running))
+    we-suspend?))
+
+(def-debug-task resume-thread (thread &key deliver-signal)
+  (when (typep (confirmed-state-of thread) 'debug-thread-state-stopped)
+    (%resume-thread thread :deliver-signal deliver-signal)))
+
+(defun %restore-trap-state (thread state)
+  (when (and (typep (confirmed-state-of thread) 'debug-thread-state-trapped)
+             (typep state 'debug-thread-state-trapped))
+    (setf (slot-value thread 'confirmed-state) state)))
+
+(defmacro with-thread-suspended ((thread &key exclusive? save-trap-state?) &body code)
+  (with-unique-names (we-suspended init-state)
+    (once-only (thread)
+      `(with-thread-control (,thread :exclusive? ,exclusive?)
+         (let ((,we-suspended (suspend-thread ,thread))
+               ,@(if save-trap-state? `((,init-state (confirmed-state-of ,thread)))))
+           (with-exit-unwind
+               (progn ,@code)
+             (if ,we-suspended
+                 (resume-thread thread)
+                 ,(if save-trap-state? `(%restore-trap-state ,thread ,init-state)))))))))
 
 (def-debug-task terminate-debug (process)
   (with-threads-suspended (process :all)
