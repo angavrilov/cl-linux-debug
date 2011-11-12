@@ -17,16 +17,16 @@
 (defcfun "Disasm" :int
   (dstruct :pointer))
 
-(defstruct bea-argument
+(def (structure e) bea-argument
   mnemonic size access-write?)
 
-(defstruct (bea-argument-register (:include bea-argument))
+(def (structure e) (bea-argument-register (:include bea-argument))
   id high?)
 
-(defstruct (bea-argument-constant (:include bea-argument))
+(def (structure e) (bea-argument-constant (:include bea-argument))
   relative?)
 
-(defstruct (bea-argument-memory (:include bea-argument))
+(def (structure e) (bea-argument-memory (:include bea-argument))
   base-reg index-reg scale displacement segment-reg)
 
 (defun rename-bea-register (reg-id reg-type)
@@ -81,7 +81,7 @@
           :relative? (eq (foreign-enum-keyword 'arg-type-mode (logand arg-type #xFFFFFFF))
                          :RELATIVE_MODE)))))))
 
-(defstruct bea-instruction
+(def (structure e) bea-instruction
   (length 0 :type uint8)
   (text nil)
   ;; General information
@@ -152,7 +152,7 @@
                               :argument3 (decode-bea-argument argument3)
                               :prefixes prefixes :rex-prefix rex-prefix)))))
 
-(defun bea-disassemble (byte-vector offset &key option-list end real-eip arch (errorp t))
+(def (function e) bea-disassemble (byte-vector offset &key option-list end real-eip arch (errorp t))
   (declare (type (vector uint8) byte-vector))
   (with-foreign-objects ((disasm-obj 'disasm)
                          (buffer :uint8 16))

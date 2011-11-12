@@ -8,10 +8,10 @@
 
 (defun check-errno (function rv)
   (let ((errno *errno*))
-    (when (= rv -1)
-      (error "~A failed: ~A (~A)"
-             function (foreign-funcall "strerror" :int errno :string) errno))
-    rv))
+    (if (= rv -1)
+        (cerror "ignore" "~A failed: ~A (~A)"
+                function (foreign-funcall "strerror" :int errno :string) errno)
+        rv)))
 
 (defmacro with-errno (call)
   `(check-errno ',(first call) ,call))
@@ -41,10 +41,15 @@
 
 (sb-unix::enable-interrupt sb-unix::sigchld #'sigchld-handler)
 
-(defun set-sigchld-handler (process-id callback)
+(defun set-sigchld-handler (process-id callback &key allow-overwrite?)
   (with-lock-held (*sigchld-lock*)
     (if callback
-        (setf (gethash process-id *sigchld-callbacks*) callback)
+        (progn
+          (when (and (not allow-overwrite?)
+                     (gethash process-id *sigchld-callbacks*))
+            (cerror "Overwrite the old hook."
+                    "SIGCHLD hook for process ~A already exists." process-id))
+          (setf (gethash process-id *sigchld-callbacks*) callback))
         (remhash process-id *sigchld-callbacks*))))
 
 ;; Ptrace
@@ -66,6 +71,11 @@
 
 (defun ptrace-kill (process)
   (with-errno (ptrace :PTRACE_KILL process (null-pointer) (null-pointer))))
+
+(defun ptrace-get-event-msg (process)
+  (with-foreign-object (data :unsigned-long)
+    (with-errno (ptrace :PTRACE_GETEVENTMSG process (null-pointer) data))
+    (mem-ref data :unsigned-long)))
 
 (defun ptrace-get-registers (process)
   (with-foreign-object (reginfo 'user_regs_struct)

@@ -7,9 +7,10 @@
   :depends-on (:anaphora
                :metabang-bind
                :cffi
-               :hu.dwim.defclass-star
+               :hu.dwim.def
+               :hu.dwim.defclass-star+hu.dwim.def
                :bordeaux-threads
-               :chanl)
+               :chanl :cl-cont)
   :components ((:module
                 "src"
                 :components ((:file "package")
@@ -17,5 +18,7 @@
                              (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))
                              (:file "bea-engine" :depends-on ("bea-engine-grovel"))
                              (cffi-grovel:grovel-file "ptrace-grovel" :depends-on ("package"))
-                             (:file "ptrace" :depends-on ("package" "ptrace-grovel"))))))
+                             (:file "ptrace" :depends-on ("package" "utils" "ptrace-grovel"))
+                             (:file "proc" :depends-on ("package" "utils"))
+                             (:file "debug-process" :depends-on ("package" "ptrace" "proc"))))))
 

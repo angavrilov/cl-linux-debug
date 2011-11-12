@@ -6,8 +6,10 @@
   (:use :common-lisp
         :cffi :alexandria
         :anaphora :metabang-bind
+        :hu.dwim.def
         :hu.dwim.defclass-star
         :bordeaux-threads
+        :cont
         :chanl)
   (:shadowing-import-from #:bordeaux-threads
                           #:current-thread
