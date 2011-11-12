@@ -20,5 +20,6 @@
                              (cffi-grovel:grovel-file "ptrace-grovel" :depends-on ("package"))
                              (:file "ptrace" :depends-on ("package" "utils" "ptrace-grovel"))
                              (:file "proc" :depends-on ("package" "utils"))
+                             (:file "tasks" :depends-on ("package" "utils"))
                              (:file "debug-process" :depends-on ("package" "ptrace" "proc"))))))
 

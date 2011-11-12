@@ -16,4 +16,11 @@
                           #:thread-alive-p
                           #:threadp
                           #:thread-name
-                          #:all-threads))
+                          #:all-threads)
+  (:export #:name-of
+           #:task-finished?
+           #:return-values-of
+           #:signalled-condition-of
+           #:exit-task #:abort-task #:yield-task
+           #:with-exit-unwind
+           #:make-debug-r/w-lock #:with-r/w-lock-held))
