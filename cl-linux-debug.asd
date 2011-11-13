@@ -16,7 +16,8 @@
                 :components ((:file "package")
                              (:file "utils" :depends-on ("package"))
                              (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))
-                             (:file "bea-engine" :depends-on ("bea-engine-grovel"))))
+                             (:file "bea-engine" :depends-on ("bea-engine-grovel"))
+                             (:file "dwarf" :depends-on ("package" "utils"))))
                (:module
                 "debugger"
                 :depends-on ("code-info")
