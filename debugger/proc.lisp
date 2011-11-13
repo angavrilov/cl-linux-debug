@@ -14,16 +14,6 @@
           (directory (merge-pathnames #P"task/*/mem"
                                       (process-proc-dir process)))))
 
-(def (structure e) memory-mapping
-  (start-addr 0)
-  (end-addr 0)
-  (readable? nil)
-  (writable? nil)
-  (executable? nil)
-  (shared? nil)
-  (file-offset 0)
-  (file-path nil))
-
 (defun process-memory-maps (process)
   (with-open-file (stream (merge-pathnames #P"maps"
                                            (process-proc-dir process)))

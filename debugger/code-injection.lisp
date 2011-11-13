@@ -53,7 +53,8 @@
 
 (def-debug-task %init-code-injection (process iinfo)
   (with-threads-suspended (process :all)
-    (let* ((start-ptr (memory-mapping-start-addr (main-mapping-of process)))
+    (let* ((start-ptr (or (start-address-of (main-text-section-of process))
+                          (abort-task "The process has no main text section.")))
            (bytes (length *syscall-bytes*))
            (save-buf (make-array bytes :element-type 'uint8)))
       ;; Inject the syscall at the image start address

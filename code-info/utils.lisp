@@ -10,6 +10,16 @@
 (deftype int16 () '(signed-byte 16))
 (deftype int32 () '(signed-byte 32))
 
+(def (structure ea) memory-mapping
+  (start-addr 0)
+  (end-addr 0)
+  (readable? nil)
+  (writable? nil)
+  (executable? nil)
+  (shared? nil)
+  (file-offset 0)
+  (file-path nil))
+
 (defun unsigned (value &optional (bits 32))
   (logand value (1- (ash 1 bits))))
 

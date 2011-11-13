@@ -10,6 +10,7 @@
                :hu.dwim.def
                :hu.dwim.defclass-star+hu.dwim.def
                :bordeaux-threads
+               :trees
                :chanl :cl-cont :elf)
   :components ((:module
                 "code-info"
@@ -17,7 +18,8 @@
                              (:file "utils" :depends-on ("package"))
                              (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))
                              (:file "bea-engine" :depends-on ("bea-engine-grovel"))
-                             (:file "dwarf" :depends-on ("package" "utils"))))
+                             (:file "dwarf" :depends-on ("package" "utils"))
+                             (:file "executable" :depends-on ("package" "dwarf"))))
                (:module
                 "debugger"
                 :depends-on ("code-info")
