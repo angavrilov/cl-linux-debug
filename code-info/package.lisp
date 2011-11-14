@@ -21,7 +21,10 @@
            #:start-address-of #:length-of
            #:start-offset-of #:data-bytes-of
            #:image-of #:file-offset-of #:section-name-of
-           #:path-of #:shared-lib?
+           #:loaded? #:executable? #:writable?
+           #:find-section-by-address #:find-section-by-name
+           #:entry-address-of #:path-of #:shared-lib?
            #:relocated? #:image-section-of #:mapping-of
-           #:unwind-info-of
+           #:loaded-image-of #:relocation-offset-of
+           #:unwind-info-of #:origin-of #:executable-of
            #:main-image-of #:all-images-of #:sections-of))

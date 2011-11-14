@@ -19,7 +19,9 @@
                              (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))
                              (:file "bea-engine" :depends-on ("bea-engine-grovel"))
                              (:file "dwarf" :depends-on ("package" "utils"))
-                             (:file "executable" :depends-on ("package" "dwarf"))))
+                             (:file "classes" :depends-on ("package" "dwarf"))
+                             (:file "symbols" :depends-on ("classes" "bea-engine"))
+                             (:file "executable" :depends-on ("classes" "symbols"))))
                (:module
                 "debugger"
                 :depends-on ("code-info")

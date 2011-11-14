@@ -291,11 +291,7 @@
                     (start-attach-to-thread id)))))
         (format t "Loading the debugged executable...~%")
         (let ((executable (executable-of process)))
-          (load-executable-mappings executable (process-memory-maps pid))
-          (setf (main-text-section-of process)
-                (find-if (lambda (s) (and (equal (section-name-of s) ".text")
-                                     (eq (image-of s) (main-image-of executable))))
-                         (sections-of executable)))))
+          (load-executable-mappings executable (process-memory-maps pid))))
       (values process (length (threads-of process))))))
 
 (defun/cc start-debug (process-id)

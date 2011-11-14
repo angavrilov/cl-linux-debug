@@ -65,7 +65,6 @@
    (main-thread nil :reader t)
    (threads nil :reader t)
    (executable (make-instance 'loaded-executable) :reader t)
-   (main-text-section nil :accessor t)
    (injection-info nil :accessor t)
    (last-changed-thread nil :reader t)
    (event-condition (make-instance 'debug-task-wait-queue :name "Global Event")

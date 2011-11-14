@@ -19,6 +19,7 @@
 
 (defstruct dwarf-unwind-fde
   (cie nil)
+  (offset 0)
   (start-addr 0)
   (length 0)
   (augmentation-data nil)
@@ -44,7 +45,7 @@
         (unless no-rel?
           (setf addr (ecase (logand mode #x70)
                        (#x00 addr)
-                       (#x10 (list :pc-rel addr))
+                       (#x10 (list :pc-rel addr spos))
                        (#x20 (list :text-rel addr))
                        (#x30 (list :data-rel addr))
                        (#x40 (list :func-rel addr))
@@ -146,23 +147,24 @@
           (parse-unwind-opcodes vector pos end-pos cie))
     cie))
 
-(defun parse-unwind-fde (vector pos end-pos cie)
+(defun parse-unwind-fde (vector pos end-pos cie base-addr)
   (let* ((fde-mode (dwarf-unwind-cie-fde-mode cie))
          (addr-size (dwarf-unwind-cie-addr-size cie))
          (aug-string (dwarf-unwind-cie-augmentation-spec cie))
+         (base-pos pos)
          (start-addr (parsef parse-address vector pos fde-mode addr-size))
          (code-length (parsef parse-address vector pos fde-mode addr-size :no-rel? t))
          (aug-size (if (starts-with-subseq "z" aug-string)
                        (parse-leb128f vector pos)
                        0))
          (aug-data (parse-bytesf vector pos aug-size)))
-    (make-dwarf-unwind-fde :cie cie
+    (make-dwarf-unwind-fde :cie cie :offset (+ base-addr base-pos)
                            :start-addr start-addr
                            :length code-length
                            :augmentation-data aug-data
                            :opcodes (parse-unwind-opcodes vector pos end-pos cie))))
 
-(defun parse-unwind-record (vector pos cie-table eh-frame?)
+(defun parse-unwind-record (vector pos cie-table eh-frame? base-addr)
   (let* ((start-pos pos)
          (size1 (parse-intf vector pos 4))
          (is-64? (= size1 #xFFFFFFFF))
@@ -186,16 +188,16 @@
                                         cie-table)))
                       (when (null cie)
                         (error "Could not find CIE referenced from ~A: ~A" offset-base offset))
-                      (parse-unwind-fde vector pos end-pos cie))))
+                      (parse-unwind-fde vector pos end-pos cie base-addr))))
               end-pos))))
 
-(defun parse-unwind-data (vector &key eh-frame?)
+(defun parse-unwind-data (vector &key eh-frame? (base-addr 0))
   (let ((cie-table (make-hash-table))
         (pos 0)
         (records nil))
     (loop while (< pos (length vector))
        do (multiple-value-bind (record new-pos)
-              (parse-unwind-record vector pos cie-table eh-frame?)
+              (parse-unwind-record vector pos cie-table eh-frame? base-addr)
             (setf pos new-pos)
             (when record
               (push record records))))
