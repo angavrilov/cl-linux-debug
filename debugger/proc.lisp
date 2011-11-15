@@ -46,3 +46,10 @@
                              *default-linux-start-address*)) execs)
         (find-if (lambda (map) (not (ends-with-subseq ".so" (memory-mapping-file-path map)))) execs)
         (first execs))))
+
+(defun proc-read-memory (mem-file address vector &key (start 0) end)
+  (file-position mem-file address)
+  (let ((rpos (read-sequence vector mem-file :start start :end end)))
+    (unless (= rpos (or end (length vector)))
+      (error "Could not read memory fully at ~A...~A: ~A" address end rpos))))
+

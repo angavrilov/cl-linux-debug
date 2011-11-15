@@ -53,53 +53,54 @@
         (pushnew exec *executables*)
         exec)))
 
+
 (defun compute-loaded-image (executable image mappings)
   (let* ((own-mappings (remove-if-not
                         (lambda (x) (equal (memory-mapping-file-path x) (path-of image)))
                         mappings))
+         (exec-section (or (find-section-by-name image ".text")
+                           (first (sort (remove-if-not #'executable? (sections-of image))
+                                        #'> :key #'length-of))))
+         (exec-mapping (or (find-if (lambda (mapping)
+                                      (let ((base (memory-mapping-file-offset mapping))
+                                            (len (- (memory-mapping-end-addr mapping)
+                                                    (memory-mapping-start-addr mapping))))
+                                        (and (memory-mapping-executable? mapping)
+                                             (<= 0
+                                                 (- (file-offset-of exec-section) base)
+                                                 (- len (length-of exec-section))))))
+                                    own-mappings)
+                           (error "Could not find a mapping for the executable section: ~S ~S"
+                                  exec-section mappings)))
+         (exec-mapped-start (+ (memory-mapping-start-addr exec-mapping)
+                               (- (file-offset-of exec-section)
+                                  (memory-mapping-file-offset exec-mapping))))
+         (relocation-offset (- exec-mapped-start
+                               (start-address-of exec-section)))
          (loaded-image (make-instance 'loaded-image
                                       :executable executable
                                       :origin image
                                       :sections nil
-                                      :relocation-offset nil)))
-    (dolist (mapping own-mappings)
-      (let* ((start-offset (memory-mapping-file-offset mapping))
-             (start-addr (memory-mapping-start-addr mapping))
-             (length (- (memory-mapping-end-addr mapping) start-addr))
-             (end-offset (+ length start-offset))
-             (shift (- start-addr start-offset)))
-        (dolist (section (remove-if-not #'loaded? (sections-of image)))
-          (let* ((section-offset (file-offset-of section))
-                 (map-base (+ shift (file-offset-of section)))
-                 (map-start (max 0 (- start-offset section-offset)))
-                 (map-end (min (length-of section) (- end-offset section-offset)))
-                 (section-relocation (- map-base (start-address-of section))))
-            (when (and (< map-start map-end)
-                       (not (or (eq (elf-type-of section) :nobits)
-                                (and (executable? section)
-                                     (not (memory-mapping-executable? mapping)))
-                                (and (writable? section)
-                                     (not (memory-mapping-writable? mapping))))))
-              (cond ((null (relocation-offset-of loaded-image))
-                     (setf (slot-value loaded-image 'relocation-offset) section-relocation))
-                    ((/= section-relocation (relocation-offset-of loaded-image))
-                     (format t "Non-uniform relocation of ~A: ~A vs ~A; ~A~%"
-                             (section-name-of section)
-                             section-relocation (relocation-offset-of loaded-image)
-                             (path-of image))))
-              (let* ((loaded (make-instance 'loaded-section
-                                            :loaded-image loaded-image
-                                            :start-address (+ map-base map-start)
-                                            :length (- map-end map-start)
-                                            :start-offset map-start
-                                            :data-bytes (data-bytes-of section)
-                                            :origin section
-                                            :relocation-offset section-relocation
-                                            :mapping mapping)))
-                (push loaded (slot-value loaded-image 'sections))
-                (insert loaded (section-map-of loaded-image))
-                (push loaded (slot-value executable 'sections))
-                (insert loaded (section-map-of executable))))))))
+                                      :relocation-offset relocation-offset)))
+    (dolist (section (remove-if-not #'loaded? (sections-of image)))
+      (let* ((reloc-start (+ (start-address-of section) relocation-offset))
+             (mapping (find-if (lambda (mapping)
+                                 (<= (memory-mapping-start-addr mapping) reloc-start
+                                     (- (memory-mapping-end-addr mapping) (length-of section))))
+                               mappings)))
+        (let* ((loaded (make-instance 'loaded-section
+                                      :loaded-image loaded-image
+                                      :start-address reloc-start
+                                      :length (length-of section)
+                                      :start-offset (start-offset-of section)
+                                      :data-bytes (data-bytes-of section)
+                                      :origin section
+                                      :relocation-offset relocation-offset
+                                      :mapping mapping)))
+          (push loaded (slot-value loaded-image 'sections))
+          (insert loaded (section-map-of loaded-image))
+          (push loaded (slot-value executable 'sections))
+          (insert loaded (section-map-of executable)))))
     loaded-image))
 
 (def (function e) load-executable-mappings (executable mappings)

@@ -27,4 +27,7 @@
            #:relocated? #:image-section-of #:mapping-of
            #:loaded-image-of #:relocation-offset-of
            #:unwind-info-of #:origin-of #:executable-of
-           #:main-image-of #:all-images-of #:sections-of))
+           #:main-image-of #:all-images-of #:sections-of
+           #:find-region-by-address #:find-regions-by-name
+           #:symbol-name-of
+           ))

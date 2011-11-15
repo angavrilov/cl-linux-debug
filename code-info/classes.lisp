@@ -55,19 +55,26 @@
    (elf-data :reader t)
    (entry-address :reader t)
    (shared-lib? :reader t)
-   (region-map (make-chunk-table) :reader t)))
-
-(defgeneric find-region-by-address (executable addr)
-  (:method (image (addr null))
-    nil)
-  (:method ((image executable-image) addr)
-    (lookup-chunk (region-map-of image) addr)))
+   (region-map (make-chunk-table) :reader t)
+   (region-name-map (make-hash-table :test #'equal) :reader t)))
 
 ;; Region data
 
 (def (class* e) executable-region (data-chunk)
   ((section :reader t)
-   (symbol-name nil :accessor t)))
+   (symbol-name nil :reader t)))
+
+(defmethod image-of ((obj executable-region))
+  (image-of (section-of obj)))
+
+(defmethod (setf symbol-name-of) (value (obj executable-region))
+  (with-slots (symbol-name) obj
+    (let* ((rtbl (region-name-map-of (image-of obj))))
+      (awhen symbol-name
+        (deletef (gethash it rtbl) obj))
+      (awhen (setf symbol-name value)
+        (pushnew obj (gethash it rtbl)))
+      value)))
 
 (def (class* e) executable-region-object (executable-region)
   ())
@@ -83,7 +90,6 @@
 
 ;; Loaded executable
 
-
 (def (class* e) loaded-object ()
   ((origin :reader t)
    (relocation-offset :reader t)))
@@ -92,12 +98,24 @@
   (:method ((obj loaded-object))
     (/= (relocation-offset-of obj) 0)))
 
+(defun wrap-loaded-chunk (base offset &key (type 'loaded-object))
+  (when base
+    (let ((real-offset (if (numberp offset) offset
+                           (relocation-offset-of offset))))
+      (make-instance type
+                     :origin base
+                     :relocation-offset real-offset
+                     :start-address (+ (start-address-of base) real-offset)
+                     :length (length-of base)
+                     :start-offset (start-offset-of base)
+                     :data-bytes (data-bytes-of base)))))
+
 (def (class* e) loaded-section (data-chunk loaded-object)
   ((loaded-image :reader t)
    (mapping :reader t)))
 
 (defmethod section-name-of ((section loaded-section))
-  (section-name-of (image-section-of section)))
+  (section-name-of (origin-of section)))
 
 (def (class* e) loaded-image (section-set loaded-object)
   ((executable :reader t)))
@@ -110,3 +128,37 @@
   ((main-image nil :reader t)
    (all-images nil :accessor t)
    (function-map (make-chunk-table) :reader t)))
+
+;;
+
+(def (class* e) loaded-region (data-chunk loaded-object)
+  ())
+
+(defmethod symbol-name-of ((lrgn loaded-region))
+  (symbol-name-of (origin-of lrgn)))
+
+(defgeneric find-region-by-address (executable addr)
+  (:method (image (addr null))
+    nil)
+  (:method ((image executable-image) addr)
+    (lookup-chunk (region-map-of image) addr))
+  (:method ((wrapper loaded-object) addr)
+    (wrap-loaded-chunk (find-region-by-address
+                        (origin-of wrapper)
+                        (- addr (relocation-offset-of wrapper)))
+                       wrapper
+                       :type 'loaded-region))
+  (:method ((exec loaded-executable) addr)
+    (awhen (loaded-image-of (find-section-by-address exec addr))
+      (find-region-by-address it addr))))
+
+(defgeneric find-regions-by-name (executable name)
+  (:method (image (name null))
+    nil)
+  (:method ((image executable-image) name)
+    (gethash name (region-name-map-of image)))
+  (:method ((wrapper loaded-object) name)
+    (mapcar (lambda (x) (wrap-loaded-chunk x wrapper :type 'loaded-region))
+            (find-regions-by-name (origin-of wrapper) name)))
+  (:method ((exec loaded-executable) name)
+    (mapcan (lambda (x) (find-regions-by-name x name)) (all-images-of exec))))

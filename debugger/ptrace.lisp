@@ -80,14 +80,23 @@
     (with-errno (ptrace :PTRACE_GETEVENTMSG process (null-pointer) data))
     (mem-ref data :unsigned-long)))
 
+(defun ptrace-set-options (process &rest options)
+  (let ((iv (reduce #'logior (mapcar (lambda (x) (foreign-enum-value 'ptrace-options x)) options))))
+    (with-errno (ptrace :PTRACE_SETOPTIONS process (null-pointer)
+                        (make-pointer (unsigned iv))))))
+
+(defun %ptrace-decode-registers (reginfo)
+  (macrolet ((convert (&rest names)
+               `(list ,@(loop for i in names
+                           collect (make-keyword i)
+                           collect `(foreign-slot-value reginfo 'user_regs_struct ',i)))))
+    (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax
+             cs ss ds es fs gs)))
+
 (defun ptrace-get-registers (process)
   (with-foreign-object (reginfo 'user_regs_struct)
     (with-errno (ptrace :PTRACE_GETREGS process (null-pointer) reginfo))
-    (macrolet ((convert (&rest names)
-                 `(list ,@(loop for i in names
-                             collect (make-keyword i)
-                             collect `(foreign-slot-value reginfo 'user_regs_struct ',i)))))
-      (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax))))
+    (%ptrace-decode-registers reginfo)))
 
 (defun ptrace-set-registers (process &rest registers)
   (when registers
@@ -98,8 +107,10 @@
                       ,@(loop for i in names
                            collect `(when ,i
                                       (setf (foreign-slot-value reginfo 'user_regs_struct ',i) ,i))))))
-        (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax)
-        (with-errno (ptrace :PTRACE_SETREGS process (null-pointer) reginfo))))))
+        (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax
+                 cs ss ds es fs gs)
+        (with-errno (ptrace :PTRACE_SETREGS process (null-pointer) reginfo))
+        (%ptrace-decode-registers reginfo)))))
 
 (defun ptrace-copy-bytes (process address array &key
                           (start 0) (end (array-total-size array)) (write? nil))

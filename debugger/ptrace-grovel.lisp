@@ -59,10 +59,11 @@
        ((:PTRACE_SETOPTIONS "PTRACE_SETOPTIONS"))
        ((:PTRACE_GETEVENTMSG "PTRACE_GETEVENTMSG")))
 
-(constant (PTRACE_O_TRACEFORK "PTRACE_O_TRACEFORK"))
-(constant (PTRACE_O_TRACEVFORK "PTRACE_O_TRACEVFORK"))
-(constant (PTRACE_O_TRACECLONE "PTRACE_O_TRACECLONE"))
-(constant (PTRACE_O_TRACEEXEC "PTRACE_O_TRACEEXEC"))
+(cenum ptrace-options
+       ((:PTRACE_O_TRACEFORK "PTRACE_O_TRACEFORK"))
+       ((:PTRACE_O_TRACEVFORK "PTRACE_O_TRACEVFORK"))
+       ((:PTRACE_O_TRACECLONE "PTRACE_O_TRACECLONE"))
+       ((:PTRACE_O_TRACEEXEC "PTRACE_O_TRACEEXEC")))
 
 (cenum ptrace-event
        ((:PTRACE_EVENT_FORK "PTRACE_EVENT_FORK"))
@@ -89,5 +90,11 @@
          (ebp "ebp" :type :long)
          (eip "eip" :type :long)
          (orig-eax "orig_eax" :type :long)
-         (eflags "eflags" :type :long))
+         (eflags "eflags" :type :long)
+         (cs "xcs" :type :long)
+         (ds "xds" :type :long)
+         (ss "xss" :type :long)
+         (es "xes" :type :long)
+         (fs "xfs" :type :long)
+         (gs "xgs" :type :long))
 

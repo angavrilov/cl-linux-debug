@@ -32,5 +32,6 @@
                              (:file "tasks" :depends-on ("package"))
                              (:file "classes" :depends-on ("package" "tasks"))
                              (:file "debug-process" :depends-on ("package" "classes" "ptrace" "proc"))
-                             (:file "code-injection" :depends-on ("debug-process"))))))
+                             (:file "debug-attach" :depends-on ("debug-process"))
+                             (:file "code-injection" :depends-on ("debug-attach"))))))
 

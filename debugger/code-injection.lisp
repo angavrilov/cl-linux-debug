@@ -8,24 +8,20 @@
 (defparameter *area-alloc-size* (/ 1048576 2))
 
 (def-debug-task %exec-injected-syscall (thread address id &rest args)
-  (let ((saved-regs (ptrace-get-registers (thread-id-of thread))))
-    (apply #'ptrace-set-registers (thread-id-of thread)
-           :eip address :orig-eax -1 :eax id
-           (mapcan #'list '(:ebx :ecx :edx :esi :edi :ebp) args))
-    (with-exit-unwind
-        (progn
-          (%resume-thread thread)
-          (let ((state (wait-for-state thread :not-type 'debug-thread-state-running))
-                (regs (ptrace-get-registers (thread-id-of thread))))
-            (unless (and (typep state 'debug-thread-state-trapped)
-                         (= (getf regs :eip) (+ address 3)))
-              (abort-task "Could not execute injected syscall, state ~S, regs ~S" state regs))
-            (getf regs :eax)))
-      (apply #'ptrace-set-registers (thread-id-of thread) saved-regs))))
+  (apply #'%set-registers thread
+         :eip address :orig-eax -1 :eax id
+         (mapcan #'list '(:ebx :ecx :edx :esi :edi :ebp) args))
+  (%resume-thread thread)
+  (let ((state (wait-for-state thread :not-type 'debug-thread-state-running))
+        (regs (ptrace-get-registers (thread-id-of thread))))
+    (unless (and (typep state 'debug-thread-state-trapped)
+                 (= (getf regs :eip) (+ address 3)))
+      (abort-task "Could not execute injected syscall, state ~S, regs ~S" state regs))
+    (getf regs :eax)))
 
 (def-debug-task inject-syscall (thread id &rest args)
   (let ((addr (%get-injected-syscall-address thread)))
-    (with-thread-suspended (thread :exclusive? t :save-trap-state? t)
+    (with-thread-excursion (thread)
       (apply #'%exec-injected-syscall thread addr id args))))
 
 (def-debug-task inject-mmap2 (thread start size prot flags fd offset)
@@ -80,9 +76,6 @@
 (def-debug-task %get-injected-syscall-address (thread)
   (let* ((process (process-of thread))
          (iinfo (injection-info-of process)))
-    (when (null iinfo)
-      (setf iinfo (make-instance 'code-injection-info :process process))
-      (setf (injection-info-of process) iinfo))
     (aif (syscall-inject-ptr-of iinfo)
          it
          (%init-code-injection process iinfo))))
