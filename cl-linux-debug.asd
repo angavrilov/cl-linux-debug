@@ -13,6 +13,10 @@
                :trees
                :chanl :cl-cont :elf)
   :components ((:module
+                "xmlisp"
+                :components ((:file "package")
+                             (:file "XMLisp" :depends-on ("package"))))
+               (:module
                 "code-info"
                 :components ((:file "package")
                              (:file "utils" :depends-on ("package"))
@@ -33,5 +37,10 @@
                              (:file "classes" :depends-on ("package" "tasks"))
                              (:file "debug-process" :depends-on ("package" "classes" "ptrace" "proc"))
                              (:file "debug-attach" :depends-on ("debug-process"))
-                             (:file "code-injection" :depends-on ("debug-attach"))))))
+                             (:file "code-injection" :depends-on ("debug-attach"))))
+               (:module
+                "data-info"
+                :depends-on ("debugger" "xmlisp")
+                :components ((:file "package")
+                             (:file "memory" :depends-on ("package"))))))
 

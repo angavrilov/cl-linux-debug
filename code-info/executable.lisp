@@ -50,6 +50,9 @@
           (when (start-address-of section)
             (insert section (section-map-of exec))))
         (annotate-regions-from-symbols exec)
+        ;; Discard processed elf section content to save memory
+        (dolist (section sections)
+          (setf (slot-value (elf-section-of section) 'elf:data) nil))
         (pushnew exec *executables*)
         exec)))
 

@@ -78,6 +78,8 @@
                            :reader t)
    (control-lock (make-debug-r/w-lock :name "Global Lock") :reader t)))
 
+(defmethod process-of ((obj debug-process)) obj)
+
 (defgeneric is-running? (obj)
   (:method ((obj debug-thread-state)) nil)
   (:method ((obj debug-thread-state-running)) t)

@@ -30,4 +30,5 @@
            #:main-image-of #:all-images-of #:sections-of
            #:find-region-by-address #:find-regions-by-name
            #:symbol-name-of
+           #:make-chunk-table #:lookup-chunk
            ))

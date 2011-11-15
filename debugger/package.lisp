@@ -24,4 +24,10 @@
            #:signalled-condition-of
            #:exit-task #:abort-task #:yield-task
            #:with-exit-unwind
-           #:make-debug-r/w-lock #:with-r/w-lock-held))
+           #:make-debug-r/w-lock #:with-r/w-lock-held
+           #:def-debug-task #:call-debug-task
+           #:process-memory-maps
+           #:with-thread-suspended
+           #:with-any-thread-suspended
+           #:read-process-data
+           #:*debugged-processes*))

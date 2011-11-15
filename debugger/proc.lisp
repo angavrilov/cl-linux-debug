@@ -14,7 +14,7 @@
           (directory (merge-pathnames #P"task/*/mem"
                                       (process-proc-dir process)))))
 
-(defun process-memory-maps (process)
+(defun proc-memory-maps (process)
   (with-open-file (stream (merge-pathnames #P"maps"
                                            (process-proc-dir process)))
     (loop for line = (read-line stream nil nil)

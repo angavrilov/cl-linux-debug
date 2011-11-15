@@ -79,3 +79,13 @@
     (aif (syscall-inject-ptr-of iinfo)
          it
          (%init-code-injection process iinfo))))
+
+(def-debug-task read-process-data (process address vector &key (start 0) end)
+  (with-any-thread-suspended (process thread)
+    (let* ((real-end (or end (length vector)))
+           (size (- real-end start)))
+      (if (> size 16)
+          (proc-read-memory (mem-file-of (process-of process))
+                            address vector :start start :end real-end)
+          (ptrace-copy-bytes (thread-id-of thread) address vector
+                             :start start :end real-end)))))

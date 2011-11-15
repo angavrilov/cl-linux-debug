@@ -82,7 +82,9 @@
                (resume-thread thread))))))))
 
 (defun find-any-thread-to-suspend (process)
-  (or (dolist (thread (threads-of process))
+  (or (when (typep process 'debug-thread)
+        process)
+      (dolist (thread (threads-of process))
         (when (typep (confirmed-state-of thread) 'debug-thread-state-stopped)
           (return thread)))
       (main-thread-of process)))
@@ -132,6 +134,9 @@
     (slot-makunbound process 'mem-file)
     (removef *debugged-processes* process)))
 
+(defun process-memory-maps (process)
+  (proc-memory-maps (process-id-of process)))
+
 (def-debug-task initialize-debug (process)
   (with-global-control (process :exclusive? t)
     (flet ((start-attach-to-thread (id)
@@ -158,10 +163,11 @@
                   (dolist (id (set-difference ids known))
                     (start-attach-to-thread id)))))
         (setf (slot-value process 'mem-file)
-              (open (process-memory-file pid) :direction :io :if-exists :overwrite))
+              (open (process-memory-file pid) :direction :io :if-exists :overwrite
+                    :element-type 'uint8))
         (format t "Loading the debugged executable...~%")
         (let ((executable (executable-of process)))
-          (load-executable-mappings executable (process-memory-maps pid))))
+          (load-executable-mappings executable (process-memory-maps process))))
       (values process (length (threads-of process))))))
 
 (defun/cc start-debug (process-id)
