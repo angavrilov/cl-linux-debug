@@ -9,7 +9,7 @@
 (def (class* e) section-extent (memory-extent)
   ((section :reader t)))
 
-(def (class* e) memory-mirror ()
+(def (class* e) memory-mirror (type-context)
   ((process :reader t)
    (lock (make-recursive-lock "Memory Mirror"))
    (extents nil :accessor t)
@@ -19,20 +19,43 @@
 (defmethod executable-of ((mirror memory-mirror))
   (executable-of (process-of mirror)))
 
-(defgeneric resolve-extent-for-addr (mirror addr)
-  (:method ((mirror memory-mirror) addr)
-    (with-recursive-lock-held ((lock-of mirror))
-      (or (lookup-chunk (extent-map-of mirror) addr)
-          (lookup-chunk (section-map-of mirror) addr))))
-  (:method ((ext memory-extent) addr)
-    (if (< -1 (- addr (start-address-of ext)) (length-of ext))
-        ext
-        (resolve-extent-for-addr (mirror-of ext) addr))))
+(defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
+  (with-recursive-lock-held ((lock-of mirror))
+    (or (lookup-chunk (extent-map-of mirror) addr)
+        (lookup-chunk (section-map-of mirror) addr))))
+
+(defmethod resolve-extent-for-addr ((ext memory-extent) addr)
+  (if (< -1 (- addr (start-address-of ext)) (length-of ext))
+      ext
+      (resolve-extent-for-addr (mirror-of ext) addr)))
+
+(defmethod get-bytes-for-addr ((mirror memory-mirror) addr size)
+  (awhen (resolve-extent-for-addr mirror addr)
+    (get-bytes-for-addr it addr size)))
+
+(defmethod get-bytes-for-addr ((ext memory-extent) addr size)
+  (let* ((start (start-address-of ext))
+         (offset (- addr start))
+         (bias (start-offset-of ext)))
+    (when (<= 0 offset (- (length-of ext) size))
+      (values (data-bytes-of ext) (+ offset bias) (- start bias)))))
+
+(defun get-memory-bytes (memory addr size)
+  (multiple-value-bind (bytes offset)
+      (get-bytes-for-addr memory addr size)
+    (when bytes
+      (parse-bytes bytes offset size))))
+
+(defun get-memory-integer (memory addr size &key signed?)
+  (multiple-value-bind (bytes offset)
+      (get-bytes-for-addr memory addr size)
+    (when bytes
+      (parse-int bytes offset size :signed? signed?))))
 
 ;; Mirror synchronization
 
 (defun delete-memory-extent (mirror extent)
-  (setf (slot-value extent 'data-bytes) nil)
+  (setf (slot-value extent 'cl-linux-debug.code-info::data-bytes) nil)
   (removef (extents-of mirror) extent)
   (trees:delete (start-address-of extent) (extent-map-of mirror)))
 
@@ -42,6 +65,7 @@
     (or (lookup-chunk (extent-map-of mirror) start)
         (let ((new-ext (make-instance 'memory-extent
                                       :mirror mirror
+                                      :mapping mapping
                                       :start-address start
                                       :length len
                                       :data-bytes (make-array len :element-type 'uint8))))
@@ -64,9 +88,14 @@
     (dolist (ext (extents-of mirror))
       (let* ((start (start-address-of ext))
              (mapping (find start mappings :key #'memory-mapping-start-addr)))
-        (when (or (null mapping)
-                  (/= (- (memory-mapping-end-addr mapping) start) (length-of ext)))
-          (delete-memory-extent mirror ext))))
+        (if (null mapping)
+            (delete-memory-extent mirror ext)
+            (let ((msize (- (memory-mapping-end-addr mapping) start)))
+              (when (/= msize (length-of ext))
+                (setf (slot-value ext 'cl-linux-debug.code-info::data-bytes)
+                      (make-array msize :element-type 'uint8))
+                (setf (slot-value ext 'length) msize))
+              (setf (slot-value ext 'mapping) mapping)))))
     (dolist (sect (sections-of (executable-of mirror)))
       (unless (or (writable? (origin-of sect))
                   (null (data-bytes-of sect)))
@@ -93,3 +122,13 @@
   (let ((mirror (make-instance 'memory-mirror :process process)))
     (refresh-memory-mirror mirror)
     mirror))
+
+(defgeneric get-memory-global (memory name)
+  (:method ((memory memory-mirror) name)
+    (let* ((type (lookup-global-in-context memory name))
+           (symbols (find-regions-by-name (executable-of memory)
+                                          (get-$-field-name name :no-namespace? t)))
+           (addr-sym (find-if (lambda (x) (typep (origin-of x) 'executable-region-object)) symbols)))
+      (when addr-sym
+        (make-memory-ref memory (start-address-of addr-sym) type
+                         :parent :globals :key name)))))

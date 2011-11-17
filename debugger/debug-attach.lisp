@@ -177,3 +177,12 @@
 (defun/cc stop-debug (process)
   (call-debug-task 'terminate-debug process))
 
+(def-debug-task resume-all-threads (process)
+  (with-global-control (process :exclusive? t)
+    (dolist (thread (threads-of process))
+      (resume-thread thread))))
+
+(def-debug-task stop-all-threads (process)
+  (with-global-control (process :exclusive? t)
+    (suspend-threads process :all)))
+

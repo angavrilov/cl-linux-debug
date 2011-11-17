@@ -29,8 +29,14 @@
 (defun wait-pending? (process)
   (= (waitpid process (null-pointer) WNOHANG) process))
 
+(defcfun "syscall" :int
+  (id :int)
+  (process :int)
+  (thread :int)
+  (signal :int))
+
 (defun kill-thread (process thread signal)
-  (with-errno (foreign-funcall "syscall" :int SYS_tgkill :int process :int thread :int signal)))
+  (with-errno (syscall SYS_tgkill process thread signal)))
 
 (defvar *sigchld-lock* (bordeaux-threads:make-lock "SIGCHLD LOCK"))
 (defvar *sigchld-callbacks* (make-hash-table :test #'eql))

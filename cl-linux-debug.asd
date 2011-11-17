@@ -42,5 +42,9 @@
                 "data-info"
                 :depends-on ("debugger" "xmlisp")
                 :components ((:file "package")
-                             (:file "memory" :depends-on ("package"))))))
+                             (:file "fields" :depends-on ("package"))
+                             (:file "types" :depends-on ("package" "fields"))
+                             (:file "type-core" :depends-on ("package" "types"))
+                             (:file "memory" :depends-on ("package" "type-core"))
+                             (:file "malloc" :depends-on ("package" "memory"))))))
 

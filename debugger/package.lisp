@@ -30,4 +30,6 @@
            #:with-thread-suspended
            #:with-any-thread-suspended
            #:read-process-data
-           #:*debugged-processes*))
+           #:*debugged-processes*
+           #:start-debug #:stop-debug
+           #:resume-all-threads #:stop-all-threads))

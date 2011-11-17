@@ -31,4 +31,6 @@
            #:find-region-by-address #:find-regions-by-name
            #:symbol-name-of
            #:make-chunk-table #:lookup-chunk
+           #:with-simple-vector-fill
+           #:binsearch-generic #:binsearch-uint32-<
            ))

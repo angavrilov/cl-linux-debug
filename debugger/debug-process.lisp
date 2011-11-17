@@ -157,9 +157,10 @@
       (typecase new-state
         ;; Eat spurious stops
         (debug-thread-state-paused
-         (unless (typep cur-state 'debug-thread-state-stopping)
-           (%resume-thread thread)
-           (return-from process-thread-state-change)))
+         (when (and (typep cur-state 'debug-thread-state-running)
+                    (not (typep cur-state 'debug-thread-state-stopping)))
+           (when (ptrace-continue (thread-id-of thread))
+             (return-from process-thread-state-change))))
         ;; Handle forks
         (debug-thread-state-trapped
          (case (ptrace-event-of new-state)
