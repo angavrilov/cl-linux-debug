@@ -9,7 +9,7 @@
 (def (class* e) section-extent (memory-extent)
   ((section :reader t)))
 
-(def (class* e) memory-mirror (type-context)
+(def (class* e) memory-mirror ()
   ((process :reader t)
    (lock (make-recursive-lock "Memory Mirror"))
    (extents nil :accessor t)
@@ -118,8 +118,8 @@
   (:method ((mirror memory-mirror))
     (call-debug-task #'do-refresh-mirror mirror)))
 
-(defun make-memory-mirror (process)
-  (let ((mirror (make-instance 'memory-mirror :process process)))
+(defun make-memory-mirror (process &optional (type 'memory-mirror))
+  (let ((mirror (make-instance type :process process)))
     (refresh-memory-mirror mirror)
     mirror))
 

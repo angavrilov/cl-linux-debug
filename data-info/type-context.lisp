@@ -108,6 +108,7 @@
 
 (defgeneric check-refresh-context (context)
   (:method ((context type-context))
+    ;; Check types
     (when (< (last-types-version-of context) *known-types-version*)
       (let ((*old-processed-types* (processed-types-of context)))
         (setf (processed-types-of context) (make-hash-table :test #'equal))
@@ -115,6 +116,7 @@
            do (with-simple-restart (continue "Skip this type")
                 (lookup-type-in-context context name))))
       (setf (last-types-version-of context) *known-types-version*))
+    ;; Check globals
     (when (< (last-globals-version-of context) *known-globals-version*)
       (let ((*old-processed-globals* (processed-globals-of context)))
         (setf (processed-globals-of context) (make-hash-table :test #'equal))

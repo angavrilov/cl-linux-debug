@@ -155,6 +155,9 @@
 
 ;; Binary search
 
+(defun make-binsearch-uint32-vec (&optional (size 0))
+  (make-array size :element-type 'uint32 :fill-pointer 0 :adjustable t))
+
 (defun get-vector-simple-array (vector)
   (sb-kernel:with-array-data ((dv vector) (sv) (ev))
     (assert (= sv 0))

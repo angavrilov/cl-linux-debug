@@ -33,6 +33,7 @@
            #:find-region-by-address #:find-regions-by-name
            #:symbol-name-of
            #:make-chunk-table #:lookup-chunk
+           #:make-binsearch-uint32-vec
            #:with-simple-vector-fill
            #:binsearch-generic #:binsearch-uint32-<
            ))
