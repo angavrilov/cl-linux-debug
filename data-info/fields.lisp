@@ -2,6 +2,8 @@
 
 (in-package :cl-linux-debug.data-info)
 
+;; Access generics
+
 (defgeneric @ (obj key &optional default)
   (:method ((obj list) key &optional default)
     (mapcan (lambda (x) (ensure-list (@ x key default))) obj))
@@ -14,6 +16,8 @@
   (:method (obj (key list) &optional default)
     (mapcan (lambda (x) (ensure-list ($ obj x default))) key)))
 
+;; Save readtable
+
 (defvar *old-readtable*
   (progn
     (when (get-macro-character #\$)
@@ -21,6 +25,8 @@
     (when (get-macro-character #\@)
       (warn "A reader for @ is already present."))
     (copy-readtable *readtable*)))
+
+;; Symbol management
 
 (defun register-$-var (name)
   (let ((fpkg (load-time-value
@@ -51,17 +57,54 @@
              (register-$-field (add-$-prefix (subseq name (1+ it)))))
        (register-$-field (add-$-prefix name))))
 
+(declaim (inline is-$-keyword? is-$-keyword-namespace?))
+
+(defun is-$-keyword? (obj)
+  (and (typep obj 'symbol) (get obj 'is-$-var?)))
+
+(defun is-$-keyword-namespace? (obj)
+  (or (is-$-keyword? obj)
+      (and (consp obj) (is-$-keyword? (car obj)) (is-$-keyword? (cdr obj)))))
+
 (defun get-$-field-name (field &key no-namespace?)
   (if (consp field)
       (progn
-        (assert (and (symbolp (car field)) (symbolp (cdr field))))
+        (assert (is-$-keyword-namespace? field))
         (if no-namespace?
             (get-$-field-name (cdr field))
             (concatenate 'string (get-$-field-name (car field))
                          ":" (get-$-field-name (cdr field)))))
       (progn
-        (assert (and (typep field 'symbol) (get field 'is-$-var?)))
+        (assert (is-$-keyword? field))
         (subseq (symbol-name field) 1))))
+
+(defun name-with-namespace (name namespace)
+  (if (and namespace (symbolp name))
+      (cons namespace name)
+      name))
+
+(defun namespace-by-name (name &optional default)
+  (if (consp name) (car name) default))
+
+;; Types
+
+(deftype $-keyword () 'symbol)
+(deftype $-keyword-namespace () '(or symbol cons))
+
+(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword)) stream)
+  (format stream "\"~A\"" (get-$-field-name value)))
+
+(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword)))
+  (aprog1 (get-$-field value)
+    (assert (symbolp it))))
+
+(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword-namespace)) stream)
+  (format stream "\"~A\"" (get-$-field-name value)))
+
+(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword-namespace)))
+  (get-$-field value))
+
+;; Reader
 
 (defun main-$-reader (stream char)
   (let ((at? (char= char #\@))

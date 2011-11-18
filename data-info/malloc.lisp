@@ -171,7 +171,9 @@
               for heaps = (find-aux-heap-chain memory arena)
               append (mapcar #'find-aux-heap-range heaps)))))
 
-(defun collect-malloc-objects (memory result-vector)
+(defun collect-malloc-objects (memory &optional result-vector)
+  (unless result-vector
+    (setf result-vector (make-array 4096 :element-type 'uint32 :fill-pointer 0 :adjustable t)))
   (setf (fill-pointer result-vector) 0)
   (dolist (range (sort (find-heap-ranges memory) #'< :key #'car))
     (enumerate-malloc-chunks memory result-vector (car range) (cdr range)))

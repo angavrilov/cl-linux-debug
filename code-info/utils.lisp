@@ -22,6 +22,33 @@
   (file-offset 0)
   (file-path nil))
 
+;; Offsets
+
+(deftype offset () '(or signed-byte ratio null))
+(deftype address () '(or unsigned-byte ratio null))
+
+(defun format-hex-offset (offset &key force-sign?)
+  (multiple-value-bind (int rest) (floor offset 1)
+    (string-downcase
+     (format nil "~@[~A~]0x~X~@[.~A~]"
+             (cond ((< int 0) "-")
+                   (force-sign? "+"))
+             (abs int)
+             (ecase rest
+               (0 nil)
+               ((1/8 2/8 3/8 4/8 5/8 6/8 7/8) (* 8 rest)))))))
+
+(defun parse-hex-offset (offset)
+  (or (cl-ppcre:register-groups-bind (sign? body tail)
+          ("([-+])?0x([0-9a-fA-F]+)(?:.([0-7]))?" offset)
+        (check-type body string)
+        (let* ((iv (parse-integer body :radix 16))
+               (siv (if (equal sign? "-") (- iv) iv)))
+          (if tail
+              (+ siv (/ (parse-integer tail) 8))
+              siv)))
+      (error "Invalid syntax for offset: '~A'" offset)))
+
 ;; Signed/unsigned conversion
 
 (declaim (inline signed unsigned))

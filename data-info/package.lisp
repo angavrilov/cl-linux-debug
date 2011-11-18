@@ -4,7 +4,9 @@
 
 (defpackage :cl-linux-debug.field-names
   (:use)
-  (:export #:@ #:$ #:$$))
+  (:export #:@ #:$ #:$$
+           #:$-keyword #:$-keyword-namespace
+           #:is-$-keyword? #:is-$-keyword-namespace?))
 
 (defpackage :cl-linux-debug.data-defs
   (:use :common-lisp :xml
@@ -18,14 +20,12 @@
                 #:int8 #:uint8
                 #:int16 #:uint16
                 #:int32 #:uint32
-                #:int64 #:uint64)
-  (:export #:*known-types* #:*known-types-version*
-           #:*known-globals* #:*known-globals-version*
-           #:*type-context* #:size-in-context #:lookup-type-reference
-           #:copy-data-definition #:layout-type-rec
-           #:name-with-namespace #:align-up
-           #:format-hex-offset #:parse-hex-offset
-           #:name))
+                #:int64 #:uint64
+                #:offset #:address
+                #:format-hex-offset #:parse-hex-offset)
+  (:export #:copy-data-definition #:name-with-namespace
+           #:name ; to avoid conflict
+           ))
 
 (pushnew (find-package :cl-linux-debug.data-defs)
          xml:*xmlisp-packages*)

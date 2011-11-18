@@ -2,54 +2,7 @@
 
 (in-package :cl-linux-debug.data-defs)
 
-(defvar *known-types* nil)
-(defvar *known-types-version* 0)
-
-(defvar *known-globals* nil)
-(defvar *known-globals-version* 0)
-
-(defparameter *type-context* nil)
-
-(defun align-up (offset alignment)
-  (* alignment (ceiling offset alignment)))
-
-(deftype $-keyword () 'symbol)
-(deftype $-keyword-namespace () '(or symbol cons))
-
-(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword)) stream)
-  (format stream "\"~A\"" (cl-linux-debug.data-info::get-$-field-name value)))
-
-(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword)))
-  (aprog1 (cl-linux-debug.data-info::get-$-field value)
-    (assert (symbolp it))))
-
-(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword-namespace)) stream)
-  (format stream "\"~A\"" (cl-linux-debug.data-info::get-$-field-name value)))
-
-(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword-namespace)))
-  (cl-linux-debug.data-info::get-$-field value))
-
-(deftype offset () '(or signed-byte ratio null))
-
-(defun format-hex-offset (offset)
-  (multiple-value-bind (int rest) (floor offset 1)
-    (string-downcase
-     (format nil "~:[~;-~]0x~X~@[.~A~]"
-             (< int 0) (abs int)
-             (ecase rest
-               (0 nil)
-               ((1/8 2/8 3/8 4/8 5/8 6/8 7/8) (* 8 rest)))))))
-
-(defun parse-hex-offset (offset)
-  (or (cl-ppcre:register-groups-bind (sign? body tail)
-          ("(-)?0x([0-9a-fA-F]+)(?:.([0-7]))?" offset)
-        (check-type body string)
-        (let* ((iv (parse-integer body :radix 16))
-               (siv (if sign? (- iv) iv)))
-          (if tail
-              (+ siv (/ (parse-integer tail) 8))
-              siv)))
-      (error "Invalid syntax for offset: '~A'" offset)))
+;; hex formatting
 
 (defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql 'offset)) stream)
   (format stream "\"~A\"" (format-hex-offset value)))
@@ -57,16 +10,21 @@
 (defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql 'offset)))
   (parse-hex-offset value))
 
-(deftype address () '(or unsigned-byte ratio null))
-
 (defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql 'address)) stream)
   (format stream "\"~A\"" (format-hex-offset value)))
 
 (defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql 'address)))
   (parse-hex-offset value))
 
+;; Base types
+
 (def (class* eas) comment (xml-serializer)
-  ())
+  ()
+  (:documentation "A separate-tag XML item comment."))
+
+(def (class* eas) concrete-item ()
+  ()
+  (:documentation "A mixin for concrete (instantiatable) types."))
 
 (def (class* eas) data-item (xml-serializer)
   ((comment nil :accessor t)
@@ -76,26 +34,13 @@
    (effective-alignment :accessor t)
    (effective-size :accessor t)
    (effective-finalized? nil :accessor t)
-   (effective-tag :accessor t)))
+   (effective-has-pointers? nil :accessor t)
+   (effective-tag :accessor t))
+  (:documentation "An abstract base class for all type items."))
 
-(defgeneric compute-effective-size (obj)
-  (:method :around ((obj data-item))
-    (or (size-of obj)
-        (align-up (call-next-method)
-                  (effective-alignment-of obj)))))
-
-(defgeneric compute-effective-alignment (obj)
-  (:method :around ((obj data-item))
-    (or (alignment-of obj) (call-next-method))))
-
-(defgeneric layout-type-rec (obj)
-  (:method ((obj data-item))
-    (setf (effective-alignment-of obj)
-          (compute-effective-alignment obj)
-          (effective-size-of obj)
-          (compute-effective-size obj)))
-  (:method :after ((obj data-item))
-    (setf (effective-finalized? obj) t)))
+(defmethod initialize-instance :before ((obj data-item) &key)
+  (unless (typep obj 'concrete-item)
+    (error "Could not instantiate an abstract type class: ~S" obj)))
 
 (defmethod print-slots ((obj data-item))
   (stable-sort
@@ -104,7 +49,7 @@
                   (name (symbol-name sym)))
                 (or (starts-with-subseq "EFFECTIVE-" name)
                     (starts-with-subseq "SYNTAX-" name)
-                    (member sym '(is-created-by-xml-reader file copy-origin))))
+                    (member sym '(is-created-by-xml-reader file copy-origin default-size))))
               (class-slots (class-of obj)))
    #'< :key (lambda (x &aux (name (closer-mop:slot-definition-name x)))
               (or (position name '(name type-name is-union count offset size alignment))
@@ -129,262 +74,118 @@
              :file (file obj) :copy-origin obj
              vals))))
 
+;; Abstract type classes
+
 (def (class* eas) data-field (data-item)
   ((name nil :accessor t :type $-keyword)
    (offset nil :accessor t :type offset)
    (syntax-parent nil :accessor t)
    (effective-parent :accessor t)
-   (effective-offset :accessor t)))
+   (effective-offset :accessor t))
+  (:documentation "An abstract type that can be inside a compound structure."))
 
-(def (class* eas) compound-item (data-item)
+(def (class* eas) unit-item (data-item)
+  ((default-size :accessor t))
+  (:documentation "An abstract type for a type that is complete without any arguments."))
+
+(def (class* eas) virtual-compound-item (data-item)
+  ((effective-fields :accessor t))
+  (:documentation "An abstract type that may contain fake fields."))
+
+(def (class* eas) compound-item (virtual-compound-item)
   ((fields nil :accessor t)
-   (is-union nil :accessor t :type boolean)
-   (effective-fields :accessor t)))
-
-(defgeneric layout-fields (obj fields)
-  (:method :before ((obj compound-item) fields)
-    (dolist (field fields)
-      (setf (effective-parent-of field) obj)
-      (layout-type-rec field)))
-  (:method ((obj compound-item) fields)
-    (let ((offset 0))
-      (dolist (field fields)
-        (setf offset (or (offset-of field)
-                         (when (is-union-p obj) 0)
-                         (align-up offset (effective-alignment-of field))))
-        (setf (effective-offset-of field) offset)
-        (incf offset (effective-size-of field))))))
-
-(defmethod compute-effective-size ((obj compound-item))
-  (reduce #'max (effective-fields-of obj)
-          :key (lambda (x) (+ (effective-offset-of x) (effective-size-of x)))
-          :initial-value 0))
-
-(defmethod compute-effective-alignment ((obj compound-item))
-  (reduce #'max (effective-fields-of obj)
-          :key #'effective-alignment-of
-          :initial-value 1))
-
-(defgeneric compute-effective-fields (obj)
-  (:method ((obj data-item)) nil)
-  (:method ((obj compound-item))
-    (fields-of obj)))
-
-(defmethod layout-type-rec ((obj compound-item))
-  (let ((fields (compute-effective-fields obj)))
-    (setf (effective-fields-of obj) fields)
-    (layout-fields obj fields))
-  (call-next-method))
+   (is-union nil :accessor t :type boolean))
+  (:documentation "An abstract type that may contain real fields."))
 
 (defmethod add-subobject ((obj compound-item) (subobj data-field))
   (nconcf (fields-of obj) (list subobj))
   (setf (syntax-parent-of subobj) obj))
 
-(defmethod copy-data-definition ((obj compound-item))
-  (aprog1 (call-next-method)
-    (dolist (field (fields-of it))
-      (setf (syntax-parent-of field) it))))
-
-(def (class* eas) ref-compound-item (compound-item)
-  ((type-name nil :accessor t :type $-keyword-namespace)))
-
-(defgeneric make-proxy-field (obj type))
-
-(defgeneric lookup-type-reference (context referrer name)
-  (:method (context referrer (name null))
-    (declare (ignore context))
-    (error "~A must have fields or TYPE-NAME" (class-name (class-of referrer))))
-  (:method (context referrer name)
-    (declare (ignore referrer context))
-    (error "Unknown type name: ~A" name)))
-
-(defmethod compute-effective-fields ((obj ref-compound-item))
-  (cond ((or (type-name-of obj) (null (fields-of obj)))
-         (unless (and (null (fields-of obj))
-                      (null (is-union-p obj)))
-           (error "When TYPE-NAME is given, direct fields are not allowed."))
-         (let ((top-type (lookup-type-reference *type-context* obj (type-name-of obj))))
-           (awhen (make-proxy-field obj top-type)
-             (list it))))
-        (t
-         (call-next-method))))
-
-(def (class* eas) global-type-proxy (data-field)
-  ((type-name nil :accessor t :type $-keyword-namespace)
-   (effective-main-type :accessor t)))
-
-(macrolet ((delegate (name)
-             `(defmethod ,name ((proxy global-type-proxy))
-                (let ((base (effective-main-type-of proxy)))
-                  (assert (and base (effective-finalized? base)))
-                  (,name base)))))
-  (delegate effective-size-of)
-  (delegate effective-alignment-of)
-  (delegate effective-tag-of))
-
-(defmethod layout-type-rec ((proxy global-type-proxy)))
+(defmethod initialize-instance :after ((obj compound-item) &key)
+  (dolist (field (fields-of obj))
+    (setf (syntax-parent-of field) obj)))
 
 (def (class* eas) struct-compound-item (compound-item)
-  ())
+  ()
+  (:documentation "An abstract type that contains named fields as part of its own structure."))
 
-(def (class* eas) compound (data-field struct-compound-item ref-compound-item)
-  ())
-
-(defmethod layout-type-rec ((obj compound))
-  (if (type-name-of obj)
-      (progn
-        (unless (and (null (fields-of obj))
-                     (not (is-union-p obj))
-                     (null (size-of obj))
-                     (null (alignment-of obj)))
-          (error "COMPOUND with a TYPE-NAME can't have fields."))
-        (let ((ref (lookup-type-reference *type-context* obj (type-name-of obj))))
-          (change-class obj 'global-type-proxy :effective-main-type ref)))
-      (call-next-method)))
+(def (class* eas) ref-compound-item (compound-item)
+  ((type-name nil :accessor t :type $-keyword-namespace))
+  (:documentation "An abstract type that may refer to a global type."))
 
 (def (class* eas) container-item (ref-compound-item)
   ((effective-contained-item :accessor t)
-   (effective-element-size :accessor t)))
-
-(defmethod compute-effective-size :before ((obj container-item))
-  (slot-makunbound obj 'effective-element-size))
-
-(defmethod slot-unbound (class (obj container-item) (slot (eql 'effective-element-size)))
-  (let ((elt (effective-contained-item-of obj)))
-    (setf (effective-element-size-of obj) (effective-size-of elt))))
-
-(defmethod compute-effective-fields ((obj container-item))
-  (let ((fields (call-next-method)))
-    (setf (effective-contained-item-of obj)
-          (if (> (length fields) 1)
-              (make-instance 'compound :syntax-parent obj :fields fields)
-              (first fields)))
-    nil))
-
-(defmethod layout-fields :before ((obj container-item) fields)
-  (declare (ignore fields))
-  (let ((item (effective-contained-item-of obj)))
-    (setf (effective-parent-of item) obj)
-    (layout-type-rec item)))
-
-(def (class* eas) primitive-field (data-field)
-  ()
-  (:default-initargs :effective-finalized? t))
-
-(def (class* eas) padding (primitive-field)
-  ())
-
-(defmethod compute-effective-size ((obj padding)) 0)
-(defmethod compute-effective-alignment ((obj padding)) 1)
-
-(defmethod make-proxy-field (obj (type primitive-field))
-  type)
-
-(def (class* eas) integer-field (primitive-field)
-  ((syntax-int-signed? nil :accessor t :type boolean)
-   (syntax-int-size nil :accessor t :type integer)))
-
-(defmethod compute-effective-size ((obj integer-field))
-  (syntax-int-size-of obj))
-
-(defmethod compute-effective-alignment ((obj integer-field))
-  (syntax-int-size-of obj))
-
-(def (class* eas) int8_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 1 :syntax-int-signed? t))
-
-(def (class* eas) uint8_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 1 :syntax-int-signed? nil))
-
-(def (class* eas) int16_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 2 :syntax-int-signed? t))
-
-(def (class* eas) uint16_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 2 :syntax-int-signed? nil))
-
-(def (class* eas) int32_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 4 :syntax-int-signed? t))
-
-(def (class* eas) uint32_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 4 :syntax-int-signed? nil))
-
-(def (class* eas) int64_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 8 :syntax-int-signed? t))
-
-(def (class* eas) uint64_t (integer-field)
-  ()
-  (:default-initargs :syntax-int-size 8 :syntax-int-signed? nil))
-
-(def (class* eas) pointer (data-field container-item)
-  ())
-
-(defmethod make-proxy-field (obj (type pointer))
-  type)
-
-(defgeneric size-in-context (context tag)
-  (:method (ctx tag)
-    (declare (ignore ctx))
-    (ecase tag
-      ('pointer 4))))
-
-(defmethod compute-effective-size ((obj pointer))
-  (size-in-context *type-context* 'pointer))
-
-(defmethod compute-effective-alignment ((obj pointer))
-  (size-in-context *type-context* 'pointer))
-
-(defmethod lookup-type-reference (context (obj pointer) (name null))
-  (declare (ignore context))
-  (make-instance 'padding :syntax-parent obj))
-
-(macrolet ((primitives (&rest names)
-             `(progn
-                ,@(loop for name in names
-                     for kwd = (cl-linux-debug.data-info::get-$-field
-                                (string-downcase (symbol-name name)))
-                     collect `(defmethod lookup-type-reference
-                                  (context ref (name (eql ,kwd)))
-                                (declare (ignore context))
-                                (make-instance ',name :syntax-parent ref))))))
-  (primitives int8_t uint8_t int16_t uint16_t
-              int32_t uint32_t int64_t uint64_t
-              pointer))
+   (effective-element-size :accessor t))
+  (:documentation "An abstract type that points to a set of elements."))
 
 (def (class* eas) array-item (container-item)
-  ())
+  ()
+  (:documentation "An abstract container that contains an integer-indexed sequence of items."))
 
-(def (class* eas) static-array (data-field array-item)
+;; Concrete compound class
+
+(def (class* eas) compound (data-field struct-compound-item ref-compound-item concrete-item)
+  ()
+  (:documentation "A structure/union type, that may be a proxy for a global type."))
+
+;; Primitive fields
+
+(def (class* eas) primitive-field (data-field unit-item)
+  ()
+  (:documentation "An abstract type for a primitive field."))
+
+(def (class* eas) padding (primitive-field concrete-item)
+  ()
+  (:default-initargs :default-size 0 :effective-alignment 1)
+  (:documentation "A concrete type for unmarked space."))
+
+;; Integers
+
+(def (class* eas) integer-field (primitive-field)
+  ((effective-int-signed? nil :accessor t :type boolean))
+  (:documentation "An abstract type for an integer primitive field."))
+
+(macrolet ((def-simple-int (name size signed?)
+             `(def (class* eas) ,name (integer-field concrete-item)
+                ()
+                (:default-initargs :default-size ,size :effective-int-signed? ,signed?))))
+  (def-simple-int uint8_t 1 nil)
+  (def-simple-int int8_t 1 t)
+  (def-simple-int uint16_t 2 nil)
+  (def-simple-int int16_t 2 t)
+  (def-simple-int uint32_t 4 nil)
+  (def-simple-int int32_t 4 t)
+  (def-simple-int uint64_t 8 nil)
+  (def-simple-int int64_t 8 t))
+
+;; Pointer
+
+(def (class* eas) pointer (data-field unit-item container-item concrete-item)
+  ()
+  (:default-initargs :default-size 4 :effective-has-pointers? t)
+  (:documentation "A simple pointer to another object."))
+
+;; A static array (elements inline in the object itself)
+
+(def (class* eas) static-array (data-field array-item concrete-item)
   ((count nil :accessor t :type integer-or-null)))
 
-(defmethod compute-effective-size ((obj static-array))
-  (* (effective-element-size-of obj) (count-of obj)))
-
-(defmethod compute-effective-alignment ((obj static-array))
-  (effective-alignment-of (effective-contained-item-of obj)))
+;; Global entity definition
 
 (def (class* eas) global-type-definition (data-item)
-  ((type-name nil :accessor t :type $-keyword)))
-
-(defmethod make-proxy-field (obj (type global-type-definition))
-  (make-instance 'global-type-proxy :syntax-parent obj
-                 :type-name (type-name-of type)
-                 :effective-main-type type))
+  ((type-name nil :accessor t :type $-keyword))
+  (:documentation "An abstract global entity definition."))
 
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 
-(def (class* eas) struct-type (struct-compound-item global-type-definition)
-  ())
+(def (class* eas) struct-type (struct-compound-item global-type-definition concrete-item)
+  ()
+  (:documentation "A global structure type definition."))
 
 (def (class* eas) global-object (compound)
-  ())
+  ()
+  (:documentation "A global variable definition."))
 
 (defmethod read-return-value :after ((type global-object))
   (assert (name-of type)))
@@ -392,29 +193,11 @@
 (def (class* eas) data-definition (xml-serializer)
   ((namespace nil :accessor t :type $-keyword)
    (global-type-definitions nil :accessor t)
-   (global-objects nil :accessor t)))
+   (global-objects nil :accessor t))
+  (:documentation "A wrapper for a group of related definitions."))
 
 (defmethod add-subobject ((obj data-definition) (subobj global-type-definition))
   (nconcf (global-type-definitions-of obj) (list subobj)))
 
 (defmethod add-subobject ((obj data-definition) (subobj global-object))
   (nconcf (global-objects-of obj) (list subobj)))
-
-(defun name-with-namespace (name namespace)
-  (if (and namespace (symbolp name))
-      (cons namespace name)
-      name))
-
-(defmethod read-return-value ((defs data-definition))
-  (flet ((with-namespace (name)
-           (name-with-namespace name (namespace-of defs))))
-    (awhen (global-type-definitions-of defs)
-      (incf *known-types-version*)
-      (dolist (type it)
-        (setf (assoc-value *known-types* (with-namespace (type-name-of type)) :test #'equal) type)))
-    (awhen (global-objects-of defs)
-      (incf *known-globals-version*)
-      (dolist (type it)
-        (setf (assoc-value *known-globals* (with-namespace (name-of type)) :test #'equal) type))))
-  (values `(read-return-value ,defs) defs))
-

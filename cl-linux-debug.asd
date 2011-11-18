@@ -45,6 +45,9 @@
                              (:file "fields" :depends-on ("package"))
                              (:file "types" :depends-on ("package" "fields"))
                              (:file "type-core" :depends-on ("package" "types"))
-                             (:file "memory" :depends-on ("package" "type-core"))
+                             (:file "type-memory" :depends-on ("package" "type-core"))
+                             (:file "type-misc" :depends-on ("package" "type-memory"))
+                             (:file "type-context" :depends-on ("package" "type-core"))
+                             (:file "memory" :depends-on ("package" "type-context" "type-memory"))
                              (:file "malloc" :depends-on ("package" "memory"))))))
 
