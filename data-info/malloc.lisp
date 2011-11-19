@@ -49,6 +49,7 @@
 
   <struct-type type-name='vtable'>
     <pointer name='type_info' offset='-0x4' type-name='type_info'/>
+    <static-array name='methods' count='16' type-name='pointer'/>
   </struct-type>
 
   <struct-type type-name='type_info'>

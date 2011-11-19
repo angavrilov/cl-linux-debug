@@ -8,7 +8,8 @@
 (def (class* ea) memory-object-info ()
   ((malloc-chunk-range nil :accessor t)
    (section nil :accessor t)
-   (region nil :accessor t)))
+   (region nil :accessor t)
+   (is-code? nil :accessor t)))
 
 (defmethod refresh-memory-mirror :after ((mirror object-memory-mirror))
   (check-refresh-context mirror)
@@ -24,6 +25,7 @@
       (make-instance 'memory-object-info
                      :malloc-chunk-range (if malloc-ok? (cons malloc-min malloc-max))
                      :section section
+                     :is-code? (and section (executable? (origin-of section)))
                      :region region))))
 
 (defun get-address-info-region (memory addr)
@@ -61,9 +63,10 @@
           (do ((tail infolist (rest tail)))
               ((null tail))
             (destructuring-bind (addrv val info start end) (first tail)
-              (declare (ignore info end))
+              (declare (ignore end))
               (let* ((next (second tail))
-                     (nnext (third tail)))
+                     (nnext (third tail))
+                     (section (section-of info)))
                 (assert (= addr addrv))
                 (cond
                   ;; string
@@ -71,7 +74,13 @@
                    (consume (make-instance 'stl-string)))
                   ;; garbage
                   ((not (eql val start))
-                   (consume (make-instance 'int32_t)))
+                   (cond ((or (logtest val 3)
+                              (not (or start section)))
+                          (consume (make-instance 'int32_t)))
+                         ((or start (executable? (origin-of section)))
+                          (consume (make-instance 'pointer)))
+                         (t
+                          (consume (make-instance 'pointer)))))
                   ;; stl vector
                   ((and (eql start (fourth next))
                         (eql start (fourth nnext))
