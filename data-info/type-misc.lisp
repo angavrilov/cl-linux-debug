@@ -2,6 +2,8 @@
 
 (in-package :cl-linux-debug.data-info)
 
+;; Primitives
+
 (macrolet ((primitives (&rest names)
              `(progn
                 ,@(loop for name in names
@@ -10,6 +12,16 @@
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
               pointer))
+
+;; User-readable output
+
+(defgeneric format-ref-value-by-type (type ref value)
+  (:method (type ref (value memory-object-ref))
+    (if (eq value ref) "" (format-hex-offset (start-address-of value))))
+  (:method (type ref (value null))
+    "?")
+  (:method (type ref value)
+    value))
 
 ;; Integers
 
@@ -29,6 +41,9 @@
 
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-$ type ref t) key))
+
+(defmethod format-ref-value-by-type ((type pointer) ref (value null))
+  "NULL")
 
 ;; Abstract array
 
@@ -66,6 +81,9 @@
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql $count)))
   (nth-value 1 (array-base-dimensions type ref)))
+
+(defmethod format-ref-value-by-type ((type array-item) ref value)
+  (format nil "[~A]" $ref.count))
 
 ;; Static array
 

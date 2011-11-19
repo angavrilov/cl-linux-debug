@@ -53,9 +53,12 @@
            #:lookup-type-in-context
            #:lookup-global-in-context
            #:memory-object-ref-type
+           #:memory-object-ref-parent
+           #:memory-object-ref-parent-key
            #:effective-main-type-of
            #:address= #:address-
            #:format-field-seq
+           #:format-ref-value-by-type
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
            #:make-memory-ref
@@ -64,7 +67,9 @@
            #:refresh-memory-mirror
            #:get-memory-bytes
            #:get-memory-integer
-           #:get-memory-global))
+           #:get-memory-global
+           #:get-address-object-info
+           ))
 
 (pushnew (find-package :cl-linux-debug.data-info)
          xml:*xmlisp-packages*)

@@ -11,5 +11,6 @@
   :components ((:module
                 "gui"
                 :components ((:file "package")
-                             (:file "memory-browser" :depends-on ("package"))
+                             (:file "tree-model" :depends-on ("package"))
+                             (:file "memory-browser" :depends-on ("package" "tree-model"))
                              ))))

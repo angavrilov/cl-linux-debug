@@ -138,6 +138,8 @@
   (symbol-name-of (origin-of lrgn)))
 
 (defgeneric find-region-by-address (executable addr)
+  (:method ((image null) addr)
+    nil)
   (:method (image (addr null))
     nil)
   (:method ((image executable-image) addr)
@@ -149,10 +151,12 @@
                        wrapper
                        :type 'loaded-region))
   (:method ((exec loaded-executable) addr)
-    (awhen (loaded-image-of (find-section-by-address exec addr))
-      (find-region-by-address it addr))))
+    (awhen (find-section-by-address exec addr)
+      (find-region-by-address (loaded-image-of it) addr))))
 
 (defgeneric find-regions-by-name (executable name)
+  (:method ((image null) name)
+    nil)
   (:method (image (name null))
     nil)
   (:method ((image executable-image) name)

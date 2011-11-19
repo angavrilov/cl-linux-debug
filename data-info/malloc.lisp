@@ -32,13 +32,11 @@
     <comment>A GLibc malloc arena descriptor</comment>
     <int32_t name='mutex'/>
     <int32_t name='flags'/>
-    <static-array name='fastbinsY' count='10' comment='NFASTBINS'>
-      <uint32_t comment='pointer'/>
-    </static-array>
+    <static-array name='fastbinsY' count='10' comment='NFASTBINS' type-name='pointer'/>
     <uint32_t name='top' comment='pointer'/>
     <pointer name='last_remainder'/>
     <static-array name='bins' count='254' comment='NBINS*2-2'>
-      <uint32_t comment='pointer'/>
+      <pointer/>
     </static-array>
     <static-array name='binmap' count='4' comment='BINMAPSIZE'>
       <uint32_t/>

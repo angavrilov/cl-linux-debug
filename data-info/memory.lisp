@@ -16,6 +16,8 @@
    (extent-map (make-chunk-table) :reader t)
    (section-map (make-chunk-table) :reader t)))
 
+(defmethod mirror-of ((mirror memory-mirror)) mirror)
+
 (defmethod executable-of ((mirror memory-mirror))
   (executable-of (process-of mirror)))
 

@@ -79,7 +79,7 @@
     (error "~A must have fields or TYPE-NAME" (class-name (class-of referrer))))
   (:method (context referrer name)
     (declare (ignore context))
-    (aif (assoc-value name *known-builtin-types*)
+    (aif (assoc-value *known-builtin-types* name)
          (make-instance it :syntax-parent referrer)
          (error "Unknown type name: ~A" name)))
   (:method (context (referrer unit-item) (name null))
