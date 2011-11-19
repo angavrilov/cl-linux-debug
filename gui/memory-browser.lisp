@@ -110,7 +110,7 @@
                                                                (start-address-of rv)))
                "unknown area"))
           ((typep rv 'integer)
-           (format-hex-offset rv))
+           (format-hex-offset (unsigned rv (* 8 (length-of (ref-of node))))))
           (t ""))))
 
 ;; Tree layout
@@ -135,8 +135,8 @@
     (declare (ignore info))
     (setf (col-name-of child) "<target>"
           (slot-value child 'ref) ref)
-    (remove-child node 0)
-    (layout-children-in-range node (list ref) child r-start r-len)))
+    (layout-children-in-range node (list ref) child r-start r-len)
+    (remove-child node 0)))
 
 (def (class* e) array-subgroup-node (lazy-placeholder-node lazy-expanding-node)
   ((items nil :reader t)))
@@ -149,13 +149,14 @@
       (add-child parent child))))
 
 (defmethod on-lazy-expand-node ((node array-subgroup-node))
-  (remove-child node 0)
-  (populate-array-subgroup node (items-of node) (master-node-of node)))
+  (populate-array-subgroup node (items-of node) (or (master-node-of node) node))
+  (remove-child node 0))
 
-(defun make-array-subgroup (base items master)
+(defun make-array-subgroup (base items parent master)
   (aprog1
-      (make-instance 'array-subgroup-node :view (view-of master)
+      (make-instance 'array-subgroup-node :view (view-of parent)
                      :master-node master :items items
+                     :ref (first items) :ref-value nil
                      :col-name (format nil "~A..~A"
                                        base (+ base (length items) -1)))
     (make-lazy it nil)))
@@ -164,26 +165,30 @@
   ())
 
 (defmethod on-lazy-expand-node ((node array-object-node))
-  (remove-child node 0)
   (let* ((items ($ (ref-of node) '@))
          (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
                      (master-node-of node)
-                     (first items)))
-         (parent (if (children-of node)
+                     nil))
+         (placeholder (first (children-of node)))
+         (parent (if (rest (children-of node))
                      (aprog1 (make-instance 'lazy-placeholder-node
-                                            :view (view-of node) :col-name "<items>")
-                       (add-child node it 0))
+                                            :view (view-of node) :col-name "<items>"
+                                            :expanded? t)
+                       (add-child node it 1))
                      node))
          (num-items (length items)))
     (if (<= num-items 100)
-        (populate-array-subgroup parent items master)
+        (progn
+          (setf (slot-value placeholder 'ref) (first items))
+          (populate-array-subgroup parent items (or master placeholder)))
         (loop
            for base from 0 by 100
            for cnt = (min 100 (- num-items base))
            and rest = items then (subseq rest cnt)
            while (< base num-items)
            do (add-child parent
-                         (make-array-subgroup base (subseq rest 0 cnt) master))))))
+                         (make-array-subgroup base (subseq rest 0 cnt) node master))))
+    (remove-child node 0)))
 
 (defun layout-children-in-range (parent child-refs master &optional min-addr addr-range)
   (when child-refs

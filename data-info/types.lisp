@@ -59,8 +59,9 @@
 
 (defgeneric copy-data-definition (obj)
   (:method ((obj t)) obj)
-  (:method ((obj list))
-    (mapcar #'copy-data-definition obj))
+  (:method ((obj cons))
+    (cons (copy-data-definition (car obj))
+          (copy-data-definition (cdr obj))))
   (:method ((obj data-item))
     (let* ((slots (print-slots obj))
            (vals (loop for slot in slots
@@ -96,6 +97,8 @@
   ((fields nil :accessor t)
    (is-union nil :accessor t :type boolean))
   (:documentation "An abstract type that may contain real fields."))
+
+(defmethod is-union-p ((item virtual-compound-item)) nil)
 
 (defmethod add-subobject ((obj compound-item) (subobj data-field))
   (nconcf (fields-of obj) (list subobj))
@@ -156,19 +159,41 @@
   (def-simple-int uint32_t 4 nil)
   (def-simple-int int32_t 4 t)
   (def-simple-int uint64_t 8 nil)
-  (def-simple-int int64_t 8 t))
+  (def-simple-int int64_t 8 t)
+  (def-simple-int bool 4 nil))
 
 ;; Pointer
 
-(def (class* eas) pointer (data-field unit-item container-item concrete-item)
+(def (class* eas) pointer (unit-item container-item data-field concrete-item)
   ()
   (:default-initargs :default-size 4 :effective-has-pointers? t)
   (:documentation "A simple pointer to another object."))
 
+;; String
+
+(def (class* eas) static-string (primitive-field concrete-item)
+  ()
+  (:default-initargs :default-size 0 :effective-alignment 1)
+  (:documentation "A null-terminated string buffer embedded in the object."))
+
+(def (class* eas) ptr-string (primitive-field virtual-compound-item concrete-item)
+  ()
+  (:default-initargs :default-size 4 :effective-has-pointers? t)
+  (:documentation "A null-terminated string buffer pointer."))
+
+(def (class* eas) stl-string (ptr-string)
+  ()
+  (:documentation "An STL string buffer pointer."))
+
 ;; A static array (elements inline in the object itself)
 
-(def (class* eas) static-array (data-field array-item concrete-item)
+(def (class* eas) static-array (array-item data-field concrete-item)
   ((count nil :accessor t :type integer-or-null)))
+
+;; STL containers
+
+(def (class* eas) stl-vector (array-item data-field concrete-item)
+  ())
 
 ;; Global entity definition
 

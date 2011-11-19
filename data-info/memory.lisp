@@ -127,10 +127,15 @@
 
 (defgeneric get-memory-global (memory name)
   (:method ((memory memory-mirror) name)
-    (let* ((type (lookup-global-in-context memory name))
-           (symbols (find-regions-by-name (executable-of memory)
-                                          (get-$-field-name name :no-namespace? t)))
-           (addr-sym (find-if (lambda (x) (typep (origin-of x) 'executable-region-object)) symbols)))
-      (when addr-sym
-        (make-memory-ref memory (start-address-of addr-sym) type
-                         :parent :globals :key name)))))
+    (let* ((type (lookup-global-in-context memory name)))
+      (when type
+        (awhen (or (offset-of type)
+                   (let* ((symbols (find-regions-by-name
+                                    (executable-of memory)
+                                    (get-$-field-name name :no-namespace? t)))
+                          (addr-sym (find-if
+                                     (lambda (x) (typep (origin-of x) 'executable-region-object))
+                                     symbols)))
+                     (when addr-sym (start-address-of addr-sym))))
+          (make-memory-ref memory it type
+                           :parent :globals :key name))))))

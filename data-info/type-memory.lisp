@@ -40,7 +40,7 @@
       (format stream "REF ~A @~X: ~A"
               (xml-tag-name-string (effective-main-type-of type))
               (memory-object-ref-address ref)
-              (format-field-seq type)))))
+              (ignore-errors (format-field-seq type))))))
 
 (defgeneric lookup-type-in-context (context type-name)
   (:method :around (context type-name)

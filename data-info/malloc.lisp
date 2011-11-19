@@ -47,6 +47,15 @@
     <int32_t name='max_system_mem'/>
   </struct-type>
 
+  <struct-type type-name='vtable'>
+    <pointer name='type_info' offset='-0x4' type-name='type_info'/>
+  </struct-type>
+
+  <struct-type type-name='type_info'>
+    <pointer/>
+    <ptr-string name='class_name'/>
+  </struct-type>
+
   <global-object name='main_arena' type-name='malloc_state'/>
 </data-definition>
 

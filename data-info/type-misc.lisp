@@ -11,6 +11,7 @@
                      collect `(setf (assoc-value *known-builtin-types* ',kwd) ',name)))))
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
+              bool static-string ptr-string stl-string
               pointer))
 
 ;; User-readable output
@@ -30,6 +31,13 @@
     (with-bytes-for-ref (vector offset ref size)
       (parse-int vector offset size :signed? (effective-int-signed? type)))))
 
+(defmethod %memory-ref-$ ((type bool) ref (key (eql t)))
+  (awhen (call-next-method)
+    (/= it 0)))
+
+(defmethod format-ref-value-by-type ((type bool) ref value)
+  (if value "true" "false"))
+
 ;; Pointer
 
 (defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
@@ -44,6 +52,22 @@
 
 (defmethod format-ref-value-by-type ((type pointer) ref (value null))
   "NULL")
+
+;; Strings
+
+(defmethod %memory-ref-$ ((type static-string) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (if (/= size 0)
+          (parse-string vector offset
+                        :limit (min (length vector) (+ size offset)))
+          (parse-string vector offset)))))
+
+(defmethod compute-effective-fields ((type ptr-string))
+  (list (make-instance 'pointer :name $ptr :type-name $static-string)))
+
+(defmethod %memory-ref-$ ((type ptr-string) ref (key (eql t)))
+  $ref.ptr[t])
 
 ;; Abstract array
 
@@ -83,7 +107,7 @@
   (array-item-ref type ref 0 :check-bounds? nil))
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql $count)))
-  (nth-value 1 (array-base-dimensions type ref)))
+  (or (nth-value 1 (array-base-dimensions type ref)) 0))
 
 (defmethod format-ref-value-by-type ((type array-item) ref value)
   (format nil "[~A]" $ref.count))
@@ -98,6 +122,22 @@
 
 (defmethod array-base-dimensions ((type static-array) ref)
   (values (memory-object-ref-address ref) (count-of type)))
+
+;; STL vector
+
+(defun copy-item-def (type)
+  (copy-data-definition (effective-contained-item-of type)))
+
+(defmethod compute-effective-fields ((type stl-vector))
+  (list (make-instance 'pointer :name $start :fields (list (copy-item-def type)))
+        (make-instance 'pointer :name $end)
+        (make-instance 'pointer :name $block-end)))
+
+(defmethod array-base-dimensions ((type stl-vector) ref)
+  (let ((s $ref.start) (e $ref.end))
+    (awhen (and s e)
+      (values (start-address-of s)
+              (/ (address- e s) (effective-element-size-of type))))))
 
 ;; Generic structure
 

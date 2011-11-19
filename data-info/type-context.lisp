@@ -59,7 +59,7 @@
     (tag-type-tree (effective-contained-item-of type)
                    (if (typep old-copy 'container-item)
                        (effective-contained-item-of old-copy))))
-  (:method :before ((type compound-item) old-copy)
+  (:method :before ((type virtual-compound-item) old-copy)
     (let ((matches (match-up-lists (effective-fields-of type)
                                    (if (typep old-copy 'compound-item)
                                        (effective-fields-of old-copy))
