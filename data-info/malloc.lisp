@@ -52,8 +52,9 @@
   </struct-type>
 
   <struct-type type-name='type_info'>
-    <pointer/>
+    <pointer name='_vtable' type-name='vtable'/>
     <ptr-string name='class_name'/>
+    <pointer name='base_class' type-name='type_info'/>
   </struct-type>
 
   <global-object name='main_arena' type-name='malloc_state'/>
@@ -185,10 +186,11 @@
   result-vector)
 
 (defun lookup-malloc-object (obj-vector address)
-  (let ((idx (binsearch-uint32-< obj-vector (1- address))))
-    (if (< idx 0) nil
-        (let ((start (aref obj-vector idx)))
-          (if (logtest start 1) nil
-              (let ((min (+ start +chunk-header-size+))
-                    (max (logand (aref obj-vector (1+ idx)) (lognot 1))))
-                (values min max (<= min address max))))))))
+  (when (> address 0)
+    (let ((idx (binsearch-uint32-< obj-vector (1- address))))
+      (if (< idx 0) nil
+          (let ((start (aref obj-vector idx)))
+            (if (logtest start 1) nil
+                (let ((min (+ start +chunk-header-size+))
+                      (max (logand (aref obj-vector (1+ idx)) (lognot 1))))
+                  (values min max (<= min address max)))))))))

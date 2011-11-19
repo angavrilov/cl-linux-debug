@@ -62,16 +62,17 @@
 (defgeneric get-bytes-for-addr (extent address size))
 
 (defun make-memory-ref (memory address type &key parent key local?)
-  (awhen (if local? memory (resolve-extent-for-addr memory address))
-    (let* ((real-type (if (is-$-keyword-namespace? type)
-                          (lookup-type-in-context memory type)
-                          (effective-main-type-of type)))
-           (tag (effective-tag-of real-type)))
-      (make-memory-object-ref :memory it
-                              :address address
-                              :tag tag
-                              :parent-ref parent
-                              :parent-key (or key tag)))))
+  (let* ((extent (if local? memory (resolve-extent-for-addr memory address)))
+         (real-type (if (is-$-keyword-namespace? type)
+                        (lookup-type-in-context memory type)
+                        (effective-main-type-of type)))
+         (tag (effective-tag-of real-type)))
+    (assert extent)
+    (make-memory-object-ref :memory extent
+                            :address address
+                            :tag tag
+                            :parent-ref parent
+                            :parent-key (or key tag))))
 
 (defun resolve-offset-ref (base address type key &key local?)
   (make-memory-ref (memory-object-ref-memory base) address type

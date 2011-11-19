@@ -12,9 +12,16 @@
 (def (class* e) memory-mirror ()
   ((process :reader t)
    (lock (make-recursive-lock "Memory Mirror"))
+   (null-extent :reader t)
    (extents nil :accessor t)
    (extent-map (make-chunk-table) :reader t)
    (section-map (make-chunk-table) :reader t)))
+
+(defmethod intialize-instance :after ((mirror memory-mirror))
+  (setf (slot-value mirror 'null-extent)
+        (make-instance 'memory-extent
+                       :start-address 0 :length 0 :mapping nil :mirror mirror
+                       :data-bytes (make-array 0 :element-type 'uint8))))
 
 (defmethod mirror-of ((mirror memory-mirror)) mirror)
 
@@ -24,7 +31,8 @@
 (defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
   (with-recursive-lock-held ((lock-of mirror))
     (or (lookup-chunk (extent-map-of mirror) addr)
-        (lookup-chunk (section-map-of mirror) addr))))
+        (lookup-chunk (section-map-of mirror) addr)
+        (null-extent-of mirror))))
 
 (defmethod resolve-extent-for-addr ((ext memory-extent) addr)
   (if (< -1 (- addr (start-address-of ext)) (length-of ext))
@@ -99,8 +107,7 @@
                 (setf (slot-value ext 'length) msize))
               (setf (slot-value ext 'mapping) mapping)))))
     (dolist (sect (sections-of (executable-of mirror)))
-      (unless (or (writable? (origin-of sect))
-                  (null (data-bytes-of sect)))
+      (unless (null (data-bytes-of sect))
         (ensure-section-extent mirror sect)))
     (loop for map in mappings
        when (and (memory-mapping-writable? map)

@@ -70,6 +70,7 @@
            #:get-memory-integer
            #:get-memory-global
            #:get-address-object-info
+           #:guess-types-by-data
            ))
 
 (pushnew (find-package :cl-linux-debug.data-info)

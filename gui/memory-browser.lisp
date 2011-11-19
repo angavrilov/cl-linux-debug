@@ -164,12 +164,8 @@
 (def (class* e) array-object-node (memory-object-node lazy-expanding-node)
   ())
 
-(defmethod on-lazy-expand-node ((node array-object-node))
-  (let* ((items ($ (ref-of node) '@))
-         (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
-                     (master-node-of node)
-                     nil))
-         (placeholder (first (children-of node)))
+(defun add-array-contents (node items master)
+  (let* ((placeholder (first (children-of node)))
          (parent (if (rest (children-of node))
                      (aprog1 (make-instance 'lazy-placeholder-node
                                             :view (view-of node) :col-name "<items>"
@@ -189,6 +185,33 @@
            do (add-child parent
                          (make-array-subgroup base (subseq rest 0 cnt) node master))))
     (remove-child node 0)))
+
+(defmethod on-lazy-expand-node ((node array-object-node))
+  (let* ((items ($ (ref-of node) '@))
+         (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
+                     (master-node-of node)
+                     nil)))
+    (add-array-contents node items master)))
+
+(def (class* e) padding-node (memory-object-node lazy-expanding-node)
+  ()
+  (:default-initargs :col-type "" :col-info "" :col-comment ""))
+
+(defmethod col-name-of ((node padding-node))
+  (format nil "(~A=0x~X bytes)" (length-of node) (length-of node)))
+
+(defmethod col-value-of ((node padding-node))
+  (or (with-bytes-for-ref (vector offset (ref-of node) 1)
+        (format nil "~{~2,'0X~^ ~}~A"
+                (loop for i from 0 below (min 8 (length-of node))
+                   and j from offset below (length vector)
+                   collect (aref vector j))
+                (if (> (length-of node) 8) "...")))
+      "?"))
+
+(defmethod on-lazy-expand-node ((node padding-node))
+  (let ((items (guess-types-by-data (memory-of (view-of node)) (ref-of node))))
+    (add-array-contents node items (master-node-of node))))
 
 (defun layout-children-in-range (parent child-refs master &optional min-addr addr-range)
   (when child-refs
@@ -234,7 +257,12 @@
         (make-lazy it 'pointer-object-node))))
   (:method ((type array-item) ref master)
     (aprog1 (call-next-method)
-      (make-lazy it 'array-object-node))))
+      (make-lazy it 'array-object-node)))
+  (:method ((type padding) ref master)
+    (aprog1 (make-instance 'padding-node
+                           :view (view-of master)
+                           :ref ref :master-node master)
+      (make-lazy it nil))))
 
 (defun layout-ref-tree-node (ref master)
   (layout-ref-tree-node/type (memory-object-ref-type ref) ref master))
@@ -282,22 +310,23 @@
     (box-pack-start v-box label :expand nil)
     (box-pack-start v-box scroll :expand t)
     (container-add scroll view)
-    (flet ((add-column (id title min-width xalign)
+    (flet ((add-column (id title min-width xalign expand?)
              (let ((column (make-instance 'tree-view-column :title title
                                           :min-width min-width
-                                          :resizable t))
+                                          :resizable t
+                                          :expand expand?))
                    (renderer (make-instance 'cell-renderer-text :text "A text" :xalign xalign)))
                (setf (tree-view-column-sizing column) :fixed)
                (tree-view-column-pack-start column renderer)
                (tree-view-column-add-attribute column renderer "text" id)
                (tree-view-append-column view column)
                column)))
-      (add-column 0 "Address" 80 1.0)
+      (add-column 0 "Address" 80 1.0 nil)
       (setf (tree-view-expander-column view)
-            (add-column 1 "Name" 200 0.0))
-      (add-column 2 "Type" 100 0.0)
-      (add-column 3 "Value" 100 0.0)
-      (add-column 4 "Info" 100 0.0))
+            (add-column 1 "Name" 200 0.0 t))
+      (add-column 2 "Type" 100 0.0 nil)
+      (add-column 3 "Value" 100 0.0 nil)
+      (add-column 4 "Info" 100 0.0 t))
     (with-slots (widget tree-view info-label) tree
       (setf widget v-box
             tree-view view

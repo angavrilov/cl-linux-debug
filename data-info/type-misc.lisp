@@ -42,10 +42,11 @@
 
 (defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
   (let ((size (effective-size-of type)))
-    (with-bytes-for-ref (vector offset ref size)
-      (let ((ptr (parse-int vector offset size)))
-        (when (/= ptr 0)
-          (resolve-offset-ref ref ptr (effective-contained-item-of type) t))))))
+    (let ((ptr (or (with-bytes-for-ref (vector offset ref size)
+                     (parse-int vector offset size))
+                   (1- (ash 1 (* 8 size))))))
+      (when (/= ptr 0)
+        (resolve-offset-ref ref ptr (effective-contained-item-of type) t)))))
 
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-$ type ref t) key))

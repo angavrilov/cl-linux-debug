@@ -30,7 +30,7 @@
                               :linked-elf (if (/= (link hdr) 0)
                                               (nth (link hdr) (sections elf)))
                               :writable? (elf-flag? (flags hdr) :writable 1)
-                              :executable? (elf-flag? (flags hdr) :writable 4)
+                              :executable? (elf-flag? (flags hdr) :executable 4)
                               :data-bytes (if (and (typep data '(vector uint8))
                                                    (not (eq type :nobits)))
                                               data)))))
