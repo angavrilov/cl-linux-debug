@@ -206,11 +206,13 @@
            ((char= char #\.)
             (push-name)
             (next)
-            (if (char= char #\*)
-                (progn
-                  (setf last-name ''*)
-                  (next))
-                (setf last-name (read-$-name))))
+            (aif (case char
+                   (#\* ''*)
+                   (#\@ ''@))
+                 (progn
+                   (setf last-name it)
+                   (next))
+                 (setf last-name (read-$-name))))
            ;; [...]
            ((char= char #\[)
             (push-name)
@@ -218,7 +220,9 @@
                    (item (first lst)))
               (push #\] chars)
               (unless (= (length lst) 1) (fail))
-              (setf last-name (if (eq item '*) ''* item)))
+              (setf last-name (if (member item '(* @))
+                                  `(quote ,item)
+                                  item)))
             (next))
            ;; error
            (t (fail)))))))

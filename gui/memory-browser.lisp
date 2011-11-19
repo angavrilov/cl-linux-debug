@@ -2,6 +2,8 @@
 
 (in-package :cl-linux-debug.gui)
 
+;; Core widget and node classes
+
 (def (class* e) memory-object-tree (object-tree-view)
   ((widget :reader t)
    (memory :reader t)
@@ -11,15 +13,15 @@
   ((ref :reader t)
    (ref-value nil :accessor t)
    (master-node :reader t)
-   (col-offset)
-   (col-name)
-   (col-type)
-   (col-value)
-   (col-info)
-   (col-comment)))
+   (col-offset nil)
+   (col-name nil :writer t)
+   (col-type nil)
+   (col-value nil)
+   (col-info nil)
+   (col-comment nil)))
 
 (defmethod initialize-instance :after ((node memory-object-node) &key)
-  (unless (ref-value-of node)
+  (unless (or (null (ref-of node)) (ref-value-of node))
     (setf (ref-value-of node) ($ (ref-of node) t))))
 
 (def-column-slot col-offset memory-object-node)
@@ -34,6 +36,8 @@
 
 (defmethod length-of ((node memory-object-node))
   (length-of (ref-of node)))
+
+;; Default column definitions
 
 (defmethod col-offset-of ((node memory-object-node))
   (let ((master (master-node-of node))
@@ -109,6 +113,153 @@
            (format-hex-offset rv))
           (t ""))))
 
+;; Tree layout
+
+(def (class* e) lazy-placeholder-node (memory-object-node)
+  ()
+  (:default-initargs :ref nil :ref-value nil :col-offset "" :col-name "Processing..."
+                     :col-type "" :col-value "" :col-info "" :col-comment ""))
+
+(defun make-lazy (node class &rest args)
+  (when class
+    (apply #'change-class node class args))
+  (add-child node (make-instance 'lazy-placeholder-node :view (view-of node)) 0))
+
+(def (class* e) pointer-object-node (memory-object-node lazy-expanding-node)
+  ())
+
+(defmethod on-lazy-expand-node ((node pointer-object-node))
+  (bind ((child (first (children-of node)))
+         (ref (ref-value-of node))
+         ((:values info r-start r-len) (get-address-info-region (view-of node) ref)))
+    (declare (ignore info))
+    (setf (col-name-of child) "<target>"
+          (slot-value child 'ref) ref)
+    (remove-child node 0)
+    (layout-children-in-range node (list ref) child r-start r-len)))
+
+(def (class* e) array-subgroup-node (lazy-placeholder-node lazy-expanding-node)
+  ((items nil :reader t)))
+
+(defun populate-array-subgroup (parent items master)
+  (dolist (item items)
+    (let ((child (layout-ref-tree-node item master)))
+      (setf (col-name-of child)
+            (ensure-string (memory-object-ref-parent-key item)))
+      (add-child parent child))))
+
+(defmethod on-lazy-expand-node ((node array-subgroup-node))
+  (remove-child node 0)
+  (populate-array-subgroup node (items-of node) (master-node-of node)))
+
+(defun make-array-subgroup (base items master)
+  (aprog1
+      (make-instance 'array-subgroup-node :view (view-of master)
+                     :master-node master :items items
+                     :col-name (format nil "~A..~A"
+                                       base (+ base (length items) -1)))
+    (make-lazy it nil)))
+
+(def (class* e) array-object-node (memory-object-node lazy-expanding-node)
+  ())
+
+(defmethod on-lazy-expand-node ((node array-object-node))
+  (remove-child node 0)
+  (let* ((items ($ (ref-of node) '@))
+         (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
+                     (master-node-of node)
+                     (first items)))
+         (parent (if (children-of node)
+                     (aprog1 (make-instance 'lazy-placeholder-node
+                                            :view (view-of node) :col-name "<items>")
+                       (add-child node it 0))
+                     node))
+         (num-items (length items)))
+    (if (<= num-items 100)
+        (populate-array-subgroup parent items master)
+        (loop
+           for base from 0 by 100
+           for cnt = (min 100 (- num-items base))
+           and rest = items then (subseq rest cnt)
+           while (< base num-items)
+           do (add-child parent
+                         (make-array-subgroup base (subseq rest 0 cnt) master))))))
+
+(defun layout-children-in-range (parent child-refs master &optional min-addr addr-range)
+  (when child-refs
+    (let* ((sorted (stable-sort child-refs #'< :key #'start-address-of))
+           (handled-base (or min-addr (start-address-of (first sorted)))))
+      (labels ((advance-to (start size)
+                 (when (< handled-base start)
+                   (insert-padding handled-base start))
+                 (setf handled-base (max handled-base (+ start size))))
+               (insert-padding (start end)
+                 (let* ((memory (memory-of (view-of parent)))
+                        (type (make-instance 'padding :size (- end start)))
+                        (padding-ref (make-ad-hoc-memory-ref memory start type :no-copy? t)))
+                   (add-child parent (layout-ref-tree-node padding-ref master)))))
+        (dolist (ref child-refs)
+          (let ((ref-type (memory-object-ref-type ref)))
+            (unless (and (typep ref-type 'padding)
+                         (null (name-of ref-type))
+                         (not (eq ref (ref-of master))))
+              (advance-to (start-address-of ref) (length-of ref))
+              (add-child parent (layout-ref-tree-node ref master)))))
+        (when addr-range
+          (advance-to (+ min-addr addr-range) 0))))))
+
+(defgeneric layout-ref-tree-node/type (type ref master)
+  (:method ((type data-item) ref master)
+    (let* ((node (make-instance 'memory-object-node
+                                :view (view-of master)
+                                :expanded? t
+                                :ref ref :master-node master)))
+      (layout-children-in-range node (@ ref '*) master
+                                (start-address-of ref) (length-of ref))
+      node))
+  (:method ((type primitive-field) ref master)
+    (aprog1 (call-next-method)
+      (setf (expanded? it) nil)))
+  (:method ((type container-item) ref master)
+    (aprog1 (call-next-method)
+      (setf (expanded? it) nil)))
+  (:method ((type pointer) ref master)
+    (aprog1 (call-next-method)
+      (when (ref-value-of it)
+        (make-lazy it 'pointer-object-node))))
+  (:method ((type array-item) ref master)
+    (aprog1 (call-next-method)
+      (make-lazy it 'array-object-node))))
+
+(defun layout-ref-tree-node (ref master)
+  (layout-ref-tree-node/type (memory-object-ref-type ref) ref master))
+
+(defun describe-object-info (ref info)
+  (let ((start (format nil "~A at ~A:"
+                       (field-name-of-type (memory-object-ref-type ref)
+                                           (memory-object-ref-parent-key ref))
+                       (format-hex-offset (start-address-of ref)))))
+    (concatenate 'string start " "
+                 (or (describe-address-info (start-address-of ref) info) "unknown"))))
+
+(defun get-address-info-region (view ref)
+  (bind ((info (get-address-object-info (memory-of view) (start-address-of ref)))
+         ((:values r-start r-len)
+          (acond ((malloc-chunk-range-of info)
+                  (values (car it) (- (cdr it) (car it))))
+                 ((region-of info)
+                  (values (start-address-of it) (length-of it))))))
+    (values info r-start r-len)))
+
+(defun layout-memory-object-tree (view ref)
+  (bind ((master (make-instance 'memory-object-node :ref ref :view view))
+         ((:values info r-start r-len) (get-address-info-region view ref)))
+    (setf (label-label (info-label-of view)) (describe-object-info ref info))
+    (layout-children-in-range master (list ref) master r-start r-len)
+    (set-tree-view-root view master)))
+
+;; Widget creation
+
 (defun construct-memory-object-tree (tree width-request height-request)
   (let* ((view (tree-view-of tree))
          (scroll (make-instance 'scrolled-window
@@ -148,32 +299,6 @@
             info-label label))
     #+nil(connect-signal window "destroy" (lambda (w) (declare (ignore w)) (leave-gtk-main)))
     #+nil(widget-show window)))
-
-(defun layout-memory-object-nodes (ref master)
-  (let* ((node (make-instance 'memory-object-node
-                              :view (view-of master)
-                              :ref ref :master-node master)))
-    (dolist (child-ref (@ ref '*))
-      (let ((child (layout-memory-object-nodes child-ref master)))
-        (add-child node child)))
-    (setf (expanded? node) (eq ref (ref-of master)))
-    node))
-
-(defun describe-object-info (ref info)
-  (let ((start (format nil "~A at ~A:"
-                       (field-name-of-type (memory-object-ref-type ref)
-                                           (memory-object-ref-parent-key ref))
-                       (format-hex-offset (start-address-of ref)))))
-    (concatenate 'string start " "
-                 (or (describe-address-info (start-address-of ref) info) "unknown"))))
-
-(defun layout-memory-object-tree (view ref)
-  (let* ((info (get-address-object-info (memory-of view) (start-address-of ref)))
-         (master (make-instance 'memory-object-node :ref ref :view view))
-         (tree (layout-memory-object-nodes ref master)))
-    (setf (label-label (info-label-of view)) (describe-object-info ref info))
-    (set-tree-view-root view master)
-    (add-child master tree)))
 
 (defmethod initialize-instance :after ((obj memory-object-tree) &key
                                        (width-request 640)

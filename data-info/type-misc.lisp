@@ -73,10 +73,13 @@
          for i from 0 below size
          collect (offset-memory-reference first i step)))))
 
+(defmethod %memory-ref-$ ((type array-item) ref (key (eql '@)))
+  (all-array-item-refs type ref))
+
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql '*)))
   ($ (all-array-item-refs type ref) t))
 
-(defmethod %memory-ref-$ ((type array-item) ref (key (eql $first)))
+(defmethod %memory-ref-$ ((type array-item) ref (key (eql $item)))
   (array-item-ref type ref 0 :check-bounds? nil))
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql $count)))
@@ -95,9 +98,6 @@
 
 (defmethod array-base-dimensions ((type static-array) ref)
   (values (memory-object-ref-address ref) (count-of type)))
-
-(defmethod %memory-ref-@ ((type static-array) ref (key (eql '*)))
-  (all-array-item-refs type ref))
 
 ;; Generic structure
 

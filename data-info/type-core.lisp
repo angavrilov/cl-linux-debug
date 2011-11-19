@@ -27,6 +27,14 @@
 
 (defmethod effective-main-type-of ((obj data-item)) obj)
 
+(defmethod initialize-instance :after ((type global-type-proxy) &key effective-main-type)
+  (when effective-main-type
+    (setf (type-name-of type) (type-name-of effective-main-type))))
+
+(defmethod copy-data-definition ((type global-type-proxy))
+  (aprog1 (call-next-method)
+    (setf (effective-main-type-of it) (effective-main-type-of type))))
+
 (macrolet ((delegate (name)
              `(defmethod ,name ((proxy global-type-proxy))
                 (let ((base (effective-main-type-of proxy)))
@@ -88,7 +96,6 @@
 (defgeneric make-proxy-field (obj type)
   (:method (obj (type global-type-definition))
     (make-instance 'global-type-proxy :syntax-parent obj
-                   :type-name (type-name-of type)
                    :effective-main-type type))
   (:method (obj (type unit-item))
     (assert (not (effective-finalized? type)))

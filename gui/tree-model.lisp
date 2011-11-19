@@ -128,6 +128,7 @@
          (view (tree-view-of tree))
          (root (tree-lisp-store-root model)))
     (setf (tree-view-model view) model)
+    #+nil
     (setf (tree-view-row-separator-func view)
           (lambda (model iter)
             (separator? (gtk::get-node-by-iter model iter))))
@@ -167,6 +168,19 @@
                  (setf (expanded? node) t))
                (mapc #'rec c)))
       (rec node))))
+
+(def (class* e) lazy-expanding-node (object-node)
+  ((lazy-expanded? nil :reader t)))
+
+(defgeneric on-lazy-expand-node (node))
+
+(defmethod on-node-expanded :before ((node lazy-expanding-node))
+  (unless (lazy-expanded? node)
+    (setf (slot-value node 'lazy-expanded?) t)
+    (within-main-loop
+      (with-simple-restart (continue "Cancel expanding node")
+        (on-lazy-expand-node node))
+      (setf (expanded? node) t))))
 
 (defun ensure-string (data)
   (if (stringp data) data (format nil "~S" data)))
@@ -208,10 +222,9 @@
                     (symbolicate name '#:-of))))
     `(defgeneric ,getter (node)
        (:method :around ((node ,class))
-         (if (slot-boundp node ',name)
-             (slot-value node ',name)
-             (setf (slot-value node ',name)
-                   (ensure-string (call-next-method))))))))
+         (aif (slot-value node ',name) it
+              (setf (slot-value node ',name)
+                    (ensure-string (call-next-method))))))))
 
 (defun add-model-columns (tree &rest getters)
   (dolist (cb getters)

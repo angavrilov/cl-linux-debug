@@ -52,6 +52,12 @@
     (let ((*type-context* context))
       (call-next-method))))
 
+(defgeneric layout-ad-hoc-in-context (context type-tree)
+  (:method :around (context type-tree)
+    (let ((*type-context* context))
+      (call-next-method))
+    type-tree))
+
 (defgeneric resolve-extent-for-addr (extent address))
 (defgeneric get-bytes-for-addr (extent address size))
 
@@ -70,6 +76,13 @@
 (defun resolve-offset-ref (base address type key &key local?)
   (make-memory-ref (memory-object-ref-memory base) address type
                    :parent base :key key :local? local?))
+
+(defun make-ad-hoc-memory-ref (memory address type-tree &key no-copy? parent key local?)
+  (assert (not (effective-finalized? type-tree)))
+  (let ((type (layout-ad-hoc-in-context
+               memory (if no-copy? type-tree
+                          (copy-data-definition type-tree)))))
+    (make-memory-ref memory address type :parent parent :key key :local? local?)))
 
 (declaim (inline get-bytes-for-ref))
 (defun get-bytes-for-ref (ref size)

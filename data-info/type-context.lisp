@@ -77,7 +77,8 @@
   (let ((*cur-ctx-namespace* (namespace-by-name full-name)))
     (layout-type-rec ddef)
     (tag-type-tree ddef (if old-table (gethash full-name old-table)))
-    (setf (gethash full-name table) ddef)
+    (when table
+      (setf (gethash full-name table) ddef))
     ddef))
 
 (defmethod lookup-type-reference ((context type-context) obj name)
@@ -96,6 +97,9 @@
   (let ((*type-context* context)
         (*cur-ctx-namespace* (namespace-by-name type-name)))
     (lookup-type-reference context nil type-name)))
+
+(defmethod layout-ad-hoc-in-context ((context type-context) type-tree)
+  (do-layout-in-context nil type-tree nil nil))
 
 (defmethod lookup-global-in-context ((context type-context) full-name)
   (let ((*cur-ctx-namespace* (namespace-by-name full-name))

@@ -62,6 +62,7 @@
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
            #:make-memory-ref
+           #:make-ad-hoc-memory-ref
            #:with-bytes-for-ref
            #:make-memory-mirror
            #:refresh-memory-mirror
