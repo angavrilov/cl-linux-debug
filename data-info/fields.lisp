@@ -36,16 +36,20 @@
       (export sym fpkg)
       (values sym (null status)))))
 
+(defun init-$-field (sym)
+  (unless (get sym 'is-$-var?)
+    (setf (get sym 'is-$-var?) t)
+    (eval `(progn
+             (declaim (inline ,sym))
+             (defun ,sym (arg &optional def)
+               ($ arg ',sym def))
+             (define-symbol-macro ,sym ',sym))))
+  t)
+
 (defun register-$-field (name)
-  (multiple-value-bind (sym new?)
+  (multiple-value-bind (sym)
       (register-$-var name)
-    (when new?
-      (setf (get sym 'is-$-var?) t)
-      (eval `(progn
-               (declaim (inline ,sym))
-               (defun ,sym (arg &optional def)
-                 ($ arg ',sym def))
-               (define-symbol-macro ,sym ',sym))))
+    (init-$-field sym)
     sym))
 
 (defun add-$-prefix (name)
@@ -60,7 +64,12 @@
 (declaim (inline is-$-keyword? is-$-keyword-namespace?))
 
 (defun is-$-keyword? (obj)
-  (and (typep obj 'symbol) (get obj 'is-$-var?)))
+  (and (typep obj 'symbol)
+       (eq (symbol-package obj)
+           (load-time-value
+            (find-package :cl-linux-debug.field-names)))
+       (or (get obj 'is-$-var?)
+           (init-$-field obj))))
 
 (defun is-$-keyword-namespace? (obj)
   (or (is-$-keyword? obj)
@@ -88,20 +97,20 @@
 
 ;; Types
 
-(deftype $-keyword () 'symbol)
-(deftype $-keyword-namespace () '(or symbol cons))
+(deftype |$-keyword| () 'symbol)
+(deftype |$-keyword-namespace| () '(or symbol cons))
 
-(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword)) stream)
+(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '|$-keyword|)) stream)
   (format stream "\"~A\"" (get-$-field-name value)))
 
-(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword)))
+(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '|$-keyword|)))
   (aprog1 (get-$-field value)
     (assert (symbolp it))))
 
-(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '$-keyword-namespace)) stream)
+(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '|$-keyword-namespace|)) stream)
   (format stream "\"~A\"" (get-$-field-name value)))
 
-(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '$-keyword-namespace)))
+(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '|$-keyword-namespace|)))
   (get-$-field value))
 
 ;; Reader

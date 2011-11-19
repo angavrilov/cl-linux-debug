@@ -5,8 +5,8 @@
 (defpackage :cl-linux-debug.field-names
   (:use)
   (:export #:@ #:$ #:$$
-           #:$-keyword #:$-keyword-namespace
-           #:is-$-keyword? #:is-$-keyword-namespace?))
+           #:|$-keyword| #:|$-keyword-namespace|
+           #:|is-$-keyword?| #:|is-$-keyword-namespace?|))
 
 (defpackage :cl-linux-debug.data-defs
   (:use :common-lisp :xml
@@ -44,7 +44,27 @@
         :cl-linux-debug.field-names)
   (:shadowing-import-from :cl-linux-debug.code-info
                           #:parse-int #:parse-bytes #:parse-string)
-  (:export ))
+  (:export *known-builtin-types*
+           *known-types*
+           *known-globals*
+           #:align-up
+           #:get-$-field-name
+           #:type-field-sequence
+           #:lookup-type-in-context
+           #:lookup-global-in-context
+           #:memory-object-ref-type
+           #:effective-main-type-of
+           #:address= #:address-
+           #:format-field-seq
+           #:resolve-extent-for-addr
+           #:get-bytes-for-addr
+           #:make-memory-ref
+           #:with-bytes-for-ref
+           #:make-memory-mirror
+           #:refresh-memory-mirror
+           #:get-memory-bytes
+           #:get-memory-integer
+           #:get-memory-global))
 
 (pushnew (find-package :cl-linux-debug.data-info)
          xml:*xmlisp-packages*)

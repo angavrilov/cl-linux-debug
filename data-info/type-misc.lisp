@@ -56,7 +56,7 @@
     (when first
       (loop
          for i from 0 below size
-         collect (offset-memory-reference i step)))))
+         collect (offset-memory-reference first i step)))))
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql '*)))
   ($ (all-array-item-refs type ref) t))

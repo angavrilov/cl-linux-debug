@@ -176,6 +176,9 @@
   ((type-name nil :accessor t :type $-keyword))
   (:documentation "An abstract global entity definition."))
 
+(defmethod name-of ((type global-type-definition))
+  (type-name-of type))
+
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 

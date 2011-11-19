@@ -4,7 +4,7 @@
 
 ;; Memory reference object
 
-(defstruct memory-object-ref
+(def (structure e) memory-object-ref
   (memory nil)
   (address 0)
   (tag nil :type cons)
@@ -14,6 +14,9 @@
 (declaim (inline memory-object-ref-type))
 (defun memory-object-ref-type (obj)
   (car (memory-object-ref-tag obj)))
+
+(defmethod effective-main-type-of ((obj memory-object-ref))
+  (effective-main-type-of (memory-object-ref-type obj)))
 
 (defmethod start-address-of ((ref memory-object-ref))
   (memory-object-ref-address ref))
