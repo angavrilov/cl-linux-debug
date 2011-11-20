@@ -52,11 +52,10 @@
     <static-array name='methods' count='16' type-name='pointer'/>
   </struct-type>
 
-  <struct-type type-name='type_info'>
-    <pointer name='_vtable' type-name='vtable'/>
+  <class-type type-name='type_info'>
     <ptr-string name='class_name'/>
     <pointer name='base_class' type-name='type_info'/>
-  </struct-type>
+  </class-type>
 
   <global-object name='main_arena' type-name='malloc_state'/>
 </data-definition>

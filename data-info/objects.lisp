@@ -5,6 +5,9 @@
 (def (class* e) object-memory-mirror (memory-mirror type-context)
   ((malloc-chunks (make-binsearch-uint32-vec) :reader t)))
 
+(def (class* e) malloc-chunk-range (address-chunk)
+  ())
+
 (def (class* ea) memory-object-info ()
   ((malloc-chunk-range nil :accessor t)
    (section nil :accessor t)
@@ -23,18 +26,50 @@
            (section (find-section-by-address (executable-of mirror) address))
            (region (find-region-by-address (executable-of mirror) address)))
       (make-instance 'memory-object-info
-                     :malloc-chunk-range (if malloc-ok? (cons malloc-min malloc-max))
+                     :malloc-chunk-range
+                     (if malloc-ok?
+                         (make-instance 'malloc-chunk-range
+                                        :start-address malloc-min :length (- malloc-max malloc-min)))
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))
 
-(defun get-address-info-region (memory addr)
+(defmethod describe-address-in-context append ((it loaded-section) addr)
+  (list (format nil "~A~A in ~A"
+                (section-name-of it)
+                (format-hex-offset (- addr (start-address-of it)) :force-sign? t)
+                (pathname-name (path-of (image-of (origin-of it)))))))
+
+(defmethod describe-address-in-context append ((it malloc-chunk-range) addr)
+  (list (let ((s (start-address-of it)))
+          (format nil "heap ~A~@[~A~] (~A bytes)"
+                  (format-hex-offset s)
+                  (when (/= addr s)
+                    (format-hex-offset (- addr s)  :force-sign?  t))
+                  (format-hex-offset (length-of it))))))
+
+(defmethod describe-address-in-context append ((it loaded-region) addr)
+  (list (format nil "~A~@[~A~]"
+                (or (symbol-name-of it)
+                    (format-hex-offset (start-address-of it)))
+                (when (/= addr (start-address-of it))
+                  (format-hex-offset (- addr (start-address-of it)) :force-sign? t)))))
+
+(defmethod describe-address-in-context append ((info memory-object-info) addr)
+  (mapcan (lambda (x) (describe-address-in-context x addr))
+          (list (region-of info)
+                (malloc-chunk-range-of info)
+                (section-of info))))
+
+(defmethod describe-address-in-context append ((mirror object-memory-mirror) addr)
+  (describe-address-in-context (get-address-object-info mirror addr) addr))
+
+(defun get-address-info-range (memory addr)
   (bind ((info (get-address-object-info memory addr))
          ((:values r-start r-len)
-          (acond ((malloc-chunk-range-of info)
-                  (values (car it) (- (cdr it) (car it))))
-                 ((region-of info)
-                  (values (start-address-of it) (length-of it))))))
+          (awhen (or (malloc-chunk-range-of info)
+                     (region-of info))
+            (values (start-address-of it) (length-of it)))))
     (values info r-start r-len)))
 
 (defun guess-types-by-data (mirror ref)
@@ -59,7 +94,7 @@
                            for val = (parse-int vector off 4)
                            collect (list* addr val
                                           (multiple-value-list
-                                           (get-address-info-region mirror val))))))
+                                           (get-address-info-range mirror val))))))
           (do ((tail infolist (rest tail)))
               ((null tail))
             (destructuring-bind (addrv val info start end) (first tail)

@@ -24,6 +24,12 @@
   (:method (type ref value)
     value))
 
+(defun format-ref-value (ref value)
+  (format-ref-value-by-type (memory-object-ref-type ref) ref value))
+
+(defgeneric describe-ref-value-by-type (type ref value)
+  )
+
 ;; Integers
 
 (defmethod %memory-ref-$ ((type integer-field) ref (key (eql t)))
@@ -142,11 +148,22 @@
 
 ;; Generic structure
 
+(defun find-field-by-name (compound name &optional (offset 0))
+  (dolist (field (effective-fields-of compound))
+    (when (eq (effective-tag-of field) name)
+      (return (cons offset field)))
+    (if (name-of field)
+        (when (eq (name-of field) name)
+          (return (cons offset field)))
+        (awhen (find-field-by-name (effective-main-type-of field)
+                                   name (+ offset (effective-offset-of field)))
+          (return it)))))
+
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key symbol))
-  (aif (find key (effective-fields-of type) :key #'name-of)
+  (aif (find-field-by-name type key)
        (resolve-offset-ref ref (+ (memory-object-ref-address ref)
-                                  (effective-offset-of it))
-                           it key :local? t)
+                                  (car it) (effective-offset-of (cdr it)))
+                           (cdr it) key :local? t)
        (call-next-method)))
 
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '*)))
@@ -157,3 +174,10 @@
                                 :local? t))
           (effective-fields-of type)))
 
+;; Class
+
+(defmethod compute-effective-fields ((type class-type))
+  (list* (aif (inherits-from-of type)
+              (make-instance 'compound :type-name it)
+              (make-instance 'pointer :name $_vtable :type-name $glibc:vtable))
+         (call-next-method)))

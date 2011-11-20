@@ -73,8 +73,7 @@
       (t (xml:xml-tag-name-string type)))))
 
 (defmethod col-value-of ((node memory-object-node))
-  (let ((ref (ref-of node)))
-    (format-ref-value-by-type (memory-object-ref-type ref) ref (ref-value-of node))))
+  (format-ref-value (ref-of node) (ref-value-of node)))
 
 (defmethod col-comment-of ((node memory-object-node))
   (atypecase (comment-of (effective-main-type-of (ref-of node)))
@@ -82,36 +81,14 @@
     (null "No comment specified.")
     (t it)))
 
-(defun describe-address-info (addr info)
-  (let* ((section (awhen (section-of info)
-                    (format nil "~A~A in ~A"
-                            (section-name-of it)
-                            (format-hex-offset (- addr (start-address-of it)) :force-sign? t)
-                            (pathname-name (path-of (image-of (origin-of it)))))))
-         (heap (awhen (malloc-chunk-range-of info)
-                 (format nil "heap ~A~@[~A~] (~A bytes)"
-                         (format-hex-offset (car it))
-                         (when (/= addr (car it))
-                           (format-hex-offset (- addr (car it)) :force-sign? t))
-                         (format-hex-offset (- (cdr it) (car it))))))
-         (region (awhen (region-of info)
-                   (format nil "~A~@[~A~]"
-                           (or (symbol-name-of it)
-                               (format-hex-offset (start-address-of it)))
-                           (when (/= addr (start-address-of it))
-                             (format-hex-offset (- addr (start-address-of it)) :force-sign? t)))))
-         (items (remove-if #'null (list region section heap))))
-    (when items
-      (format nil "~{~A~^ ~}" items))))
-
 (defmethod col-info-of ((node memory-object-node))
   (let ((rv (ref-value-of node)))
     (cond ((and (typep rv 'memory-object-ref)
                 (not (eq rv (ref-of node))))
-           (or (describe-address-info (start-address-of rv)
-                                      (get-address-object-info (memory-of (view-of node))
-                                                               (start-address-of rv)))
-               "unknown area"))
+           (aif (describe-address-in-context (memory-of (view-of node))
+                                             (start-address-of rv))
+                (format nil "~{~A~^; ~}" it)
+                "unknown area"))
           ((typep rv 'integer)
            (format-hex-offset (unsigned rv (* 8 (length-of (ref-of node))))))
           (t ""))))
@@ -134,7 +111,8 @@
 (defmethod on-lazy-expand-node ((node pointer-object-node))
   (bind ((child (elt (children-of node) 0))
          (ref (ref-value-of node))
-         ((:values info r-start r-len) (get-address-info-region (view-of node) ref)))
+         ((:values info r-start r-len)
+          (get-address-info-range (memory-of (view-of node)) (start-address-of ref))))
     (declare (ignore info))
     (setf (col-name-of child) "<target>"
           (slot-value child 'ref) ref)
@@ -198,18 +176,18 @@
 
 (def (class* e) padding-node (memory-object-node lazy-expanding-node)
   ()
-  (:default-initargs :col-type "" :col-info "" :col-comment ""))
+  (:default-initargs :col-type "" :col-value "" :col-comment ""))
 
 (defmethod col-name-of ((node padding-node))
   (format nil "(~A=0x~X bytes)" (length-of node) (length-of node)))
 
-(defmethod col-value-of ((node padding-node))
+(defmethod col-info-of ((node padding-node))
   (or (with-bytes-for-ref (vector offset (ref-of node) 1)
         (format nil "~{~2,'0X~^ ~}~A"
                 (loop for i from 0 below (min 8 (length-of node))
                    and j from offset below (length vector)
                    collect (aref vector j))
-                (if (> (length-of node) 8) "...")))
+                (if (> (length-of node) 8) "..." "")))
       "?"))
 
 (defmethod on-lazy-expand-node ((node padding-node))
@@ -275,21 +253,13 @@
                        (field-name-of-type (memory-object-ref-type ref)
                                            (memory-object-ref-parent-key ref))
                        (format-hex-offset (start-address-of ref)))))
-    (concatenate 'string start " "
-                 (or (describe-address-info (start-address-of ref) info) "unknown"))))
-
-(defun get-address-info-region (view ref)
-  (bind ((info (get-address-object-info (memory-of view) (start-address-of ref)))
-         ((:values r-start r-len)
-          (acond ((malloc-chunk-range-of info)
-                  (values (car it) (- (cdr it) (car it))))
-                 ((region-of info)
-                  (values (start-address-of it) (length-of it))))))
-    (values info r-start r-len)))
+    (apply #'concatenate 'string start " "
+           (or (describe-address-in-context info (start-address-of ref)) (list "unknown")))))
 
 (defun layout-memory-object-tree (view ref)
   (bind ((master (make-instance 'memory-object-node :ref ref :view view))
-         ((:values info r-start r-len) (get-address-info-region view ref)))
+         ((:values info r-start r-len)
+          (get-address-info-range (memory-of view) (start-address-of ref))))
     (setf (label-label (info-label-of view)) (describe-object-info ref info))
     (layout-children-in-range master (list ref) master r-start r-len)
     (set-tree-view-root view master)))

@@ -211,6 +211,11 @@
   ()
   (:documentation "A global structure type definition."))
 
+(def (class* eas) class-type (struct-compound-item global-type-definition concrete-item)
+  ((inherits-from nil :accessor t :type $-keyword-namespace)
+   (mangled-name nil :accessor t :type string))
+  (:documentation "A global class type definition."))
+
 (def (class* eas) global-object (compound)
   ()
   (:documentation "A global variable definition."))

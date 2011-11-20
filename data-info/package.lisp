@@ -58,7 +58,7 @@
            #:effective-main-type-of
            #:address= #:address-
            #:format-field-seq
-           #:format-ref-value-by-type
+           #:format-ref-value
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
            #:make-memory-ref
@@ -70,6 +70,8 @@
            #:get-memory-integer
            #:get-memory-global
            #:get-address-object-info
+           #:describe-address-in-context
+           #:get-address-info-range
            #:guess-types-by-data
            ))
 

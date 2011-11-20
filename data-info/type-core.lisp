@@ -140,7 +140,7 @@
                 ((fields-of obj)
                  (first (fields-of obj)))
                 (t
-                 (make-instance 'padding :syntax-parent obj)))))
+                 (make-instance 'padding :syntax-parent obj :default-size 4)))))
   (:method ((obj container-item))
     nil))
 

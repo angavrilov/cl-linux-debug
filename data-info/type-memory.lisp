@@ -58,6 +58,10 @@
       (call-next-method))
     type-tree))
 
+(defgeneric describe-address-in-context (context address)
+  (:method-combination append)
+  (:method append (context address) nil))
+
 (defgeneric resolve-extent-for-addr (extent address))
 (defgeneric get-bytes-for-addr (extent address size))
 
