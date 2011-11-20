@@ -33,7 +33,9 @@
   (:method append ((type global-type-definition) ref value)
     (awhen (and (eq ref value)
                 (assoc-value (effective-code-helpers-of type) $describe))
-      (list (funcall it value ref)))))
+      (list (funcall it value ref))))
+  (:method append ((type class-type) ref value)
+    (list (get-$-field-name (type-name-of type)))))
 
 (defun describe-ref-value (ref value)
   (describe-ref-value-by-type (memory-object-ref-type ref) ref value))

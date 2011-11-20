@@ -38,17 +38,23 @@
       (loop for child across (children-of node) and i from 0
          do (build-node-tree node child i)))))
 
+(defun build-added-subtree (node child index &key first?)
+  (build-node-tree node child index)
+  (when (and first? (expanded? node))
+    (setf (expanded? node) t))
+  (when (expanded? child)
+    (setf (expanded? child) t)))
+
 (defgeneric add-child (node child &optional index)
   (:method ((node object-node) (child object-node) &optional index)
     (assert (null (parent-of child)))
     (assert (eq (view-of child) (view-of node)))
-    (let ((iv (or index (length (children-of node)))))
+    (let* ((clen (length (children-of node)))
+           (iv (or index clen)))
       (setf (slot-value child 'parent) node)
       (gtk::array-insert-at (children-of node) child iv)
       (when (slot-boundp node 'store-node)
-        (build-node-tree node child iv)
-        (when (expanded? child)
-          (setf (expanded? child) t))))))
+        (build-added-subtree node child iv)))))
 
 (defgeneric child-index-of (node child)
   (:method ((node object-node) (child integer))
@@ -153,7 +159,7 @@
     (setf (slot-value view 'tree-root) node
           (slot-value node 'store-node) nil)
     (loop for child across new-children and i from 0
-       do (build-node-tree node child i))
+       do (build-added-subtree node child i))
     node))
 
 (defgeneric (setf expanded?) (value node)
