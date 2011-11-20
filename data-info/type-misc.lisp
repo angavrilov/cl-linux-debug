@@ -63,7 +63,8 @@
                      (parse-int vector offset size))
                    (1- (ash 1 (* 8 size))))))
       (when (/= ptr 0)
-        (resolve-offset-ref ref ptr (effective-contained-item-of type) t)))))
+        (aprog1 (resolve-offset-ref ref ptr (effective-contained-item-of type) t)
+          (adjust-mem-ref-type (memory-object-ref-type it) it))))))
 
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-$ type ref t) key))
@@ -105,6 +106,7 @@
   (multiple-value-bind (base size)
       (array-base-dimensions type ref)
     (when (and base
+               (integerp size) (>= size 0)
                (or (< -1 index size)
                    (not check-bounds?)))
       (let ((elt-size (effective-element-size-of type)))
@@ -122,7 +124,7 @@
       (array-item-ref type ref 0)
     (when first
       (loop
-         for i from 0 below size
+         for i from 0 below (min 50000 size)
          collect (offset-memory-reference first i step)))))
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql '@)))
@@ -202,3 +204,9 @@
               (make-instance 'compound :type-name it)
               (make-instance 'pointer :name $_vtable :type-name $glibc:vtable))
          (call-next-method)))
+
+(defmethod adjust-mem-ref-type ((type class-type) ref)
+  (with-bytes-for-ref (vector offset ref 4)
+    (let ((context (get-context-of-memory ref)))
+      (awhen (resolve-class-in-context context (parse-int vector offset 4))
+        (setf (memory-object-ref-tag ref) (effective-tag-of it))))))

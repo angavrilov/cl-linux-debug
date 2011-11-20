@@ -30,6 +30,9 @@
 (defun address- (ref1 ref2)
   (- (start-address-of ref1) (start-address-of ref2)))
 
+(defgeneric adjust-mem-ref-type (type ref)
+  (:method (type ref) ref))
+
 (defun format-field-seq (type)
   (format nil "~{~A~^.~}"
           (mapcar #'get-$-field-name (nreverse (type-field-sequence type)))))
@@ -45,7 +48,9 @@
 (defgeneric lookup-type-in-context (context type-name)
   (:method :around (context type-name)
     (let ((*type-context* context))
-      (call-next-method))))
+      (call-next-method)))
+  (:method (context (type-name null))
+    nil))
 
 (defgeneric lookup-global-in-context (context type-name)
   (:method :around (context type-name)
@@ -57,6 +62,9 @@
     (let ((*type-context* context))
       (call-next-method))
     type-tree))
+
+(defgeneric resolve-class-in-context (context address)
+  (:method (context address) nil))
 
 (defgeneric describe-address-in-context (context address)
   (:method-combination append)

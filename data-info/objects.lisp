@@ -3,7 +3,8 @@
 (in-package :cl-linux-debug.data-info)
 
 (def (class* e) object-memory-mirror (memory-mirror type-context)
-  ((malloc-chunks (make-binsearch-uint32-vec) :reader t)))
+  ((malloc-chunks (make-binsearch-uint32-vec) :reader t)
+   (vtable-names (make-hash-table :test #'eql) :reader t)))
 
 (def (class* e) malloc-chunk-range (address-chunk)
   ())
@@ -20,7 +21,9 @@
     (collect-malloc-objects mirror (malloc-chunks-of mirror))))
 
 (defgeneric get-address-object-info (mirror address)
-  (:method ((mirror object-memory-mirror) address)
+  (:method (mirror  (address memory-object-ref))
+    (get-address-object-info mirror (start-address-of address)))
+  (:method ((mirror object-memory-mirror) (address integer))
     (bind (((:values malloc-min malloc-max malloc-ok?)
             (lookup-malloc-object (malloc-chunks-of mirror) address))
            (section (find-section-by-address (executable-of mirror) address))
@@ -71,6 +74,16 @@
                      (region-of info))
             (values (start-address-of it) (length-of it)))))
     (values info r-start r-len)))
+
+(defmethod get-vtable-class-name ((context object-memory-mirror) address)
+  (let* ((vtbl (make-memory-ref context address $glibc:vtable))
+         (tptr $vtbl.type_info)
+         (tinfo (get-address-info-range context tptr)))
+    (when (and tptr
+               (is-code? (get-address-info-range context $vtbl.methods[0]))
+               (section-of tinfo)
+               (not (is-code? tinfo)))
+      $tptr.class_name)))
 
 (defun guess-types-by-data (mirror ref)
   (with-bytes-for-ref (vector offset ref (length-of ref))

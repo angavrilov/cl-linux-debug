@@ -36,10 +36,7 @@
             (apply #'tree-store-insert-with-values
                    (tree-model-of view) (store-node-of parent) index values))
       (loop for child across (children-of node) and i from 0
-         do (build-node-tree node child i))))
-  (:method :after ((parent object-node) (node object-node) index)
-    (when (and (> (length (children-of node)) 0) (expanded? node))
-      (setf (expanded? node) t))))
+         do (build-node-tree node child i)))))
 
 (defgeneric add-child (node child &optional index)
   (:method ((node object-node) (child object-node) &optional index)
@@ -49,7 +46,9 @@
       (setf (slot-value child 'parent) node)
       (gtk::array-insert-at (children-of node) child iv)
       (when (slot-boundp node 'store-node)
-        (build-node-tree node child iv)))))
+        (build-node-tree node child iv)
+        (when (expanded? child)
+          (setf (expanded? child) t))))))
 
 (defgeneric child-index-of (node child)
   (:method ((node object-node) (child integer))
@@ -160,13 +159,18 @@
 (defgeneric (setf expanded?) (value node)
   (:method (value (node object-node))
     (setf (slot-value node 'expanded?) value)
-    (awhen (slot-boundp node 'store-node)
+    (when (and (slot-boundp node 'store-node)
+               (> (length (children-of node)) 0))
       (let* ((view (view-of node))
              (indices (find-child-path node))
              (path (make-instance 'tree-path)))
         (setf (tree-path-indices path) indices)
         (if value
-            (tree-view-expand-row (tree-view-of view) path nil)
+            (progn
+              (tree-view-expand-row (tree-view-of view) path nil)
+              (loop for child across (children-of node)
+                 do (when (expanded? child)
+                      (setf (expanded? child) t))))
             (tree-view-collapse-row (tree-view-of view) path))))))
 
 (def (class* e) lazy-expanding-node (object-node)

@@ -160,7 +160,7 @@
   (def-simple-int int32_t 4 t)
   (def-simple-int uint64_t 8 nil)
   (def-simple-int int64_t 8 t)
-  (def-simple-int bool 4 nil))
+  (def-simple-int bool 1 nil))
 
 ;; Pointer
 
@@ -216,10 +216,6 @@
 
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
-
-(defmethod copy-data-definition ((type global-type-definition))
-  (aprog1 (call-next-method)
-    (setf (effective-code-helpers-of it) (effective-code-helpers-of type))))
 
 (def (class* eas) struct-type (global-type-definition struct-compound-item concrete-item)
   ()

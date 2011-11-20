@@ -6,7 +6,8 @@
   ((last-types-version 0 :accessor t)
    (processed-types (make-hash-table :test #'equal) :accessor t)
    (last-globals-version 0 :accessor t)
-   (processed-globals (make-hash-table :test #'equal) :accessor t)))
+   (processed-globals (make-hash-table :test #'equal) :accessor t)
+   (vtable-class-cache (make-hash-table :test #'equal) :accessor t)))
 
 (defmethod get-context-of-memory ((context type-context)) context)
 
@@ -112,6 +113,16 @@
                                 table *old-processed-globals*))
         (error "No such global: ~A" (get-$-field-name full-name)))))
 
+(defgeneric get-vtable-class-name (context address))
+
+(defmethod resolve-class-in-context ((context type-context) (address integer))
+  (multiple-value-bind (rv found) (gethash address (vtable-class-cache-of context))
+    (if found rv
+        (setf (gethash address (vtable-class-cache-of context))
+              (awhen (aand (get-vtable-class-name context address)
+                           (assoc-value *known-classes* it :test #'equal))
+                (lookup-type-in-context context it))))))
+
 (defgeneric check-refresh-context (context)
   (:method ((context type-context))
     ;; Check types
@@ -121,7 +132,8 @@
         (loop for name being the hash-keys in *old-processed-types*
            do (with-simple-restart (continue "Skip this type")
                 (lookup-type-in-context context name))))
-      (setf (last-types-version-of context) *known-types-version*))
+      (setf (last-types-version-of context) *known-types-version*)
+      (clrhash (vtable-class-cache-of context)))
     ;; Check globals
     (when (< (last-globals-version-of context) *known-globals-version*)
       (let ((*old-processed-globals* (processed-globals-of context)))

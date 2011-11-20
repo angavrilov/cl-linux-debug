@@ -6,7 +6,7 @@
   (:use)
   (:export #:@ #:$ #:$$
            #:|$-keyword| #:|$-keyword-namespace|
-           #:|is-$-keyword?| #:|is-$-keyword-namespace?|))
+           #:is-$-keyword?  #:is-$-keyword-namespace?))
 
 (defpackage :cl-linux-debug.data-defs
   (:use :common-lisp :xml
