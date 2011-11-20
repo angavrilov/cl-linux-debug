@@ -59,6 +59,7 @@
            #:address= #:address-
            #:format-field-seq
            #:format-ref-value
+           #:describe-ref-value
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
            #:make-memory-ref

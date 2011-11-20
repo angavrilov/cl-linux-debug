@@ -25,6 +25,9 @@
 
 (defmethod mirror-of ((mirror memory-mirror)) mirror)
 
+(defmethod get-context-of-memory ((extent memory-extent))
+  (get-context-of-memory (mirror-of extent)))
+
 (defmethod executable-of ((mirror memory-mirror))
   (executable-of (process-of mirror)))
 

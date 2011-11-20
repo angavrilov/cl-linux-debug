@@ -170,6 +170,17 @@
   (let ((elt (effective-contained-item-of obj)))
     (setf (effective-element-size-of obj) (effective-size-of elt))))
 
+(defmethod read-return-value :after ((obj global-type-definition))
+  (setf (effective-code-helpers-of obj)
+        (mapcar (lambda (ch)
+                  (let ((str (concatenate 'string "(" (xml::content ch) ")"))
+                        (*package* (find-package :cl-linux-debug.data-info)))
+                    (cons (name-of ch)
+                          (compile nil `(lambda ($ $$)
+                                          (declare (ignorable $ $$))
+                                          ,@(read-from-string str))))))
+                (code-helpers-of obj))))
+
 (defmethod read-return-value ((defs data-definition))
   (flet ((with-namespace (name)
            (name-with-namespace name (namespace-of defs))))

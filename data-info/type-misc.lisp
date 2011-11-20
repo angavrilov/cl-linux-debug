@@ -28,7 +28,15 @@
   (format-ref-value-by-type (memory-object-ref-type ref) ref value))
 
 (defgeneric describe-ref-value-by-type (type ref value)
-  )
+  (:method-combination append :most-specific-first)
+  (:method append (type ref value) nil)
+  (:method append ((type global-type-definition) ref value)
+    (awhen (and (eq ref value)
+                (assoc-value (effective-code-helpers-of type) $describe))
+      (list (funcall it value ref)))))
+
+(defun describe-ref-value (ref value)
+  (describe-ref-value-by-type (memory-object-ref-type ref) ref value))
 
 ;; Integers
 
@@ -39,7 +47,10 @@
 
 (defmethod %memory-ref-$ ((type bool) ref (key (eql t)))
   (awhen (call-next-method)
-    (/= it 0)))
+    (if (/= it 0) it nil)))
+
+(defmethod describe-ref-value-by-type append ((type integer-field) ref (value integer))
+  (list (format-hex-offset (unsigned value (* 8 (effective-size-of type))))))
 
 (defmethod format-ref-value-by-type ((type bool) ref value)
   (if value "true" "false"))
@@ -60,6 +71,13 @@
 (defmethod format-ref-value-by-type ((type pointer) ref (value null))
   "NULL")
 
+(defmethod describe-ref-value-by-type append ((type pointer) ref (value memory-object-ref))
+  (when (not (eq ref value))
+    (append (describe-ref-value value value)
+            (or (describe-address-in-context
+                 (get-context-of-memory ref) (start-address-of value))
+                (list "unknown area")))))
+
 ;; Strings
 
 (defmethod %memory-ref-$ ((type static-string) ref (key (eql t)))
@@ -75,6 +93,9 @@
 
 (defmethod %memory-ref-$ ((type ptr-string) ref (key (eql t)))
   $ref.ptr[t])
+
+(defmethod format-ref-value-by-type ((type string-field) ref (value string))
+  (format nil "~S" value))
 
 ;; Abstract array
 

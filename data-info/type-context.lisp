@@ -8,6 +8,8 @@
    (last-globals-version 0 :accessor t)
    (processed-globals (make-hash-table :test #'equal) :accessor t)))
 
+(defmethod get-context-of-memory ((context type-context)) context)
+
 (defun partition-into-groups (list key)
   "Cut the list into groups that begin with a non-nil key."
   (labels ((pick-nils (list key)

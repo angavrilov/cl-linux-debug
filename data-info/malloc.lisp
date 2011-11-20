@@ -50,6 +50,10 @@
   <struct-type type-name='vtable'>
     <pointer name='type_info' offset='-0x4' type-name='type_info'/>
     <static-array name='methods' count='16' type-name='pointer'/>
+
+    <code-helper name='describe'>
+      (format nil "Class: ~A" $.type_info.class_name)
+    </code-helper>
   </struct-type>
 
   <class-type type-name='type_info'>

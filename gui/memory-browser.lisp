@@ -82,16 +82,8 @@
     (t it)))
 
 (defmethod col-info-of ((node memory-object-node))
-  (let ((rv (ref-value-of node)))
-    (cond ((and (typep rv 'memory-object-ref)
-                (not (eq rv (ref-of node))))
-           (aif (describe-address-in-context (memory-of (view-of node))
-                                             (start-address-of rv))
-                (format nil "~{~A~^; ~}" it)
-                "unknown area"))
-          ((typep rv 'integer)
-           (format-hex-offset (unsigned rv (* 8 (length-of (ref-of node))))))
-          (t ""))))
+  (format nil "~{~A~^; ~}"
+          (describe-ref-value (ref-of node) (ref-value-of node))))
 
 ;; Tree layout
 

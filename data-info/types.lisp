@@ -171,12 +171,16 @@
 
 ;; String
 
-(def (class* eas) static-string (primitive-field concrete-item)
+(def (class* eas) string-field (primitive-field)
+  ()
+  (:documentation "A string field."))
+
+(def (class* eas) static-string (string-field concrete-item)
   ()
   (:default-initargs :default-size 0 :effective-alignment 1)
   (:documentation "A null-terminated string buffer embedded in the object."))
 
-(def (class* eas) ptr-string (primitive-field virtual-compound-item concrete-item)
+(def (class* eas) ptr-string (string-field virtual-compound-item concrete-item)
   ()
   (:default-initargs :default-size 4 :effective-has-pointers? t)
   (:documentation "A null-terminated string buffer pointer."))
@@ -197,8 +201,14 @@
 
 ;; Global entity definition
 
+(def (class* eas) code-helper (xml-serializer)
+  ((name nil :accessor t :type $-keyword))
+  (:documentation "A bit of code to help in type presentation."))
+
 (def (class* eas) global-type-definition (data-item)
-  ((type-name nil :accessor t :type $-keyword))
+  ((type-name nil :accessor t :type $-keyword)
+   (code-helpers nil :accessor t)
+   (effective-code-helpers nil :accessor t))
   (:documentation "An abstract global entity definition."))
 
 (defmethod name-of ((type global-type-definition))
@@ -207,11 +217,15 @@
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 
-(def (class* eas) struct-type (struct-compound-item global-type-definition concrete-item)
+(defmethod copy-data-definition ((type global-type-definition))
+  (aprog1 (call-next-method)
+    (setf (effective-code-helpers-of it) (effective-code-helpers-of type))))
+
+(def (class* eas) struct-type (global-type-definition struct-compound-item concrete-item)
   ()
   (:documentation "A global structure type definition."))
 
-(def (class* eas) class-type (struct-compound-item global-type-definition concrete-item)
+(def (class* eas) class-type (global-type-definition struct-compound-item concrete-item)
   ((inherits-from nil :accessor t :type $-keyword-namespace)
    (mangled-name nil :accessor t :type string))
   (:documentation "A global class type definition."))

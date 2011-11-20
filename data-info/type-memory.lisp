@@ -62,13 +62,17 @@
   (:method-combination append)
   (:method append (context address) nil))
 
+(defgeneric get-context-of-memory (memory)
+  (:method ((ref memory-object-ref))
+    (get-context-of-memory (memory-object-ref-memory ref))))
+
 (defgeneric resolve-extent-for-addr (extent address))
 (defgeneric get-bytes-for-addr (extent address size))
 
 (defun make-memory-ref (memory address type &key parent key local?)
   (let* ((extent (if local? memory (resolve-extent-for-addr memory address)))
          (real-type (if (is-$-keyword-namespace? type)
-                        (lookup-type-in-context memory type)
+                        (lookup-type-in-context (get-context-of-memory memory) type)
                         (effective-main-type-of type)))
          (tag (effective-tag-of real-type)))
     (assert extent)
