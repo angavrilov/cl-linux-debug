@@ -8,7 +8,8 @@
              `(progn
                 ,@(loop for name in names
                      for kwd = (get-$-field (string-downcase (symbol-name name)))
-                     collect `(setf (assoc-value *known-builtin-types* ',kwd) ',name)))))
+                     collect `(setf (assoc-value *known-builtin-types* ',kwd) ',name)
+                     collect `(defmethod %memory-ref-$ ((type ,name) ref (key (eql $_type))) ,kwd)))))
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
               bool static-string ptr-string stl-string

@@ -149,3 +149,9 @@
                      (when addr-sym (start-address-of addr-sym))))
           (make-memory-ref memory it type
                            :parent :globals :key name))))))
+
+(defmethod $ ((obj memory-mirror) key &optional default)
+  (or (get-memory-global obj key) default))
+
+(defmethod $ ((obj memory-mirror) (key (eql '*)) &optional default)
+  (or (mapcar (lambda (k) (get-memory-global obj (car k))) *known-globals*) default))

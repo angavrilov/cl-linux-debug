@@ -221,27 +221,25 @@
         (when addr-range
           (advance-to (+ min-addr addr-range) 0))))))
 
+(defgeneric expand-by-default? (type ref master)
+  (:method ((type data-item) ref master) t)
+  (:method ((type primitive-field) ref master) nil)
+  (:method ((type container-item) ref master) nil)
+  (:method ((type compound) ref master)
+    (null (name-of type)))
+  (:method ((type class-type) ref master) t)
+  (:method ((type struct-compound-item) ref master)
+    (eq ref (ref-of master))))
+
 (defgeneric layout-ref-tree-node/type (type ref master)
   (:method ((type data-item) ref master)
     (let* ((node (make-instance 'memory-object-node
                                 :view (view-of master)
-                                :expanded? t
+                                :expanded? (expand-by-default? type ref master)
                                 :ref ref :master-node master)))
       (layout-children-in-range node (@ ref '*) master
                                 (start-address-of ref) (length-of ref))
       node))
-  (:method ((type primitive-field) ref master)
-    (aprog1 (call-next-method)
-      (setf (expanded? it) nil)))
-  (:method ((type container-item) ref master)
-    (aprog1 (call-next-method)
-      (setf (expanded? it) nil)))
-  (:method ((type struct-compound-item) ref master)
-    (aprog1 (call-next-method)
-      (setf (expanded? it)
-            (or (and (null (name-of type)) (typep type 'compound))
-                (typep type 'class-type)
-                (eq ref (ref-of master))))))
   (:method ((type pointer) ref master)
     (aprog1 (call-next-method)
       (when (ref-value-of it)
