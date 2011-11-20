@@ -102,9 +102,10 @@
 
 (defun enumerate-malloc-chunks (memory result-vector start-address limit)
   "Scan a chain of malloc chunks, collecting their start addresses. Unused ones have the lowest bit set."
+  (incf start-address (- +chunk-header-size+ 4))
   (multiple-value-bind (bytes offset base-in)
-      (get-bytes-for-addr memory start-address +chunk-header-size+)
-    (when (and bytes (< start-address (- limit +chunk-header-size+)))
+      (get-bytes-for-addr memory start-address 4)
+    (when (and bytes (< start-address (- limit 4)))
       ;; Highly optimized section:
       (let ((offset-limit (- (min (length bytes) (- limit base-in))
                              +chunk-header-size+)))
@@ -116,7 +117,7 @@
                  (optimize (speed 3)))
         ;; Unsafe section:
         (with-simple-vector-fill (result-sv result-vector uint32)
-          (let ((last-size-word (parse-int bytes (+ offset 4) 4))
+          (let ((last-size-word (parse-int bytes offset 4))
                 (addr (+ base-in offset)))
             (declare (type uint32 last-size-word)
                      (type (unsigned-byte 32) addr)
@@ -132,7 +133,7 @@
                       (when (>= next-pos offset-limit)
                         (return))
                       (let* ((next-addr (+ addr size))
-                             (next-size-word (parse-int bytes (+ next-pos 4) 4))
+                             (next-size-word (parse-int bytes next-pos 4))
                              (used-bit (logxor 1 (logand next-size-word 1)))
                              (item (logior addr used-bit)))
                         (declare (type uint32 next-addr))
@@ -141,8 +142,9 @@
                               offset next-pos
                               addr next-addr))))))))
       ;; End optimized section
-      (vector-push-extend (logior (+ base-in offset) 1) result-vector))
-    result-vector))
+      (let ((end-addr (+ base-in offset)))
+        (vector-push-extend (logior end-addr 1) result-vector)
+        (values start-address end-addr (fill-pointer result-vector))))))
 
 (defun enumerate-malloc-arenas (memory)
   (let ((main-arena (get-memory-global memory $glibc:main_arena)))
@@ -191,6 +193,6 @@
       (if (< idx 0) nil
           (let ((start (aref obj-vector idx)))
             (if (logtest start 1) nil
-                (let ((min (+ start +chunk-header-size+))
+                (let ((min (+ start 4))
                       (max (logand (aref obj-vector (1+ idx)) (lognot 1))))
                   (values min max (<= min address max)))))))))
