@@ -17,7 +17,7 @@
    (extent-map (make-chunk-table) :reader t)
    (section-map (make-chunk-table) :reader t)))
 
-(defmethod intialize-instance :after ((mirror memory-mirror))
+(defmethod initialize-instance :after ((mirror memory-mirror) &key)
   (setf (slot-value mirror 'null-extent)
         (make-instance 'memory-extent
                        :start-address 0 :length 0 :mapping nil :mirror mirror

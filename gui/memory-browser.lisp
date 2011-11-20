@@ -7,7 +7,10 @@
 (def (class* e) memory-object-tree (object-tree-view)
   ((widget :reader t)
    (memory :reader t)
-   (info-label :reader t)))
+   (info-label :reader t))
+  (:default-initargs
+      :column-accessors
+      '(col-offset-of col-name-of col-type-of col-value-of col-info-of col-comment-of)))
 
 (def (class* e) memory-object-node (object-node)
   ((ref :reader t)
@@ -129,7 +132,7 @@
   ())
 
 (defmethod on-lazy-expand-node ((node pointer-object-node))
-  (bind ((child (first (children-of node)))
+  (bind ((child (elt (children-of node) 0))
          (ref (ref-value-of node))
          ((:values info r-start r-len) (get-address-info-region (view-of node) ref)))
     (declare (ignore info))
@@ -165,8 +168,8 @@
   ())
 
 (defun add-array-contents (node items master)
-  (let* ((placeholder (first (children-of node)))
-         (parent (if (rest (children-of node))
+  (let* ((placeholder (elt (children-of node) 0))
+         (parent (if (> (length (children-of node)) 1)
                      (aprog1 (make-instance 'lazy-placeholder-node
                                             :view (view-of node) :col-name "<items>"
                                             :expanded? t)
@@ -300,9 +303,6 @@
                                 :vscrollbar-policy :automatic))
          (label (make-instance 'label :label "No object" :xalign 0.0 :yalign 0.5))
          (v-box (make-instance 'v-box)))
-    (add-model-columns tree
-                       #'col-offset-of #'col-name-of #'col-type-of #'col-value-of
-                       #'col-info-of #'col-comment-of)
     (setf (widget-width-request view) width-request
           (widget-height-request view) height-request
           (tree-view-tooltip-column view) 5
