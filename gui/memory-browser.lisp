@@ -102,6 +102,8 @@
     (apply #'change-class node class args))
   (add-child node (make-instance 'lazy-placeholder-node :view (view-of node)) 0))
 
+;; Pointer
+
 (def (class* e) pointer-object-node (memory-object-node lazy-expanding-node)
   ())
 
@@ -115,6 +117,8 @@
           (slot-value child 'ref) ref)
     (layout-children-in-range node (list ref) child r-start r-len)
     (remove-child node 0)))
+
+;; Array
 
 (def (class* e) array-subgroup-node (lazy-placeholder-node lazy-expanding-node)
   ((items nil :reader t)))
@@ -171,6 +175,8 @@
                      nil)))
     (add-array-contents node items master)))
 
+;; Padding
+
 (def (class* e) padding-node (memory-object-node lazy-expanding-node)
   ()
   (:default-initargs :col-type "" :col-value "" :col-comment ""))
@@ -190,6 +196,19 @@
 (defmethod on-lazy-expand-node ((node padding-node))
   (let ((items (guess-types-by-data (memory-of (view-of node)) (ref-of node))))
     (add-array-contents node items (master-node-of node))))
+
+;; Struct
+
+(def (class* e) struct-object-node (memory-object-node lazy-expanding-node)
+  ())
+
+(defmethod on-lazy-expand-node ((node struct-object-node))
+  (let ((ref (ref-of node)))
+    (layout-children-in-range node (@ ref '*) (master-node-of node)
+                              (start-address-of ref) (length-of ref))
+    (remove-child node 0)))
+
+;; Recursive walk
 
 (defun layout-children-in-range (parent child-refs master &optional min-addr addr-range)
   (when child-refs
@@ -240,6 +259,13 @@
       (layout-children-in-range node (@ ref '*) master
                                 (start-address-of ref) (length-of ref))
       node))
+  (:method ((type struct-compound-item) ref master)
+    (if (not (expand-by-default? type ref master))
+        (aprog1 (make-instance 'struct-object-node
+                               :view (view-of master)
+                               :ref ref :master-node master)
+          (make-lazy it nil))
+        (call-next-method)))
   (:method ((type pointer) ref master)
     (aprog1 (call-next-method)
       (when (ref-value-of it)
