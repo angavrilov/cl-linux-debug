@@ -38,6 +38,14 @@
    (effective-tag :accessor t))
   (:documentation "An abstract base class for all type items."))
 
+(def (class* eas) code-helper (xml-serializer)
+  ((name nil :accessor t :type $-keyword))
+  (:documentation "A bit of code to help in type presentation."))
+
+(def (class* eas) code-helper-mixin ()
+  ((code-helpers nil :accessor t)
+   (effective-code-helpers nil :accessor t)))
+
 (defmethod initialize-instance :before ((obj data-item) &key)
   (unless (typep obj 'concrete-item)
     (error "Could not instantiate an abstract type class: ~S" obj)))
@@ -133,7 +141,7 @@
 
 ;; Primitive fields
 
-(def (class* eas) primitive-field (data-field unit-item)
+(def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
   ()
   (:documentation "An abstract type for a primitive field."))
 
@@ -208,14 +216,8 @@
 
 ;; Global entity definition
 
-(def (class* eas) code-helper (xml-serializer)
-  ((name nil :accessor t :type $-keyword))
-  (:documentation "A bit of code to help in type presentation."))
-
-(def (class* eas) global-type-definition (data-item)
-  ((type-name nil :accessor t :type $-keyword)
-   (code-helpers nil :accessor t)
-   (effective-code-helpers nil :accessor t))
+(def (class* eas) global-type-definition (data-item code-helper-mixin)
+  ((type-name nil :accessor t :type $-keyword))
   (:documentation "An abstract global entity definition."))
 
 (defmethod name-of ((type global-type-definition))

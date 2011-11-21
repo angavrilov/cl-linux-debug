@@ -187,7 +187,7 @@
              (error "COMPOUND with a TYPE-NAME can't have size."))
            (change-class obj 'global-type-proxy :effective-main-type it))
          (call-next-method)))
-  (:method :after ((obj global-type-definition))
+  (:method :after ((obj code-helper-mixin))
     (setf (effective-code-helpers-of obj)
           (mapcar (lambda (ch)
                     (cons (name-of ch)

@@ -32,11 +32,11 @@
 (defgeneric describe-ref-value-by-type (type ref value)
   (:method-combination append :most-specific-first)
   (:method append (type ref value) nil)
-  (:method append ((type global-type-definition) ref value)
-    (awhen (and (eq ref value)
+  (:method append ((type code-helper-mixin) ref value)
+    (awhen (and (or (eq ref value) (not (typep value 'memory-object-ref)))
                 (assoc-value (effective-code-helpers-of type) $describe))
       (ignore-errors
-        (ensure-list (call-helper it value ref :context-ref ref)))))
+        (flatten (ensure-list (call-helper it value ref :context-ref ref))))))
   (:method append ((type class-type) ref value)
     (list (get-$-field-name (type-name-of type)))))
 
@@ -71,9 +71,17 @@
          ((:values vector offset)
           (get-bytes-for-addr (memory-object-ref-memory ref) base byte-size)))
     (when vector
-      (ldb (byte (* 8 size) (* 8 shift)) (parse-int vector offset byte-size)))))
+      (let ((iv (ldb (byte (* 8 size) (* 8 shift))
+                     (parse-int vector offset byte-size))))
+        (if (or (/= iv 0) (/= size 1/8))
+            iv nil)))))
 
 (defmethod compute-effective-alignment (context (obj flag-bit)) 1/8)
+
+(defmethod format-ref-value-by-type ((type flag-bit) ref value)
+  (if (= (effective-size-of type) 1/8)
+      (if value "true" "false")
+      (call-next-method)))
 
 ;; Pointer
 

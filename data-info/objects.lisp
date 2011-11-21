@@ -143,7 +143,7 @@
                            collect (list* addr val
                                           (multiple-value-list
                                            (get-address-info-range mirror val))))))
-          (awhen (and (= addr root-start)
+          (awhen (and (eql addr root-start)
                       infolist
                       (get-vtable-class-name mirror (second (first infolist))))
             (consume (aif (resolve-class-in-context mirror (second (first infolist)))
