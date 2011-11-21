@@ -201,11 +201,15 @@
 
 (defmethod col-info-of ((node padding-node))
   (or (with-bytes-for-ref (vector offset (ref-of node) 1)
-        (format nil "~{~2,'0X~^ ~}~A"
-                (loop for i from 0 below (min 8 (length-of node))
-                   and j from offset below (length vector)
-                   collect (aref vector j))
-                (if (> (length-of node) 8) "..." "")))
+        (let* ((bytes (loop for i from 0 below (min 8 (length-of node))
+                         and j from offset below (length vector)
+                         collect (aref vector j)))
+               (chars (loop for c in bytes
+                         collect (if (>= c 32) (code-char c) #\?))))
+          (format nil "~{~2,'0X~^ ~}~A (~A)"
+                  bytes
+                  (if (> (length-of node) 8) "..." "")
+                  (coerce chars 'string))))
       "?"))
 
 (defmethod on-lazy-expand-node ((node padding-node))
