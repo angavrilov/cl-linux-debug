@@ -15,6 +15,6 @@
         :gtk :gdk :gobject)
   (:shadowing-import-from :cl-linux-debug.data-defs
                           #:alignment #:pointer)
-  (:export ))
+  (:export #:browse-object-in-new-window))
 
 (in-package :cl-linux-debug.gui)

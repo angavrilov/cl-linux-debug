@@ -62,10 +62,12 @@
            #:describe-ref-value
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
+           #:get-context-of-memory
            #:make-memory-ref
            #:make-ad-hoc-memory-ref
            #:with-bytes-for-ref
            #:make-memory-mirror
+           #:check-refresh-context
            #:refresh-memory-mirror
            #:get-memory-bytes
            #:get-memory-integer
@@ -74,8 +76,28 @@
            #:describe-address-in-context
            #:get-address-info-range
            #:guess-types-by-data
+           #:load-data-definition
            ))
 
 (pushnew (find-package :cl-linux-debug.data-info)
+         xml:*xmlisp-packages*)
+
+(defpackage :cl-linux-debug.data-xml
+  (:use :common-lisp :xml
+        :alexandria :anaphora :metabang-bind
+        :cl-linux-debug.code-info
+        :cl-linux-debug.field-names
+        :cl-linux-debug.data-defs
+        :cl-linux-debug.data-info)
+  (:import-from :cl-linux-debug.code-info
+                #:int8 #:uint8
+                #:int16 #:uint16
+                #:int32 #:uint32
+                #:int64 #:uint64
+                #:offset #:address
+                #:format-hex-offset #:parse-hex-offset)
+  (:intern #:global))
+
+(pushnew (find-package :cl-linux-debug.data-xml)
          xml:*xmlisp-packages*)
 

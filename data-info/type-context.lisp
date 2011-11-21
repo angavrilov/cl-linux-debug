@@ -142,3 +142,7 @@
            do (with-simple-restart (continue "Skip this global")
                 (lookup-global-in-context context name))))
       (setf (last-globals-version-of context) *known-globals-version*))))
+
+(defun load-data-definition (path)
+  (let ((*package* (find-package :cl-linux-debug.data-xml)))
+    (load path)))

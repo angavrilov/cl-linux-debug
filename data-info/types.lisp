@@ -162,6 +162,13 @@
   (def-simple-int int64_t 8 t)
   (def-simple-int bool 1 nil))
 
+;; Bit
+
+(def (class* eas) flag-bit (primitive-field concrete-item)
+  ((size nil :accessor t :type address))
+  (:default-initargs :default-size 1/8 :effective-alignment 1/8)
+  (:documentation "A bitfield chunk."))
+
 ;; Pointer
 
 (def (class* eas) pointer (unit-item container-item data-field concrete-item)

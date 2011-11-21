@@ -48,7 +48,9 @@
                              (:file "type-memory" :depends-on ("package" "type-core"))
                              (:file "type-misc" :depends-on ("package" "type-memory"))
                              (:file "type-context" :depends-on ("package" "type-core" "type-memory"))
-                             (:file "memory" :depends-on ("package" "type-context" "type-memory"))
+                             (:file "xml-helper" :depends-on ("package" "type-core" "type-memory"))
+                             (:file "memory" :depends-on ("package" "type-context"
+                                                                    "type-memory" "xml-helper"))
                              (:file "malloc" :depends-on ("package" "memory"))
                              (:file "objects" :depends-on ("package" "memory" "malloc"))))))
 

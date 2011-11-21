@@ -19,6 +19,26 @@
 (defun align-up (offset alignment)
   (* alignment (ceiling offset alignment)))
 
+;; Helper
+
+(defparameter cl-linux-debug.data-xml::global nil)
+
+(defmacro %group-all (&rest args)
+  (if (rest args) `(list ,@args) (first args)))
+
+(defun compile-helper (text &key group?)
+  (let* ((*package* (find-package :cl-linux-debug.data-xml))
+         (str (concatenate 'string "(" text ")"))
+         (code (read-from-string str)))
+    (compile nil `(lambda ($ $$)
+                    (declare (ignorable $ $$))
+                    ,@(if group? `((%group-all ,@code)) code)))))
+
+(defun call-helper (cb ref base &key context-ref)
+  (let ((cl-linux-debug.data-xml::global
+         (get-context-of-memory (or context-ref ref))))
+    (funcall cb ref base)))
+
 ;; Proxy
 
 (def (class* eas) global-type-proxy (data-field concrete-item)
@@ -170,12 +190,8 @@
   (:method :after ((obj global-type-definition))
     (setf (effective-code-helpers-of obj)
           (mapcar (lambda (ch)
-                    (let ((str (concatenate 'string "(" (xml::content ch) ")"))
-                          (*package* (find-package :cl-linux-debug.data-info)))
-                      (cons (name-of ch)
-                            (compile nil `(lambda ($ $$)
-                                            (declare (ignorable $ $$))
-                                            ,@(read-from-string str))))))
+                    (cons (name-of ch)
+                          (compile-helper (xml::content ch) :group? t)))
                   (code-helpers-of obj)))))
 
 (defmethod slot-unbound (class (obj container-item) (slot (eql 'effective-element-size)))

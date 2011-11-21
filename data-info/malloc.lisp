@@ -52,7 +52,7 @@
     <static-array name='methods' count='16' type-name='pointer'/>
 
     <code-helper name='describe'>
-      (format nil "Class: ~A" $.type_info.class_name)
+      (fmt "Class: ~A" $.type_info.class_name)
     </code-helper>
   </struct-type>
 

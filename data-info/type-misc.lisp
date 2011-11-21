@@ -13,6 +13,7 @@
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
               bool static-string ptr-string stl-string
+              flag-bit
               pointer))
 
 ;; User-readable output
@@ -34,7 +35,8 @@
   (:method append ((type global-type-definition) ref value)
     (awhen (and (eq ref value)
                 (assoc-value (effective-code-helpers-of type) $describe))
-      (list (funcall it value ref))))
+      (ignore-errors
+        (ensure-list (call-helper it value ref :context-ref ref)))))
   (:method append ((type class-type) ref value)
     (list (get-$-field-name (type-name-of type)))))
 
@@ -48,15 +50,30 @@
     (with-bytes-for-ref (vector offset ref size)
       (parse-int vector offset size :signed? (effective-int-signed? type)))))
 
+(defmethod describe-ref-value-by-type append ((type integer-field) ref (value integer))
+  (list (format-hex-offset (unsigned value (* 8 (effective-size-of type))))))
+
+;; Boolean
+
 (defmethod %memory-ref-$ ((type bool) ref (key (eql t)))
   (awhen (call-next-method)
     (if (/= it 0) it nil)))
 
-(defmethod describe-ref-value-by-type append ((type integer-field) ref (value integer))
-  (list (format-hex-offset (unsigned value (* 8 (effective-size-of type))))))
-
 (defmethod format-ref-value-by-type ((type bool) ref value)
   (if value "true" "false"))
+
+;; Bit
+
+(defmethod %memory-ref-$ ((type flag-bit) ref (key (eql t)))
+  (bind (((:values base shift) (floor (memory-object-ref-address ref) 1))
+         (size (effective-size-of type))
+         (byte-size (ceiling (+ shift size)))
+         ((:values vector offset)
+          (get-bytes-for-addr (memory-object-ref-memory ref) base byte-size)))
+    (when vector
+      (ldb (byte (* 8 size) (* 8 shift)) (parse-int vector offset byte-size)))))
+
+(defmethod compute-effective-alignment (context (obj flag-bit)) 1/8)
 
 ;; Pointer
 
