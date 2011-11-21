@@ -9,8 +9,12 @@
    (memory :reader t)
    (info-label :reader t))
   (:default-initargs
+      :column-types
+      '("gchararray" "gchararray" "gchararray" "gchararray" "gchararray"
+        "gchararray" "gchararray" "gint")
       :column-accessors
-      '(col-offset-of col-name-of col-type-of col-value-of col-info-of col-comment-of)))
+      '(col-offset-of col-name-of col-type-of col-value-of col-info-of
+        col-comment-of col-row-color-of col-name-weight-of)))
 
 (def (class* e) memory-object-node (object-node)
   ((ref :reader t)
@@ -33,6 +37,17 @@
 (def-column-slot col-value memory-object-node)
 (def-column-slot col-info memory-object-node)
 (def-column-slot col-comment memory-object-node)
+
+(defgeneric col-row-color-of (node)
+  (:method ((node memory-object-node)) "black"))
+
+(defgeneric col-name-weight-of (node)
+  (:method ((node memory-object-node))
+    (if (and (ref-of node)
+             (typep (memory-object-ref-type (ref-of node))
+                    'struct-compound-item))
+        600
+        400)))
 
 (defmethod start-address-of ((node memory-object-node))
   (start-address-of (ref-of node)))
@@ -62,9 +77,7 @@
   (:method (type key)
     (if (typep type 'global-type-proxy)
         (field-name-of-type (effective-main-type-of type) key)
-        (xml:xml-tag-name-string type)))
-  (:method :around ((type struct-compound-item) key)
-    (format nil "{~A}" (call-next-method))))
+        (xml:xml-tag-name-string type))))
 
 (defmethod col-name-of ((node memory-object-node))
   (field-name-of-type (memory-object-ref-type (ref-of node))
@@ -180,6 +193,8 @@
 (def (class* e) padding-node (memory-object-node lazy-expanding-node)
   ()
   (:default-initargs :col-type "" :col-value "" :col-comment ""))
+
+(defmethod col-row-color-of ((node padding-node)) "darkgray")
 
 (defmethod col-name-of ((node padding-node))
   (format nil "(~A=0x~X bytes)" (length-of node) (length-of node)))
@@ -314,7 +329,7 @@
     (box-pack-start v-box label :expand nil)
     (box-pack-start v-box scroll :expand t)
     (container-add scroll view)
-    (flet ((add-column (id title min-width xalign expand?)
+    (flet ((add-column (id title min-width xalign expand? &key weight? expander?)
              (let ((column (make-instance 'tree-view-column :title title
                                           :min-width min-width
                                           :resizable t
@@ -323,11 +338,15 @@
                (setf (tree-view-column-sizing column) :fixed)
                (tree-view-column-pack-start column renderer)
                (tree-view-column-add-attribute column renderer "text" id)
+               (tree-view-column-add-attribute column renderer "foreground" 6)
+               (when weight?
+                 (tree-view-column-add-attribute column renderer "weight" 7))
                (tree-view-append-column view column)
+               (when expander?
+                 (setf (tree-view-expander-column view) column))
                column)))
       (add-column 0 "Address" 80 1.0 nil)
-      (setf (tree-view-expander-column view)
-            (add-column 1 "Name" 150 0.0 t))
+      (add-column 1 "Name" 150 0.0 t :weight? t :expander? t)
       (add-column 2 "Type" 100 0.0 nil)
       (add-column 3 "Value" 100 0.0 nil)
       (add-column 4 "Info" 200 0.0 t))
