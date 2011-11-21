@@ -301,13 +301,12 @@
                column)))
       (add-column 0 "Address" 80 1.0 nil)
       (setf (tree-view-expander-column view)
-            (add-column 1 "Name" 200 0.0 t))
+            (add-column 1 "Name" 150 0.0 t))
       (add-column 2 "Type" 100 0.0 nil)
       (add-column 3 "Value" 100 0.0 nil)
-      (add-column 4 "Info" 100 0.0 t))
+      (add-column 4 "Info" 200 0.0 t))
     (with-slots (widget tree-view info-label) tree
       (setf widget v-box
-            tree-view view
             info-label label))
     #+nil(connect-signal window "destroy" (lambda (w) (declare (ignore w)) (leave-gtk-main)))
     #+nil(widget-show window)))
@@ -317,10 +316,3 @@
                                        (height-request 400))
   (construct-memory-object-tree obj width-request height-request))
 
-(defun browse-object-in-new-window (memory ref &key (title "Memory Object"))
-  (within-main-loop
-    (let* ((window (make-instance 'gtk-window :title title))
-           (tree (make-instance 'memory-object-tree :memory memory)))
-      (container-add window (widget-of tree))
-      (layout-memory-object-tree tree ref)
-      (widget-show window))))
