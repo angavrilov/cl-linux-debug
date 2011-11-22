@@ -39,6 +39,10 @@
          (get-context-of-memory (or context-ref ref))))
     (funcall cb ref base)))
 
+(defun call-helper-if-found (node name ref base &key context-ref)
+  (awhen (assoc-value (effective-code-helpers-of node) name)
+    (ignore-errors (values (call-helper it ref base :context-ref context-ref) t))))
+
 ;; Proxy
 
 (def (class* eas) global-type-proxy (data-field concrete-item)
@@ -192,7 +196,8 @@
           (mapcar (lambda (ch)
                     (cons (name-of ch)
                           (compile-helper (xml::content ch) :group? t)))
-                  (code-helpers-of obj)))))
+                  (append (code-helpers-of obj)
+                          (auto-code-helpers obj))))))
 
 (defmethod slot-unbound (class (obj container-item) (slot (eql 'effective-element-size)))
   (let ((elt (effective-contained-item-of obj)))

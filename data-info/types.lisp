@@ -46,6 +46,10 @@
   ((code-helpers nil :accessor t)
    (effective-code-helpers nil :accessor t)))
 
+(defgeneric auto-code-helpers (node)
+  (:method-combination append :most-specific-first)
+  (:method append ((node code-helper-mixin)) nil))
+
 (defmethod initialize-instance :before ((obj data-item) &key)
   (unless (typep obj 'concrete-item)
     (error "Could not instantiate an abstract type class: ~S" obj)))
@@ -117,7 +121,7 @@
     (setf (syntax-parent-of field) obj)))
 
 (def (class* eas) struct-compound-item (compound-item)
-  ()
+  ((key-field nil :accessor t :type $-keyword))
   (:documentation "An abstract type that contains named fields as part of its own structure."))
 
 (def (class* eas) ref-compound-item (compound-item)
@@ -129,9 +133,13 @@
    (effective-element-size :accessor t))
   (:documentation "An abstract type that points to a set of elements."))
 
-(def (class* eas) array-item (container-item)
-  ()
+(def (class* eas) array-item (container-item code-helper-mixin)
+  ((index-refers-to nil :accessor t :type string))
   (:documentation "An abstract container that contains an integer-indexed sequence of items."))
+
+(defmethod auto-code-helpers append ((item array-item))
+  (awhen (index-refers-to-of item)
+    (list (make-instance 'code-helper :name $index-refers-to :content it))))
 
 ;; Concrete compound class
 
@@ -142,8 +150,12 @@
 ;; Primitive fields
 
 (def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
-  ()
+  ((refers-to nil :accessor t :type string))
   (:documentation "An abstract type for a primitive field."))
+
+(defmethod auto-code-helpers append ((item primitive-field))
+  (awhen (refers-to-of item)
+    (list (make-instance 'code-helper :name $refers-to :content it))))
 
 (def (class* eas) padding (primitive-field concrete-item)
   ()

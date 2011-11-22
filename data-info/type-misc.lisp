@@ -29,19 +29,46 @@
 (defun format-ref-value (ref value)
   (format-ref-value-by-type (memory-object-ref-type ref) ref value))
 
+(defgeneric describe-ref-child-by-type (type ref child key)
+  (:method-combination append :most-specific-first)
+  (:method append (type ref value key) nil)
+  (:method append ((type array-item) ref value (key integer))
+    (append
+     (call-helper-if-found type $describe-item value ref :context-ref ref)
+     (awhen (call-helper-if-found type $index-refers-to key ref :context-ref ref)
+       (ensure-list (describe-value it))))))
+
+(defun describe-ref-child (ref child)
+  (when (typep ref 'memory-object-ref)
+    (describe-ref-child-by-type (memory-object-ref-type ref) ref child
+                                (memory-object-ref-parent-key child))))
+
 (defgeneric describe-ref-value-by-type (type ref value)
   (:method-combination append :most-specific-first)
-  (:method append (type ref value) nil)
+  (:method append (type ref value)
+    (describe-ref-child (memory-object-ref-parent-ref ref) ref))
   (:method append ((type code-helper-mixin) ref value)
-    (awhen (and (or (eq ref value) (not (typep value 'memory-object-ref)))
-                (assoc-value (effective-code-helpers-of type) $describe))
-      (ignore-errors
-        (flatten (ensure-list (call-helper it value ref :context-ref ref))))))
+    (when (or (eq ref value) (not (typep value 'memory-object-ref)))
+      (flatten (ensure-list (call-helper-if-found type $describe
+                                                  value ref :context-ref ref)))))
+  (:method append ((type primitive-field) ref value)
+    (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
+      (ensure-list (describe-value it))))
+  (:method append ((type struct-compound-item) ref value)
+    (awhen (aand (key-field-of type) (@ ref it))
+      (list (format nil "~A=~A"
+                    (get-$-field-name (key-field-of type))
+                    (format-ref-value it ($ it t))))))
   (:method append ((type class-type) ref value)
     (list (get-$-field-name (type-name-of type)))))
 
 (defun describe-ref-value (ref value)
   (describe-ref-value-by-type (memory-object-ref-type ref) ref value))
+
+(defgeneric describe-value (obj)
+  (:method (obj) obj)
+  (:method ((obj memory-object-ref))
+    (describe-ref-value obj obj)))
 
 ;; Integers
 
