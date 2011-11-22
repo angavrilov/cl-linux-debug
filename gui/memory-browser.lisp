@@ -241,6 +241,8 @@
                    (insert-padding handled-base start))
                  (setf handled-base (max handled-base (+ start size))))
                (insert-padding (start end)
+                 (insert-normal-padding (floor start) (ceiling end)))
+               (insert-normal-padding (start end)
                  (let* ((memory (memory-of (view-of parent)))
                         (type (make-instance 'padding :size (- end start)))
                         (padding-ref (make-ad-hoc-memory-ref memory start type :no-copy? t)))

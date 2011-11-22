@@ -48,9 +48,8 @@
   (:method append (type ref value)
     (describe-ref-child (memory-object-ref-parent-ref ref) ref))
   (:method append ((type code-helper-mixin) ref value)
-    (when (or (eq ref value) (not (typep value 'memory-object-ref)))
-      (flatten (ensure-list (call-helper-if-found type $describe
-                                                  value ref :context-ref ref)))))
+    (flatten (ensure-list (call-helper-if-found type $describe
+                                                value ref :context-ref ref))))
   (:method append ((type primitive-field) ref value)
     (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
       (ensure-list (describe-value it))))
@@ -60,7 +59,13 @@
                     (get-$-field-name (key-field-of type))
                     (format-ref-value it ($ it t))))))
   (:method append ((type class-type) ref value)
-    (list (get-$-field-name (type-name-of type)))))
+    (flatten (list
+              (when (eq ref value)
+                (list (get-$-field-name (type-name-of type))))
+              (let* ((ff (first (effective-fields-of type))))
+                (unless (name-of ff)
+                  (let ((rr ($ value (or (name-of ff) (effective-tag-of ff)))))
+                    (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))))))))
 
 (defun describe-ref-value (ref value)
   (describe-ref-value-by-type (memory-object-ref-type ref) ref value))
@@ -87,7 +92,7 @@
     (if (/= it 0) it nil)))
 
 (defmethod format-ref-value-by-type ((type bool) ref value)
-  (if value "true" "false"))
+  (if value "Y" "N"))
 
 ;; Bit
 
@@ -107,7 +112,7 @@
 
 (defmethod format-ref-value-by-type ((type flag-bit) ref value)
   (if (= (effective-size-of type) 1/8)
-      (if value "true" "false")
+      (if value "Y" "N")
       (call-next-method)))
 
 ;; Pointer
@@ -227,7 +232,8 @@
 ;; Generic structure
 
 (defun find-field-by-name (compound name &optional (offset 0))
-  (dolist (field (effective-fields-of compound))
+  (dolist (field (if (typep compound 'virtual-compound-item)
+                     (effective-fields-of compound)))
     (when (eq (effective-tag-of field) name)
       (return (cons offset field)))
     (if (name-of field)
@@ -237,7 +243,7 @@
                                    name (+ offset (effective-offset-of field)))
           (return it)))))
 
-(defmethod %memory-ref-@ ((type virtual-compound-item) ref (key symbol))
+(defmethod %memory-ref-@ ((type virtual-compound-item) ref key)
   (aif (find-field-by-name type key)
        (resolve-offset-ref ref (+ (memory-object-ref-address ref)
                                   (car it) (effective-offset-of (cdr it)))
