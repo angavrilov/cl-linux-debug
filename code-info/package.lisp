@@ -35,5 +35,7 @@
            #:make-chunk-table #:lookup-chunk
            #:make-binsearch-uint32-vec
            #:with-simple-vector-fill
-           #:binsearch-generic #:binsearch-uint32-<
+           #:with-unsafe-int-read
+           #:with-binsearch-in-array
+           #:binsearch-generic #:binsearch-uint32-< #:binsearch-uint32-<=
            ))

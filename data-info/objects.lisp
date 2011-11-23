@@ -3,7 +3,7 @@
 (in-package :cl-linux-debug.data-info)
 
 (def (class* e) object-memory-mirror (memory-mirror type-context)
-  ((malloc-chunks (make-binsearch-uint32-vec) :reader t)
+  ((malloc-chunks (make-malloc-chunk-map) :reader t)
    (vtable-names (make-hash-table :test #'eql) :reader t)))
 
 (def (class* e) malloc-chunk-range (address-chunk)
