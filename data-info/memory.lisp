@@ -4,7 +4,8 @@
 
 (def (class* e) memory-extent (data-chunk)
   ((mirror :reader t)
-   (mapping :reader t)))
+   (mapping :reader t)
+   (old-data nil :reader t)))
 
 (def (class* e) section-extent (memory-extent)
   ((section :reader t)))
@@ -104,8 +105,11 @@
         (if (null mapping)
             (delete-memory-extent mirror ext)
             (let ((msize (- (memory-mapping-end-addr mapping) start)))
-              (when (/= msize (length-of ext))
-                (setf (slot-value ext 'cl-linux-debug.code-info::data-bytes)
+              (rotatef (slot-value ext 'data-bytes)
+                       (slot-value ext 'old-data))
+              (when (or (/= msize (length-of ext))
+                        (null (data-bytes-of ext)))
+                (setf (slot-value ext 'data-bytes)
                       (make-array msize :element-type 'uint8))
                 (setf (slot-value ext 'length) msize))
               (setf (slot-value ext 'mapping) mapping)))))

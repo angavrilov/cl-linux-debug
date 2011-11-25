@@ -80,6 +80,7 @@
            #:get-address-info-range
            #:guess-types-by-data
            #:load-data-definition
+           #:find-stl-strings
            ))
 
 (pushnew (find-package :cl-linux-debug.data-info)

@@ -55,5 +55,6 @@
                              (:file "memory" :depends-on ("package" "type-context"
                                                                     "type-memory" "xml-helper"))
                              (:file "malloc" :depends-on ("package" "memory"))
-                             (:file "objects" :depends-on ("package" "memory" "malloc"))))))
+                             (:file "objects" :depends-on ("package" "memory" "malloc"))
+                             (:file "search" :depends-on ("package" "objects"))))))
 

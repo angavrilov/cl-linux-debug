@@ -21,7 +21,7 @@
            #:format-hex-offset #:parse-hex-offset
            #:signed #:unsigned
            #:start-address-of #:length-of
-           #:start-offset-of #:data-bytes-of
+           #:start-offset-of #:data-bytes-of #:data-bytes
            #:image-of #:file-offset-of #:section-name-of
            #:loaded? #:executable? #:writable?
            #:find-section-by-address #:find-section-by-name
