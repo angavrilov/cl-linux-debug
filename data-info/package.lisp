@@ -74,6 +74,8 @@
            #:get-memory-integer
            #:get-memory-global
            #:get-address-object-info
+           #:compile-helper
+           #:call-helper
            #:describe-address-in-context
            #:get-address-info-range
            #:guess-types-by-data
