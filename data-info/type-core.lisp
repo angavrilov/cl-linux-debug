@@ -48,7 +48,6 @@
 (def (class* eas) global-type-proxy (data-field concrete-item)
   ((type-name nil :accessor t :type $-keyword-namespace)
    (effective-main-type :accessor t))
-  (:default-initargs :effective-finalized? t)
   (:documentation "A proxy type object; used to stand in for global types as fields."))
 
 (defmethod effective-main-type-of ((obj data-item)) obj)
@@ -183,13 +182,14 @@
       (setf (effective-fields-of obj) fields)
       (layout-fields obj fields)))
   (:method :around ((obj global-type-proxy))
-    nil)
+    (setf (effective-finalized? obj) t))
   (:method :around ((obj compound))
     (aif (lookup-ref-compound-target obj)
          (progn
            (unless (and (null (size-of obj)) (null (alignment-of obj)))
              (error "COMPOUND with a TYPE-NAME can't have size."))
-           (change-class obj 'global-type-proxy :effective-main-type it))
+           (change-class obj 'global-type-proxy :effective-main-type it
+                         :effective-finalized? t))
          (call-next-method)))
   (:method :after ((obj code-helper-mixin))
     (setf (effective-code-helpers-of obj)
