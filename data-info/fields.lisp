@@ -185,16 +185,21 @@
                             (first names)))))))
       (setf real-dollars (coerce (list* char (loop while (eql (next) #\$) collect char)) 'string))
       (setf dollars (concatenate 'string "$" (subseq real-dollars 1)))
-      (if (id-char? char)
-          (progn
-            (setf last-name (read-name))
-            (when (char= char #\:)
-              (next)
-              (setf namespace last-name
-                    last-name (or (read-name) (fail)))))
-          (when (char= char #\.)
-            (setf last-name (register-$-var dollars)
-                  dollars nil)))
+      (cond ((id-char? char)
+             (setf last-name (read-name))
+             (when (char= char #\:)
+               (next)
+               (setf namespace last-name
+                     last-name (or (read-name) (fail)))))
+            ((char= char #\.)
+             (setf last-name (register-$-var dollars)
+                   dollars nil))
+            ((char= char #\()
+             (unless (= (length dollars) 1) (fail))
+             (setf last-name (read-delimited-list #\) stream t)
+                   dollars nil)
+             (push #\) chars)
+             (next)))
       (loop
          (cond
            ((or (xml::white-space-p char)
