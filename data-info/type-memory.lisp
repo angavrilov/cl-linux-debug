@@ -163,6 +163,8 @@
     ref)
   (:method (type ref (key (eql $_address)))
     (memory-object-ref-address ref))
+  (:method (type ref (key (eql $_size)))
+    (length-of ref))
   (:method (type ref (key (eql $_parent)))
     (memory-object-ref-parent-ref ref))
   (:method (type ref (key (eql $_key)))

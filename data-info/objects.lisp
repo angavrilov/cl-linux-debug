@@ -98,9 +98,10 @@
 (defmethod get-vtable-class-name ((context object-memory-mirror) address)
   (let* ((vtbl (make-memory-ref context address $glibc:vtable))
          (tptr $vtbl.type_info)
-         (tinfo (get-address-info-range context tptr)))
-    (when (and tptr
-               (is-code? (get-address-info-range context $vtbl.methods[0]))
+         (tinfo (get-address-info-range context tptr))
+         (vinfo (get-address-info-range context $vtbl.methods[0])))
+    (when (and tptr tinfo vinfo
+               (is-code? vinfo)
                (section-of tinfo)
                (not (is-code? tinfo)))
       $tptr.class_name)))
