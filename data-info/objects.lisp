@@ -5,6 +5,7 @@
 (def (class* e) object-memory-mirror (memory-mirror type-context)
   ((malloc-chunks (make-malloc-chunk-map) :reader t)
    (malloc-chunk-reftbl nil :accessor t)
+   (find-by-id-cache (make-hash-table :test #'equal) :reader t)
    (vtable-names (make-hash-table :test #'eql) :reader t)))
 
 (def (class* e) malloc-chunk-range (address-chunk)
@@ -19,11 +20,19 @@
 
 (defmethod refresh-memory-mirror :after ((mirror object-memory-mirror))
   (check-refresh-context mirror)
+  (clrhash (find-by-id-cache-of mirror))
   (with-simple-restart (continue "Ignore malloc chunks")
     (collect-malloc-objects mirror (malloc-chunks-of mirror))
     (with-simple-restart (continue "Skip cross-referencing chunks")
       (setf (malloc-chunk-reftbl-of mirror)
             (collect-chunk-references mirror (malloc-chunks-of mirror))))))
+
+(defmethod get-id-search-cache ((context object-memory-mirror) address type field)
+  (let ((key (list address type field)))
+    (aif (gethash key (find-by-id-cache-of context))
+         (values it t)
+         (values (setf (gethash key (find-by-id-cache-of context))
+                       (make-hash-table :test #'equal)) nil))))
 
 (defgeneric get-address-object-info (mirror address)
   (:method (mirror (address null)) nil)

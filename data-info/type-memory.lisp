@@ -63,6 +63,10 @@
       (call-next-method))
     type-tree))
 
+(defgeneric get-id-search-cache (context address type field)
+  (:method (context address type field)
+    (values (make-hash-table :test #'equal) nil)))
+
 (defgeneric resolve-class-in-context (context address)
   (:method (context address) nil))
 

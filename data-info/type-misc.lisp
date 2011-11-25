@@ -202,6 +202,21 @@
 (defmethod format-ref-value-by-type ((type array-item) ref value)
   (format nil "[~A]" $ref.count))
 
+(defun find-by-id (array id-field key)
+  (when array
+    (multiple-value-bind (cache found)
+        (get-id-search-cache (get-context-of-memory array)
+                             (memory-object-ref-address array)
+                             (memory-object-ref-type array)
+                             id-field)
+      (unless found
+        (dolist (item $array.*)
+          (let ((kv (if (functionp id-field)
+                        (funcall id-field item)
+                        ($ item id-field))))
+            (setf (gethash kv cache) item))))
+      (gethash key cache))))
+
 ;; Static array
 
 (defmethod compute-effective-size (context (obj static-array))
