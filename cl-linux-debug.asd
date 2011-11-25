@@ -1,6 +1,9 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
+#-quicklisp
 (load-system :cffi-grovel)
+#+quicklisp
+(ql:quickload :cffi-grovel)
 
 (defsystem :cl-linux-debug
   :author ("Alexander Gavrilov <angavrilov@gmail.com>")

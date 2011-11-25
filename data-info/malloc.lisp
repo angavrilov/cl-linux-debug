@@ -193,6 +193,9 @@
   (extent-list nil)
   (extent-tbl (make-array (/ (ash 1 32) +max-malloc-heap-size+) :initial-element nil)))
 
+(defun malloc-chunk-count (chunk-map)
+  (length (malloc-chunk-map-range-vector chunk-map)))
+
 (defun collect-malloc-objects (memory &optional (chunk-map (make-malloc-chunk-map)))
   (let ((vector (malloc-chunk-map-range-vector chunk-map))
         (ranges nil)
@@ -228,7 +231,8 @@
          (with-binsearch-in-array (,csearch (malloc-chunk-map-range-vector ,chunk-map)
                                             uint32 #'< :array-var ,range-vec)
            (flet ((,name (addr)
-                    (declare (type uint32 addr))
+                    (declare (type uint32 addr)
+                             (optimize (speed 3) (safety 0)))
                     (let ((rvi nil) (rvo 0))
                       (declare (type (or fixnum null) rvi)
                                (type fixnum rvo))
@@ -237,6 +241,7 @@
                           (let ((start (aref ,range-vec it)))
                             (when (not (logtest start 1))
                               (let ((offset (sb-ext:truly-the uint32 (- addr start))))
+                                (declare (optimize (speed 1)))
                                 (when (>= offset 4)
                                   (setf rvi it rvo (the fixnum (- offset 4)))))))))
                       (values rvi rvo))))
@@ -247,9 +252,9 @@
 (defun lookup-malloc-object (chunk-map address)
   (with-malloc-chunk-lookup (lookup chunk-map :range-vec vec)
     (awhen (lookup address)
-      (let ((min (aref vec it))
+      (let ((min (+ (aref vec it) 4))
             (max (logand (aref vec (1+ it)) (lognot 1))))
-        (values min max (<= address max))))))
+        (values it min max (<= address max))))))
 
 (defmacro do-malloc-chunks ((bytes offset limit &optional (min-addr (gensym)) (max-addr (gensym)))
                             (memory chunk-map &key int-reader (index (gensym))) &body code)
@@ -310,3 +315,38 @@
                       (multiple-value-bind (idx tgt-offset) (lookup addr)
                         (when idx
                           (funcall callback (- pos offset) idx tgt-offset))))))))))))
+
+(defun push-reference (reftbl idx refobj)
+  (declare (optimize (speed 3)))
+  (check-type refobj atom)
+  (let ((cv (svref reftbl idx)))
+    (if (consp cv)
+        (unless (eq (car cv) refobj)
+          (setf (svref reftbl idx) (cons refobj cv)))
+        (unless (eq cv refobj)
+          (setf (svref reftbl idx)
+                (if (null cv) refobj (list refobj cv)))))))
+
+(defun get-references (reftbl idx)
+  (ensure-list (svref reftbl idx)))
+
+(defun collect-chunk-references (mirror chunk-map)
+  (let ((reftbl (make-array (malloc-chunk-count chunk-map) :initial-element nil)))
+    (flet ((push-if-ok (src dst d-off)
+             (case d-off
+               ((#xC #x0) (push-reference reftbl dst src)))))
+      (declare (inline push-if-ok))
+      (enum-malloc-chunk-pointers mirror chunk-map
+                                  (lambda (src s-off dst d-off)
+                                    (declare (ignore s-off) (type fixnum d-off))
+                                    (push-if-ok src dst d-off)))
+      (dolist (global *known-globals*)
+        (let ((name (car global)))
+          (with-simple-restart (continue "Skip indexing ~A" (get-$-field-name name))
+            (let ((area (get-memory-global mirror name)))
+              (enum-malloc-area-pointers mirror chunk-map
+                                         (start-address-of area) (length-of area)
+                                         (lambda (s-off dst d-off)
+                                           (declare (ignore s-off) (type fixnum d-off))
+                                           (push-if-ok area dst d-off)))))))
+      reftbl)))

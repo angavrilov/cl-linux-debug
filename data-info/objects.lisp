@@ -4,10 +4,12 @@
 
 (def (class* e) object-memory-mirror (memory-mirror type-context)
   ((malloc-chunks (make-malloc-chunk-map) :reader t)
+   (malloc-chunk-reftbl nil :accessor t)
    (vtable-names (make-hash-table :test #'eql) :reader t)))
 
 (def (class* e) malloc-chunk-range (address-chunk)
-  ())
+  ((chunk-id :reader t)
+   (references :reader t)))
 
 (def (class* ea) memory-object-info ()
   ((malloc-chunk-range nil :accessor t)
@@ -18,22 +20,28 @@
 (defmethod refresh-memory-mirror :after ((mirror object-memory-mirror))
   (check-refresh-context mirror)
   (with-simple-restart (continue "Ignore malloc chunks")
-    (collect-malloc-objects mirror (malloc-chunks-of mirror))))
+    (collect-malloc-objects mirror (malloc-chunks-of mirror))
+    (with-simple-restart (continue "Skip cross-referencing chunks")
+      (setf (malloc-chunk-reftbl-of mirror)
+            (collect-chunk-references mirror (malloc-chunks-of mirror))))))
 
 (defgeneric get-address-object-info (mirror address)
   (:method (mirror (address null)) nil)
   (:method (mirror (address memory-object-ref))
     (get-address-object-info mirror (start-address-of address)))
   (:method ((mirror object-memory-mirror) (address integer))
-    (bind (((:values malloc-min malloc-max malloc-ok?)
+    (bind (((:values malloc-id malloc-min malloc-max malloc-ok?)
             (lookup-malloc-object (malloc-chunks-of mirror) address))
            (section (find-section-by-address (executable-of mirror) address))
            (region (find-region-by-address (executable-of mirror) address)))
       (make-instance 'memory-object-info
                      :malloc-chunk-range
-                     (if malloc-ok?
-                         (make-instance 'malloc-chunk-range
-                                        :start-address malloc-min :length (- malloc-max malloc-min)))
+                     (when malloc-ok?
+                       (make-instance 'malloc-chunk-range
+                                      :chunk-id malloc-id
+                                      :start-address malloc-min :length (- malloc-max malloc-min)
+                                      :references
+                                      (get-references (malloc-chunk-reftbl-of mirror) malloc-id)))
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))
@@ -46,11 +54,12 @@
 
 (defmethod describe-address-in-context append ((it malloc-chunk-range) addr)
   (list (let ((s (start-address-of it)))
-          (format nil "heap ~A~@[~A~] (~A bytes)"
+          (format nil "heap ~A~@[~A~] (~A bytes~@[, ~A refs~])"
                   (format-hex-offset s)
                   (when (/= addr s)
                     (format-hex-offset (- addr s)  :force-sign?  t))
-                  (format-hex-offset (length-of it))))))
+                  (format-hex-offset (length-of it))
+                  (aif (references-of it) (length it))))))
 
 (defmethod describe-address-in-context append ((it loaded-region) addr)
   (list (format nil "~A~@[~A~]"
