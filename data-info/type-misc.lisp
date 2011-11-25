@@ -47,25 +47,31 @@
   (:method-combination append :most-specific-first)
   (:method append (type ref value)
     (describe-ref-child (memory-object-ref-parent-ref ref) ref))
-  (:method append ((type code-helper-mixin) ref value)
-    (flatten (ensure-list (call-helper-if-found type $describe
-                                                value ref :context-ref ref))))
+  (:method :around ((type code-helper-mixin) ref value)
+    (append
+     (flatten (ensure-list (call-helper-if-found type $describe
+                                                 value ref :context-ref ref)))
+     (call-next-method)))
   (:method append ((type primitive-field) ref value)
     (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
       (ensure-list (describe-value it))))
   (:method append ((type struct-compound-item) ref value)
     (awhen (aand (key-field-of type) (@ ref it))
-      (list (format nil "~A=~A"
-                    (get-$-field-name (key-field-of type))
-                    (format-ref-value it ($ it t))))))
-  (:method append ((type class-type) ref value)
+      (let ((fname (get-$-field-name (key-field-of type)))
+            (kfval ($ it t)))
+        (list*
+         (format nil "~A=~A" fname (format-ref-value it kfval))
+         (awhen (and (typep kfval 'memory-object-ref)
+                     (describe-ref-value kfval kfval))
+           it)))))
+  (:method append ((type inheriting-type) ref value)
     (flatten (list
-              (when (eq ref value)
-                (list (get-$-field-name (type-name-of type))))
               (let* ((ff (first (effective-fields-of type))))
                 (unless (name-of ff)
                   (let ((rr ($ value (or (name-of ff) (effective-tag-of ff)))))
-                    (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))))))))
+                    (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))))
+              (when (eq ref value)
+                (list (get-$-field-name (type-name-of type))))))))
 
 (defun describe-ref-value (ref value)
   (describe-ref-value-by-type (memory-object-ref-type ref) ref value))

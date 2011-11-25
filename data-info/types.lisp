@@ -130,7 +130,8 @@
 
 (def (class* eas) container-item (ref-compound-item)
   ((effective-contained-item :accessor t)
-   (effective-element-size :accessor t))
+   (effective-element-size :accessor t)
+   (key-field nil :accessor t :type $-keyword))
   (:documentation "An abstract type that points to a set of elements."))
 
 (def (class* eas) array-item (container-item code-helper-mixin)
@@ -242,9 +243,12 @@
   ()
   (:documentation "A global structure type definition."))
 
-(def (class* eas) class-type (global-type-definition struct-compound-item concrete-item)
-  ((inherits-from nil :accessor t :type $-keyword-namespace)
-   (mangled-name nil :accessor t :type string))
+(def (class* eas) inheriting-type (data-item)
+  ((inherits-from nil :accessor t :type $-keyword-namespace))
+  (:documentation "A type that can inherit."))
+
+(def (class* eas) class-type (global-type-definition struct-compound-item inheriting-type concrete-item)
+  ((mangled-name nil :accessor t :type string))
   (:documentation "A global class type definition."))
 
 (defmethod initialize-instance :after ((type class-type) &key)

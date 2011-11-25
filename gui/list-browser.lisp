@@ -39,7 +39,7 @@
                       (format-ref-value obj val))
        and vinfo = (format nil "~{~A~^; ~}" (describe-ref-value obj val))
        do (list-store-insert-with-values
-           store i i (ensure-string vfmt) (ensure-string vinfo)))))
+           store i idx (ensure-string vfmt) (ensure-string vinfo)))))
 
 (defun populate-memory-object-list (list objects)
   (setf (obj-set-of list) (coerce objects 'vector)

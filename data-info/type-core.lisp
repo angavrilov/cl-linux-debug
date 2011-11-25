@@ -161,7 +161,8 @@
           (cond ((awhen (lookup-ref-compound-target obj)
                    (make-proxy-field obj it)))
                 ((rest (fields-of obj))
-                 (make-instance 'compound :syntax-parent obj :fields (fields-of obj)))
+                 (make-instance 'compound :syntax-parent obj :fields (fields-of obj)
+                                :key-field (key-field-of obj)))
                 ((fields-of obj)
                  (first (fields-of obj)))
                 (t
