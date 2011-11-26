@@ -310,13 +310,16 @@
           (advance-to (+ min-addr addr-range) 0))
         (nreverse out-children)))))
 
+(defun layout-fields (node ref master)
+  (layout-children-in-range node (@ ref '*) (or master node)
+                            (start-address-of ref) (length-of ref)))
+
 (defgeneric layout-ref-tree-node/type (type parent ref master)
   (:method ((type data-item) parent ref master)
     (aprog1 (make-instance 'real-memory-object-node
                            :parent parent
                            :ref ref :master-node master)
-      (layout-children-in-range it (@ ref '*) (or master it)
-                                (start-address-of ref) (length-of ref))))
+      (layout-fields it ref master)))
   (:method ((type struct-compound-item) parent ref master)
     (aprog1
         (make-instance 'struct-object-node
@@ -331,9 +334,10 @@
       (when (ref-value-of it)
         (make-lazy it 'pointer-object-node))))
   (:method ((type array-item) parent ref master)
-    (make-instance 'array-object-node
-                   :parent parent
-                   :ref ref :master-node master))
+    (aprog1 (make-instance 'array-object-node
+                           :parent parent
+                           :ref ref :master-node master)
+      (layout-fields it ref master)))
   (:method ((type padding) parent ref master)
     (make-instance 'padding-object-node
                    :parent parent
