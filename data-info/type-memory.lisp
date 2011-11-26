@@ -79,7 +79,26 @@
     (get-context-of-memory (memory-object-ref-memory ref))))
 
 (defgeneric resolve-extent-for-addr (extent address))
-(defgeneric get-bytes-for-addr (extent address size))
+
+(defgeneric get-bytes-for-addr (extent address size)
+  (:method ((ref memory-object-ref) address size)
+    (get-bytes-for-addr (memory-object-ref-memory ref)
+                        (+ (memory-object-ref-address ref) address)
+                        size)))
+
+(defmacro with-bytes-for-ref ((vector-var offset-var ref size &optional (offset 0)) &body code)
+  `(multiple-value-bind (,vector-var ,offset-var)
+       (get-bytes-for-addr ,ref ,offset ,size)
+     (when ,vector-var
+       ,@code)))
+
+(defun get-memory-bytes (memory addr size)
+  (with-bytes-for-ref (bytes offset memory size addr)
+    (parse-bytes bytes offset size)))
+
+(defun get-memory-integer (memory addr size &key signed?)
+  (with-bytes-for-ref (bytes offset memory size addr)
+    (parse-int bytes offset size :signed? signed?)))
 
 (defun make-memory-ref (memory address type &key parent key local?)
   (let* ((extent (if local? memory (resolve-extent-for-addr memory address)))
@@ -110,12 +129,6 @@
   (get-bytes-for-addr (memory-object-ref-memory ref)
                       (memory-object-ref-address ref)
                       size))
-
-(defmacro with-bytes-for-ref ((vector offset ref size) &body code)
-  `(multiple-value-bind (,vector ,offset)
-       (get-bytes-for-ref ,ref ,size)
-     (when ,vector
-       ,@code)))
 
 (defparameter *safe-dereference* nil)
 

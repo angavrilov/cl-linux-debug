@@ -54,18 +54,6 @@
     (when (<= 0 offset (- (length-of ext) size))
       (values (data-bytes-of ext) (+ offset bias) (- start bias)))))
 
-(defun get-memory-bytes (memory addr size)
-  (multiple-value-bind (bytes offset)
-      (get-bytes-for-addr memory addr size)
-    (when bytes
-      (parse-bytes bytes offset size))))
-
-(defun get-memory-integer (memory addr size &key signed?)
-  (multiple-value-bind (bytes offset)
-      (get-bytes-for-addr memory addr size)
-    (when bytes
-      (parse-int bytes offset size :signed? signed?))))
-
 ;; Mirror synchronization
 
 (defun delete-memory-extent (mirror extent)
