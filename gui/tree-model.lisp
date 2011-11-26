@@ -18,15 +18,18 @@
 
 (defmethod separator? ((node null)) nil)
 
-(defmethod initialize-instance :after ((node object-node) &key parent add-child-index)
+(defmethod initialize-instance :after ((node object-node) &key parent)
   (when parent
     (setf (slot-value node 'view) (view-of parent)
           (slot-value node 'parent) nil))
   (when (typep (view-of node) 'object-node)
     (setf (slot-value node 'view) (view-of (view-of node))))
-  (assert (typep (view-of node) 'object-tree-view))
-  (when parent
-    (add-child parent node add-child-index)))
+  (assert (typep (view-of node) 'object-tree-view)))
+
+(defmethod initialize-instance :around ((node object-node) &key parent add-child-index)
+  (prog1 (call-next-method)
+    (when parent
+      (add-child parent node add-child-index))))
 
 (defgeneric build-node-tree (parent node index)
   (:method ((parent object-node) (node object-node) index)
@@ -189,7 +192,8 @@
        do (destroy-node-tree old-root child))
     (slot-makunbound old-root 'store-node)
     (setf (slot-value view 'tree-root) node
-          (slot-value node 'store-node) nil)
+          (slot-value node 'store-node) nil
+          (expanded? node) t)
     (loop for child across new-children and i from 0
        do (build-added-subtree node child i))
     node))

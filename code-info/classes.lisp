@@ -5,7 +5,7 @@
 ;; Address range
 
 (def (class* e) address-chunk ()
-  ((start-address :reader t)
+  ((start-address :accessor t)
    (length :accessor t)))
 
 (def (class* e) data-chunk (address-chunk)

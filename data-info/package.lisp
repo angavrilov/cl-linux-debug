@@ -67,6 +67,7 @@
            #:make-memory-ref
            #:make-ad-hoc-memory-ref
            #:with-bytes-for-ref
+           #:with-bits-for-ref
            #:find-by-id
            #:make-memory-mirror
            #:check-refresh-context

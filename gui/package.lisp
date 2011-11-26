@@ -15,6 +15,12 @@
         :gtk :gdk :gobject)
   (:shadowing-import-from :cl-linux-debug.data-defs
                           #:alignment #:pointer)
+  (:shadowing-import-from :cl-linux-debug.code-info
+                          #:parse-int #:parse-bytes #:parse-string)
+  (:import-from :cl-linux-debug.data-info
+                #:is-$-keyword? #:get-$-field-name
+                #:layout-ad-hoc-in-context
+                #:memory-object-ref-memory)
   (:export #:browse-object-in-new-window))
 
 (in-package :cl-linux-debug.gui)

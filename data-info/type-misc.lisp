@@ -47,11 +47,10 @@
   (:method-combination append :most-specific-first)
   (:method append (type ref value)
     (describe-ref-child (memory-object-ref-parent-ref ref) ref))
-  (:method :around ((type code-helper-mixin) ref value)
-    (append
-     (flatten (ensure-list (call-helper-if-found type $describe
-                                                 value ref :context-ref ref)))
-     (call-next-method)))
+  (:method append ((type code-helper-mixin) ref value)
+    (flatten (ensure-list (call-helper-if-found type $describe
+                                                value ref :context-ref ref)))
+    )
   (:method append ((type primitive-field) ref value)
     (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
       (ensure-list (describe-value it))))
@@ -102,17 +101,28 @@
 
 ;; Bit
 
+(defmacro with-bits-for-ref ((vector offset byte-size bit-shift bit-size)
+                             (ref &optional size)
+                             &body code)
+  (with-unique-names (base shift size-var)
+    (once-only (ref)
+      `(bind (((:values ,base ,shift) (floor (memory-object-ref-address ,ref) 1))
+              (,size-var ,(or size `(length-of ,ref)))
+              (,byte-size (ceiling (+ ,shift ,size-var)))
+              ((:values ,vector ,offset)
+               (get-bytes-for-addr (memory-object-ref-memory ,ref) ,base ,byte-size))
+              (,bit-shift (* ,shift 8))
+              (,bit-size (* ,size-var 8)))
+         (when ,vector
+           ,@code)))))
+
 (defmethod %memory-ref-$ ((type flag-bit) ref (key (eql t)))
-  (bind (((:values base shift) (floor (memory-object-ref-address ref) 1))
-         (size (effective-size-of type))
-         (byte-size (ceiling (+ shift size)))
-         ((:values vector offset)
-          (get-bytes-for-addr (memory-object-ref-memory ref) base byte-size)))
-    (when vector
-      (let ((iv (ldb (byte (* 8 size) (* 8 shift))
-                     (parse-int vector offset byte-size))))
-        (if (or (/= iv 0) (/= size 1/8))
-            iv nil)))))
+  (with-bits-for-ref (vector offset byte-size bit-shift bit-size)
+      (ref (effective-size-of type))
+    (let ((iv (ldb (byte bit-size bit-shift)
+                   (parse-int vector offset byte-size))))
+      (if (or (/= iv 0) (/= bit-size 1))
+          iv nil))))
 
 (defmethod compute-effective-alignment (context (obj flag-bit)) 1/8)
 

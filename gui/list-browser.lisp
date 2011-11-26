@@ -21,10 +21,10 @@
         (setf idx (aref (obj-subset-of list) idx)))
       (when (and idx (< -1 idx (length (obj-set-of list))))
         (let* ((vref (aref (obj-value-set-of list) idx)))
-          (layout-memory-object-tree (object-tree-of list)
-                                     (if (typep vref 'memory-object-ref)
-                                         vref
-                                         (aref (obj-set-of list) idx))))))))
+          (populate-memory-object-tree (object-tree-of list)
+                                       (if (typep vref 'memory-object-ref)
+                                           vref
+                                           (aref (obj-set-of list) idx))))))))
 
 (defun populate-store (list store subset)
   (let ((obj-set (obj-set-of list))
@@ -79,7 +79,7 @@
                                 :vscrollbar-policy :automatic))
          (model (make-instance 'list-store :column-types '("gint" "gchararray" "gchararray")))
          (model2 (make-instance 'list-store :column-types '("gint" "gchararray" "gchararray")))
-         (tree (make-instance 'memory-object-tree
+         (tree (make-instance 'memory-object-browser
                               :memory (memory-of list)
                               :width-request (round  (* width-request 0.6))
                               :height-request height-request))
@@ -144,7 +144,7 @@
            (tree (if (listp ref)
                      (aprog1 (make-instance 'memory-object-list :memory memory)
                        (populate-memory-object-list it ref))
-                     (aprog1 (make-instance 'memory-object-tree :memory memory)
-                       (layout-memory-object-tree it ref)))))
+                     (aprog1 (make-instance 'memory-object-browser :memory memory)
+                       (populate-memory-object-tree it ref)))))
       (container-add window (widget-of tree))
       (widget-show window))))
