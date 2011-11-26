@@ -111,30 +111,29 @@
                      :col-type "" :col-value "" :col-info "" :col-comment ""))
 
 (defun make-lazy (node class &rest args)
-  (when class
-    (apply #'change-class node class args))
-  (add-child node (make-instance 'lazy-placeholder-node :view (view-of node)) 0))
+  (apply #'change-class node class :lazy-placeholder-class 'lazy-placeholder-node args))
 
 ;; Pointer
 
 (def (class* e) pointer-object-node (memory-object-node lazy-expanding-node)
-  ())
+  ()
+  (:default-initargs :lazy-placeholder-class 'lazy-placeholder-node))
 
 (defmethod on-lazy-expand-node ((node pointer-object-node))
-  (bind ((child (elt (children-of node) 0))
+  (bind ((child (lazy-placeholder-of node))
          (ref (ref-value-of node))
          ((:values info r-start r-len)
           (get-address-info-range (memory-of (view-of node)) (start-address-of ref))))
     (declare (ignore info))
     (setf (col-name-of child) "<target>"
           (slot-value child 'ref) ref)
-    (layout-children-in-range node (list ref) child r-start r-len)
-    (remove-child node 0)))
+    (layout-children-in-range node (list ref) child r-start r-len)))
 
 ;; Array
 
 (def (class* e) array-subgroup-node (lazy-placeholder-node lazy-expanding-node)
-  ((items nil :reader t)))
+  ((items nil :reader t))
+  (:default-initargs :lazy-placeholder-class 'lazy-placeholder-node))
 
 (defun populate-array-subgroup (parent items master)
   (dolist (item items)
@@ -144,23 +143,21 @@
       (add-child parent child))))
 
 (defmethod on-lazy-expand-node ((node array-subgroup-node))
-  (populate-array-subgroup node (items-of node) (or (master-node-of node) node))
-  (remove-child node 0))
+  (populate-array-subgroup node (items-of node) (or (master-node-of node) node)))
 
 (defun make-array-subgroup (base items parent master)
-  (aprog1
-      (make-instance 'array-subgroup-node :view (view-of parent)
-                     :master-node master :items items
-                     :ref (first items) :ref-value nil
-                     :col-name (format nil "~A..~A"
-                                       base (+ base (length items) -1)))
-    (make-lazy it nil)))
+  (make-instance 'array-subgroup-node :view (view-of parent)
+                 :master-node master :items items
+                 :ref (first items) :ref-value nil
+                 :col-name (format nil "~A..~A"
+                                   base (+ base (length items) -1))))
 
 (def (class* e) array-object-node (memory-object-node lazy-expanding-node)
-  ())
+  ()
+  (:default-initargs :lazy-placeholder-class 'lazy-placeholder-node))
 
 (defun add-array-contents (node items master)
-  (let* ((placeholder (elt (children-of node) 0))
+  (let* ((placeholder (lazy-placeholder-of node))
          (parent (if (> (length (children-of node)) 1)
                      (aprog1 (make-instance 'lazy-placeholder-node
                                             :view (view-of node) :col-name "<items>"
@@ -178,8 +175,7 @@
            and rest = items then (subseq rest cnt)
            while (< base num-items)
            do (add-child parent
-                         (make-array-subgroup base (subseq rest 0 cnt) node master))))
-    (remove-child node 0)))
+                         (make-array-subgroup base (subseq rest 0 cnt) node master))))))
 
 (defmethod on-lazy-expand-node ((node array-object-node))
   (let* ((items ($ (ref-of node) '@))
@@ -192,7 +188,8 @@
 
 (def (class* e) padding-node (memory-object-node lazy-expanding-node)
   ()
-  (:default-initargs :col-type "" :col-value "" :col-comment ""))
+  (:default-initargs :col-type "" :col-value "" :col-comment ""
+                     :lazy-placeholder-class 'lazy-placeholder-node))
 
 (defmethod col-row-color-of ((node padding-node)) "darkgray")
 
@@ -219,13 +216,13 @@
 ;; Struct
 
 (def (class* e) struct-object-node (memory-object-node lazy-expanding-node)
-  ())
+  ()
+  (:default-initargs :lazy-placeholder-class 'lazy-placeholder-node))
 
 (defmethod on-lazy-expand-node ((node struct-object-node))
   (let ((ref (ref-of node)))
     (layout-children-in-range node (@ ref '*) (master-node-of node)
-                              (start-address-of ref) (length-of ref))
-    (remove-child node 0)))
+                              (start-address-of ref) (length-of ref))))
 
 ;; Recursive walk
 
@@ -282,10 +279,9 @@
       node))
   (:method ((type struct-compound-item) ref master)
     (if (not (expand-by-default? type ref master))
-        (aprog1 (make-instance 'struct-object-node
-                               :view (view-of master)
-                               :ref ref :master-node master)
-          (make-lazy it nil))
+        (make-instance 'struct-object-node
+                       :view (view-of master)
+                       :ref ref :master-node master)
         (call-next-method)))
   (:method ((type pointer) ref master)
     (aprog1 (call-next-method)
@@ -295,10 +291,9 @@
     (aprog1 (call-next-method)
       (make-lazy it 'array-object-node)))
   (:method ((type padding) ref master)
-    (aprog1 (make-instance 'padding-node
-                           :view (view-of master)
-                           :ref ref :master-node master)
-      (make-lazy it nil))))
+    (make-instance 'padding-node
+                   :view (view-of master)
+                   :ref ref :master-node master)))
 
 (defun layout-ref-tree-node (ref master)
   (layout-ref-tree-node/type (memory-object-ref-type ref) ref master))

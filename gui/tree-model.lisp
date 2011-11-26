@@ -18,14 +18,15 @@
 
 (defmethod separator? ((node null)) nil)
 
-(defmethod initialize-instance :after ((node object-node) &key parent)
+(defmethod initialize-instance :after ((node object-node) &key parent add-child-index)
   (when parent
     (setf (slot-value node 'view) (view-of parent)
-          (slot-value node 'parent) nil)
-    (add-child parent node))
+          (slot-value node 'parent) nil))
   (when (typep (view-of node) 'object-node)
     (setf (slot-value node 'view) (view-of (view-of node))))
-  (assert (view-of node)))
+  (assert (typep (view-of node) 'object-tree-view))
+  (when parent
+    (add-child parent node add-child-index)))
 
 (defgeneric build-node-tree (parent node index)
   (:method ((parent object-node) (node object-node) index)
@@ -40,10 +41,11 @@
 
 (defun build-added-subtree (node child index &key first?)
   (build-node-tree node child index)
-  (when (and first? (expanded? node))
-    (setf (expanded? node) t))
-  (when (expanded? child)
-    (setf (expanded? child) t)))
+  (when (expanded? node)
+    (if first?
+        (sync-expanded-state node)
+        (when (expanded? child)
+          (sync-expanded-state child)))))
 
 (defgeneric add-child (node child &optional index)
   (:method ((node object-node) (child object-node) &optional index)
@@ -81,11 +83,13 @@
          do (push (child-index-of parent cur) path))
       path)))
 
-(defgeneric destroy-node-tree (parent node index)
-  (:method ((parent object-node) (node object-node) index)
-    (loop for child across (children-of node) and i from 0
-       do (destroy-node-tree node child i))
-    (slot-makunbound node 'store-node)))
+(defgeneric destroy-node-tree (parent node)
+  (:method ((parent object-node) (node object-node))
+    (loop for child across (children-of node)
+       do (destroy-node-tree node child))
+    (let ((sn (store-node-of node)))
+      (slot-makunbound node 'store-node)
+      (tree-store-remove (tree-model-of (view-of node)) sn))))
 
 (defgeneric remove-child (node child)
   (:method ((node object-node) child)
@@ -94,9 +98,7 @@
     (let ((child-obj (aref (children-of node) child)))
       (assert (eq (parent-of child-obj) node))
       (when (slot-boundp child-obj 'store-node)
-        (let ((sn (store-node-of child-obj)))
-          (destroy-node-tree node child-obj child)
-          (tree-store-remove (tree-model-of (view-of node)) sn)))
+        (destroy-node-tree node child-obj))
       (setf (slot-value child-obj 'parent) nil)
       (gtk::array-remove-at (children-of node) child))))
 
@@ -110,14 +112,43 @@
   (:method ((node object-node) column) nil))
 
 (defgeneric on-node-expanded (node)
-  (:method :before ((node object-node))
-    (setf (slot-value node 'expanded?) t))
+  (:method :around ((node object-node))
+    (unless (expanded? node)
+      (setf (slot-value node 'expanded?) t)
+      (sync-expanded-state node)
+      (call-next-method)))
   (:method ((node object-node)) nil))
 
 (defgeneric on-node-collapsed (node)
-  (:method :before ((node object-node))
-    (setf (slot-value node 'expanded?) nil))
+  (:method :around ((node object-node))
+    (when (expanded? node)
+      (setf (slot-value node 'expanded?) nil)
+      (call-next-method)))
   (:method ((node object-node)) nil))
+
+(defgeneric sync-expanded-state (node)
+  (:method ((node object-node))
+    (when (and (slot-boundp node 'store-node)
+               (> (length (children-of node)) 0))
+      (let* ((view (view-of node))
+             (indices (find-child-path node))
+             (path (make-instance 'tree-path)))
+        (setf (tree-path-indices path) indices)
+        (if (expanded? node)
+            (progn
+              (tree-view-expand-row (tree-view-of view) path nil)
+              (loop for child across (children-of node)
+                 do (when (expanded? child)
+                      (sync-expanded-state child))))
+            (tree-view-collapse-row (tree-view-of view) path))))))
+
+(defgeneric (setf expanded?) (value node)
+  (:method :around (value (node object-node))
+    (unless (eq (not value) (not (expanded? node)))
+      (call-next-method)))
+  (:method (value (node object-node))
+    (setf (slot-value node 'expanded?) value)
+    (sync-expanded-state node)))
 
 (defun node-expand-callback (tree callback)
   (lambda (tv iter path)
@@ -154,7 +185,8 @@
         (old-root (tree-root-of view)))
     (assert (not (eq node old-root)))
     (assert (eq view (view-of node)))
-    (remove-all-children old-root)
+    (loop for child across (children-of old-root)
+       do (destroy-node-tree old-root child))
     (slot-makunbound old-root 'store-node)
     (setf (slot-value view 'tree-root) node
           (slot-value node 'store-node) nil)
@@ -162,35 +194,45 @@
        do (build-added-subtree node child i))
     node))
 
-(defgeneric (setf expanded?) (value node)
-  (:method (value (node object-node))
-    (setf (slot-value node 'expanded?) value)
-    (when (and (slot-boundp node 'store-node)
-               (> (length (children-of node)) 0))
-      (let* ((view (view-of node))
-             (indices (find-child-path node))
-             (path (make-instance 'tree-path)))
-        (setf (tree-path-indices path) indices)
-        (if value
-            (progn
-              (tree-view-expand-row (tree-view-of view) path nil)
-              (loop for child across (children-of node)
-                 do (when (expanded? child)
-                      (setf (expanded? child) t))))
-            (tree-view-collapse-row (tree-view-of view) path))))))
-
 (def (class* e) lazy-expanding-node (object-node)
-  ((lazy-expanded? nil :reader t)))
+  ((lazy-expanded? nil :reader t)
+   (lazy-placeholder nil :reader t)))
 
-(defgeneric on-lazy-expand-node (node))
+(defun create-lazy-placeholder (node lazy-placeholder-class)
+  (with-slots (lazy-placeholder) node
+    (unless lazy-placeholder
+      (setf lazy-placeholder
+            (make-instance lazy-placeholder-class :parent node :add-child-index 0)))))
+
+(defmethod initialize-instance :after ((node lazy-expanding-node) &key lazy-placeholder-class)
+  (create-lazy-placeholder node lazy-placeholder-class))
+
+(defmethod update-instance-for-different-class :after (old (node lazy-expanding-node)
+                                                &key lazy-placeholder-class)
+  (unless (lazy-expanded? node)
+    (create-lazy-placeholder node lazy-placeholder-class)))
+
+(defgeneric on-lazy-expand-node (node)
+  (:method :before ((node lazy-expanding-node))
+    (setf (slot-value node 'lazy-expanded?) t))
+  (:method :after ((node lazy-expanding-node))
+    (with-slots (lazy-placeholder) node
+      (when (and lazy-placeholder
+                 (eq (parent-of lazy-placeholder) node))
+        (remove-child node lazy-placeholder))
+      (setf lazy-placeholder nil))))
 
 (defmethod on-node-expanded :before ((node lazy-expanding-node))
   (unless (lazy-expanded? node)
     (setf (slot-value node 'lazy-expanded?) t)
     (within-main-loop
       (with-simple-restart (continue "Cancel expanding node")
-        (on-lazy-expand-node node))
-      (setf (expanded? node) t))))
+        (on-lazy-expand-node node)
+        (sync-expanded-state node)))))
+
+(defmethod (setf expanded?) :before (value (node lazy-expanding-node))
+  (when (and value (not (lazy-expanded? node)))
+    (on-lazy-expand-node node)))
 
 (defun ensure-string (data)
   (if (stringp data) data (format nil "~S" data)))
