@@ -60,7 +60,9 @@
            #:address= #:address-
            #:format-field-seq
            #:format-ref-value
+           #:comment-string-of
            #:describe-ref-value
+           #:get-ref-links
            #:resolve-extent-for-addr
            #:get-bytes-for-addr
            #:get-context-of-memory

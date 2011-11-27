@@ -29,31 +29,55 @@
 (defun format-ref-value (ref value)
   (format-ref-value-by-type (memory-object-ref-type ref) ref value))
 
+(defgeneric get-ref-child-links-by-type (type ref child key)
+  (:method-combination append :most-specific-first)
+  (:method append (type ref value key) nil)
+  (:method append ((type array-item) ref value (key integer))
+    (awhen (call-helper-if-found type $index-refers-to key ref :context-ref ref)
+      (list (list $index-refers-to it)))))
+
+(defun get-ref-child-links (ref child)
+  (when (typep ref 'memory-object-ref)
+    (get-ref-child-links-by-type (memory-object-ref-type ref) ref child
+                                 (memory-object-ref-parent-key child))))
+
+(defgeneric get-ref-links-by-type (type ref value)
+  (:method-combination append :most-specific-first)
+  (:method append (type ref value)
+    (get-ref-child-links (memory-object-ref-parent-ref ref) ref))
+  (:method append ((type primitive-field) ref value)
+    (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
+      (list (list $refers-to it)))))
+
+(defun get-ref-links (ref value)
+  (get-ref-links-by-type (memory-object-ref-type ref) ref value))
+
 (defgeneric describe-ref-child-by-type (type ref child key)
   (:method-combination append :most-specific-first)
   (:method append (type ref value key) nil)
   (:method append ((type array-item) ref value (key integer))
-    (append
-     (call-helper-if-found type $describe-item value ref :context-ref ref)
-     (awhen (call-helper-if-found type $index-refers-to key ref :context-ref ref)
-       (ensure-list (describe-value it))))))
+    (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref))))
 
 (defun describe-ref-child (ref child)
   (when (typep ref 'memory-object-ref)
     (describe-ref-child-by-type (memory-object-ref-type ref) ref child
                                 (memory-object-ref-parent-key child))))
 
+(defun comment-string-of (node)
+  (atypecase (comment-of node)
+    (comment (xml::content it))
+    (t it)))
+
 (defgeneric describe-ref-value-by-type (type ref value)
   (:method-combination append :most-specific-first)
   (:method append (type ref value)
-    (describe-ref-child (memory-object-ref-parent-ref ref) ref))
+    (append
+     (describe-ref-child (memory-object-ref-parent-ref ref) ref)
+     (loop for (nil v) in (get-ref-links ref value)
+        append (ensure-list (describe-value v)))))
   (:method append ((type code-helper-mixin) ref value)
     (flatten (ensure-list (call-helper-if-found type $describe
-                                                value ref :context-ref ref)))
-    )
-  (:method append ((type primitive-field) ref value)
-    (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
-      (ensure-list (describe-value it))))
+                                                value ref :context-ref ref))))
   (:method append ((type struct-compound-item) ref value)
     (awhen (aand (key-field-of type) (@ ref it))
       (let ((fname (get-$-field-name (key-field-of type)))
@@ -217,6 +241,10 @@
 
 (defmethod format-ref-value-by-type ((type array-item) ref value)
   (format nil "[~A]" $ref.count))
+
+(defmethod describe-ref-value-by-type append ((type array-item) ref value)
+  (awhen (comment-string-of type)
+    (list it)))
 
 (defun find-by-id (array id-field key)
   (when array

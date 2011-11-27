@@ -64,8 +64,7 @@
                (val-set (obj-value-set-of list))
                (items (loop for i from 0 below (length obj-set)
                          for val = (aref val-set i) and obj = (aref obj-set i)
-                         when (ignore-errors
-                                (call-helper helper val obj :context-ref obj))
+                         when (call-helper helper val obj :context-ref obj)
                          collect i))
                (subset (coerce items 'vector)))
           (populate-store list store subset)
@@ -81,7 +80,7 @@
          (model2 (make-instance 'list-store :column-types '("gint" "gchararray" "gchararray")))
          (tree (make-instance 'memory-object-browser
                               :memory (memory-of list)
-                              :width-request (round  (* width-request 0.6))
+                              :width-request (round  (* width-request 0.7))
                               :height-request height-request))
          (h-box (make-instance 'h-paned))
          (v-box (make-instance 'v-box))
@@ -89,7 +88,7 @@
          (entry (make-instance 'entry))
          (button (make-instance 'button :label "Filter"))
          (selection (tree-view-selection view)))
-    (setf (widget-width-request view) (round (* width-request 0.4))
+    (setf (widget-width-request view) (round (* width-request 0.3))
           (widget-height-request view) height-request
           (tree-view-fixed-height-mode view) t
           (tree-view-model view) model
@@ -134,17 +133,16 @@
             filtered-model model2))))
 
 (defmethod initialize-instance :after ((obj memory-object-list) &key
-                                       (width-request 800)
-                                       (height-request 400))
+                                       (width-request 1000)
+                                       (height-request 600))
   (construct-memory-object-list obj width-request height-request))
 
-(defun browse-object-in-new-window (memory ref &key (title "Memory Object"))
+(defmethod browse-object-in-new-window (memory (ref list) &key title)
   (within-main-loop
-    (let* ((window (make-instance 'gtk-window :title title))
-           (tree (if (listp ref)
-                     (aprog1 (make-instance 'memory-object-list :memory memory)
-                       (populate-memory-object-list it ref))
-                     (aprog1 (make-instance 'memory-object-browser :memory memory)
-                       (populate-memory-object-tree it ref)))))
-      (container-add window (widget-of tree))
+    (let* ((window (make-instance 'gtk-window))
+           (view (make-instance 'memory-object-list :memory memory)))
+      (populate-memory-object-list view ref)
+      (setf (gtk-window-title window)
+            (format nil "List~@[: ~A~]" title))
+      (container-add window (widget-of view))
       (widget-show window))))

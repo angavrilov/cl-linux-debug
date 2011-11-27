@@ -9,6 +9,8 @@
    (info-label :reader t)
    (state-cache (make-hash-table :test #'eq) :reader t)))
 
+;; Tree initialization
+
 (defun describe-object-info (ref node info)
   (let ((start (format nil "~A at ~A:"
                        (if node (col-name-of node) "data")
@@ -32,7 +34,20 @@
     (awhen (gethash type cache)
       (apply-expand-from-tree master it))
     (setf (gethash type cache) master)
-    (set-tree-view-root view master)))
+    (set-tree-view-root view master)
+    (first nodes)))
+
+;; Callbacks
+
+(defmethod on-tree-node-activated ((view memory-object-browser) (node pointer-object-node) column)
+  (awhen (ref-value-of node)
+    (browse-object-in-new-window (memory-of view) it
+                                 :title (col-name-of node))))
+
+(defmethod on-tree-node-activated ((view memory-object-browser) (node array-object-node) column)
+  (awhen ($ (ref-of node) '@)
+    (browse-object-in-new-window (memory-of view) it
+                                 :title (col-name-of node))))
 
 ;; Widget creation
 
@@ -78,7 +93,17 @@
     #+nil(widget-show window)))
 
 (defmethod initialize-instance :after ((obj memory-object-browser) &key
-                                       (width-request 640)
-                                       (height-request 400))
+                                       (width-request 800)
+                                       (height-request 600))
   (construct-memory-object-tree obj width-request height-request))
 
+(defgeneric browse-object-in-new-window (memory ref &key title)
+  (:method (memory (ref memory-object-ref) &key title)
+    (within-main-loop
+      (let* ((window (make-instance 'gtk-window))
+             (view (make-instance 'memory-object-browser :memory memory))
+             (root (populate-memory-object-tree view ref)))
+        (setf (gtk-window-title window)
+              (format nil "Object~@[: ~A~]" (or title (if root (col-name-of root)))))
+        (container-add window (widget-of view))
+        (widget-show window)))))

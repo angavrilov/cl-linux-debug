@@ -12,4 +12,4 @@
     (describe-ref-value obj obj)))
 
 (defun get-int (obj offset size &key signed?)
-  (get-memory-integer obj offset size &key signed?))
+  (get-memory-integer obj offset size :signed? signed?))

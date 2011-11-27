@@ -14,6 +14,7 @@
   ((tree-view (make-instance 'tree-view :headers-visible t :rules-hint t) :reader t)
    (tree-model :reader t)
    (tree-root :reader t)
+   (tree-selection :reader t)
    (column-accessors :reader t)))
 
 (defmethod separator? ((node null)) nil)
@@ -111,9 +112,6 @@
        while (> len 0)
        do (remove-child node (1- len)))))
 
-(defgeneric on-node-activated (node column)
-  (:method ((node object-node) column) nil))
-
 (defgeneric on-node-expanded (node)
   (:method :around ((node object-node))
     (unless (expanded? node)
@@ -161,26 +159,50 @@
 (defun node-column-callback (tree callback)
   (lambda (tv path column)
     (declare (ignore tv))
-    (funcall callback (child-at-index (tree-root-of tree) (tree-path-indices path)) column)))
+    (funcall callback tree (child-at-index (tree-root-of tree) (tree-path-indices path)) column)))
 
 (defmethod initialize-instance :after ((tree object-tree-view) &key
                                        column-types column-accessors (root-class 'object-node))
   (let* ((types (or column-types (mapcar (constantly "gchararray") column-accessors)))
          (model (make-instance 'tree-store :column-types types))
          (root (make-instance root-class :view tree :store-node nil))
-         (view (tree-view-of tree)))
+         (view (tree-view-of tree))
+         (selection (tree-view-selection view)))
     (assert (= (length types) (length column-accessors)))
-    (with-slots (tree-model tree-root) tree
+    (with-slots (tree-model tree-root tree-selection) tree
       (setf tree-model model
-            tree-root root))
+            tree-root root
+            tree-selection selection))
     (setf (tree-view-model view) model)
     #+nil
     (setf (tree-view-row-separator-func view)
           (lambda (model iter)
             (separator? (gtk::get-node-by-iter model iter))))
-    (connect-signal view "row-activated" (node-column-callback tree #'on-node-activated))
+    (connect-signal view "row-activated" (node-column-callback tree #'on-tree-node-activated))
     (connect-signal view "row-expanded" (node-expand-callback tree #'on-node-expanded))
-    (connect-signal view "row-collapsed" (node-expand-callback tree #'on-node-collapsed))))
+    (connect-signal view "row-collapsed" (node-expand-callback tree #'on-node-collapsed))
+    (connect-signal selection "changed"
+                    (lambda (s) (let ((nodes (mapcar (lambda (x) (child-at-index (tree-root-of tree)
+                                                                       (tree-path-indices x)))
+                                                (tree-selection-selected-rows s))))
+                             (on-tree-selection-changed tree nodes))))
+    (connect-signal view "button-press-event"
+                    (lambda (view event)
+                      (let* ((x (round (event-button-x event)))
+                             (y (round (event-button-y event)))
+                             (node (awhen (tree-view-get-path-at-pos view x y)
+                                     (child-at-index (tree-root-of tree)
+                                                     (tree-path-indices it)))))
+                        (on-tree-button-press tree node event))))))
+
+(defgeneric on-tree-selection-changed (view selected-nodes)
+  (:method (view nodes) nil))
+
+(defgeneric on-tree-node-activated (view node column)
+  (:method (view node column) nil))
+
+(defgeneric on-tree-button-press (view node event)
+  (:method (view node event) nil))
 
 (defun set-tree-view-root (view node)
   (check-type node object-node)

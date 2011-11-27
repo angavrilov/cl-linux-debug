@@ -61,7 +61,8 @@
   ((ref :reader t)
    (ref-type nil :accessor t)
    (ref-value nil :accessor t)
-   (ref-info nil :accessor t)))
+   (ref-info nil :accessor t)
+   (ref-links nil :accessor t)))
 
 (defgeneric evaluate-node-ref (node)
   (:method ((node real-memory-object-node))
@@ -70,6 +71,7 @@
       (setf (ref-type-of node) (memory-object-ref-type ref)
             (ref-value-of node) value
             (ref-info-of node) (describe-ref-value ref value)
+            (ref-links-of node) (get-ref-links ref value)
             (start-address-of node) (start-address-of ref)
             (length-of node) (length-of ref)))))
 
@@ -89,12 +91,26 @@
           (t
            (col-type-of node)))))
 
+(defmethod col-type-of ((type data-item))
+  (xml:xml-tag-name-string type))
+
+(defmethod col-type-of ((type global-type-proxy))
+  (col-type-of (effective-main-type-of type)))
+
+(defmethod col-type-of ((type global-type-definition))
+  (get-$-field-name (type-name-of type)))
+
+(defmethod col-type-of ((type static-array))
+  (format nil "~A[]" (col-type-of (effective-contained-item-of type))))
+
+(defmethod col-type-of ((type pointer))
+  (format nil "~A*" (col-type-of (effective-contained-item-of type))))
+
+(defmethod col-type-of ((type stl-vector))
+  (format nil "<~A>" (col-type-of (effective-contained-item-of type))))
+
 (defmethod col-type-of ((node real-memory-object-node))
-  (let ((type (ref-type-of node)))
-    (typecase type
-      (global-type-definition
-       (get-$-field-name (type-name-of type)))
-      (t (xml:xml-tag-name-string type)))))
+  (col-type-of (ref-type-of node)))
 
 (defmethod col-value-of ((node real-memory-object-node))
   (ensure-string (format-ref-value (ref-of node) (ref-value-of node))))
