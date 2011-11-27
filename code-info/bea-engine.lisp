@@ -17,16 +17,16 @@
 (defcfun "Disasm" :int
   (dstruct :pointer))
 
-(def (structure e) x86-argument
+(def (structure ea) x86-argument
   mnemonic size access-write?)
 
-(def (structure e) (x86-argument-register (:include x86-argument))
+(def (structure ea) (x86-argument-register (:include x86-argument))
   id high?)
 
-(def (structure e) (x86-argument-constant (:include x86-argument))
+(def (structure ea) (x86-argument-constant (:include x86-argument))
   relative?)
 
-(def (structure e) (x86-argument-memory (:include x86-argument))
+(def (structure ea) (x86-argument-memory (:include x86-argument))
   base-reg index-reg scale displacement segment-reg)
 
 (defstruct x86-register
@@ -168,7 +168,7 @@
           :relative? (eq (foreign-enum-keyword 'arg-type-mode (logand arg-type #xFFFFFFF))
                          :RELATIVE_MODE)))))))
 
-(def (structure e) x86-instruction
+(def (structure ea) x86-instruction
   (offset 0)
   (address 0)
   (length 0 :type uint8)
@@ -283,7 +283,7 @@
                 nil)
               (values (bea-instruction-to-lisp disasm-obj offset (or real-eip offset) rv) rv)))))))
 
-(def (function e) disassemble-all (byte-vector &key (start 0) end (base-address 0) option-flags arch)
+(def (function e) disassemble-all (byte-vector &key (start 0) end (base-address 0) option-flags arch errorp)
   (let ((real-end (or end (length byte-vector)))
         (flags (if (integerp option-flags) option-flags
                    (apply #'disassemble-options option-flags)))
@@ -293,6 +293,9 @@
        collect (multiple-value-bind (op delta)
                    (x86-disassemble byte-vector offset
                                     :real-eip (+ bias offset) :end real-end :arch arch
+                                    :errorp errorp
                                     :option-flags flags)
-                 (incf offset delta)
+                 (if op
+                     (incf offset delta)
+                     (setf offset real-end))
                  op))))
