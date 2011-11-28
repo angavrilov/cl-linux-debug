@@ -55,6 +55,33 @@
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))
 
+(defmethod decode-chunk-reference (memory (context object-memory-mirror) ref target)
+  (decode-chunk-reference memory (malloc-chunks-of context) ref target))
+
+(defmethod decode-chunk-reference (memory (context object-memory-mirror) (ref static-chunk-ref) target)
+  (multiple-value-bind (start type refs)
+      (call-next-method)
+    (dolist (global *known-globals*)
+      (let ((gref ($ context (car global))))
+        (when (< -1 (- start (start-address-of gref)) (length-of gref))
+          (psetf start (start-address-of gref)
+                 type gref
+                 refs (mapcar (lambda (x) (- (+ x start) (start-address-of gref))) refs)))))
+    (values start type refs)))
+
+(defun get-chunk-range-refs (context info)
+  (when info
+    (loop for ref in (references-of info)
+       collect
+         (multiple-value-bind (start type refs)
+             (decode-chunk-reference context context ref (chunk-id-of info))
+           (list (if (typep type 'memory-object-ref)
+                     type
+                     (make-ad-hoc-memory-ref context start type
+                                             :parent :back-refs
+                                             :key (chunk-id-of info)))
+                 refs)))))
+
 (defmethod describe-address-in-context append ((it loaded-section) addr)
   (list (format nil "~A~A in ~A"
                 (section-name-of it)

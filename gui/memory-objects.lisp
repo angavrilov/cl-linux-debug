@@ -363,12 +363,15 @@
   (layout-ref-tree-node/type (memory-object-ref-type ref) parent ref master))
 
 (defun layout-memory-object-tree (view ref)
-  (bind ((master (make-instance 'memory-object-placeholder-node :view view
+  (bind (((:values info r-start r-len)
+          (get-address-info-range (memory-of view) (start-address-of ref)))
+         (master (make-instance 'memory-object-placeholder-node :view view
                                 :col-name "ROOT"
                                 :start-address (start-address-of ref)
-                                :length (length-of ref)))
-         ((:values info r-start r-len)
-          (get-address-info-range (memory-of view) (start-address-of ref))))
+                                :length (max (length-of ref)
+                                             (if (and r-start r-len)
+                                                 (- (+ r-start r-len) (start-address-of ref))
+                                                 4)))))
     (values master info
             (layout-children-in-range master (list ref) master r-start r-len :root? t))))
 

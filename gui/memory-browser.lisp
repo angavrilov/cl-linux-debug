@@ -25,29 +25,101 @@
         (map nil #'apply-expand-from-tree (children-of tree) (children-of old)))
       (setf (expanded? tree) nil)))
 
-(defun populate-memory-object-tree (view ref)
+(defgeneric apply-expand-to-addr (node addr leaf-enum-cb)
+  (:method :around ((node memory-object-node) addr leaf-enum-cb)
+    (if (< -1 (- addr (start-address-of node)) (length-of node))
+        (call-next-method)
+        0))
+  (:method ((node memory-object-node) addr leaf-enum-cb)
+    (setf (expanded? node) t)
+    (let* ((ccnt (loop for child across (children-of node)
+                    summing (apply-expand-to-addr child addr leaf-enum-cb))))
+      (if (= ccnt 0)
+          (progn
+            (funcall leaf-enum-cb node)
+            1)
+          ccnt)))
+  (:method ((node real-memory-object-node) addr leaf-enum-cb)
+    (if (and (typep (ref-type-of node) 'unit-item)
+             (not (typep node 'padding-object-node)))
+        (progn
+          (funcall leaf-enum-cb node)
+          1)
+        (call-next-method))))
+
+(defun populate-memory-object-tree (view ref &key expand-to-addr)
   (bind (((:values master info nodes) (layout-memory-object-tree view ref))
          (type (cl-linux-debug.data-info::memory-object-ref-tag ref))
-         (cache (state-cache-of view)))
+         (cache (state-cache-of view))
+         (select-set nil))
     (setf (label-label (info-label-of view))
           (describe-object-info ref (first nodes) info))
-    (awhen (gethash type cache)
-      (apply-expand-from-tree master it))
+    (if expand-to-addr
+        (apply-expand-to-addr master (+ (start-address-of ref) expand-to-addr)
+                              (lambda (node) (push node select-set)))
+        (awhen (gethash type cache)
+          (apply-expand-from-tree master it)))
     (setf (gethash type cache) master)
     (set-tree-view-root view master)
+    (when select-set
+      (let ((lpath nil)
+            (tview (tree-view-of view)))
+        (dolist (node select-set)
+          (setf lpath (tree-path-of-list (find-child-path node)))
+          (tree-selection-select-path (tree-selection-of view) lpath))
+        (tree-view-scroll-to-cell tview lpath (first (tree-view-columns tview)))))
     (first nodes)))
 
 ;; Callbacks
+
+(defgeneric get-node-menu-items (node)
+  (:method-combination append :most-specific-first)
+  (:method append ((node memory-object-node)) nil))
+
+(defmethod get-node-menu-items append ((node real-memory-object-node))
+  (let ((memory (memory-of (view-of node))))
+    (nconc
+     (awhen (ref-links-of node)
+       (loop for (name link) in it
+          collect (list (format nil "Browse link ~A" name)
+                        (lambda () (browse-object-in-new-window
+                               memory link
+                               :title (format nil "~A of ~A" name (col-name-of node)))))))
+     (let ((info (get-address-object-info (memory-of (view-of node)) (start-address-of node))))
+       (when (and info (malloc-chunk-range-of info))
+         (list (list "Browse referencing objects"
+                     (lambda () (browse-references-for memory node info)))))))))
 
 (defmethod on-tree-node-activated ((view memory-object-browser) (node pointer-object-node) column)
   (awhen (ref-value-of node)
     (browse-object-in-new-window (memory-of view) it
                                  :title (col-name-of node))))
 
+(defmethod get-node-menu-items append ((node pointer-object-node))
+  (list (list "Browse target" (lambda () (on-tree-node-activated (view-of node) node nil)))))
+
 (defmethod on-tree-node-activated ((view memory-object-browser) (node array-object-node) column)
   (awhen ($ (ref-of node) '@)
     (browse-object-in-new-window (memory-of view) it
                                  :title (col-name-of node))))
+
+(defmethod get-node-menu-items append ((node array-object-node))
+  (list (list "Browse items" (lambda () (on-tree-node-activated (view-of node) node nil)))))
+
+(defmethod on-tree-button-press ((view memory-object-browser) (node memory-object-node) event)
+  (awhen (and (eq (event-button-type event) :button-press)
+              (eql (event-button-button event) 3)
+              (get-node-menu-items node))
+    (let* ((menu (make-instance 'menu)))
+      (dolist (item-spec it)
+        (let ((item (make-instance 'menu-item :label (first item-spec)))
+              (callback (second item-spec)))
+          (connect-signal item "activate"
+                          (lambda (x) (declare (ignore x)) (funcall callback)))
+          (menu-shell-append menu item)))
+      (widget-show menu)
+      (menu-popup menu :button (event-button-button event)
+                  :activate-time (event-button-time event)))))
 
 ;; Widget creation
 
@@ -98,12 +170,23 @@
   (construct-memory-object-tree obj width-request height-request))
 
 (defgeneric browse-object-in-new-window (memory ref &key title)
-  (:method (memory (ref memory-object-ref) &key title)
+  (:method (memory (ref memory-object-ref) &key title expand-to-addr)
     (within-main-loop
       (let* ((window (make-instance 'gtk-window))
              (view (make-instance 'memory-object-browser :memory memory))
-             (root (populate-memory-object-tree view ref)))
+             (root (populate-memory-object-tree view ref :expand-to-addr expand-to-addr)))
         (setf (gtk-window-title window)
               (format nil "Object~@[: ~A~]" (or title (if root (col-name-of root)))))
         (container-add window (widget-of view))
         (widget-show window)))))
+
+(defun browse-references-for (memory node info)
+  (loop for (ref offsets)
+     in (get-chunk-range-refs memory (malloc-chunk-range-of info))
+     append (loop for offset in offsets collect (list ref offset)) into items
+     finally (browse-object-in-new-window
+              memory (mapcar #'first items)
+              :expand-to-addr (mapcar #'second items)
+              :title (format nil "references to ~A at ~X"
+                             (col-name-of node)
+                             (start-address-of node)))))

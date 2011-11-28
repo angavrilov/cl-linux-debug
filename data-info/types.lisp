@@ -224,7 +224,7 @@
 
 ;; STL containers
 
-(def (class* eas) stl-vector (array-item data-field concrete-item)
+(def (class* eas) stl-vector (array-item unit-item data-field concrete-item)
   ())
 
 ;; Global entity definition

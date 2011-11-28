@@ -43,6 +43,15 @@
       ext
       (resolve-extent-for-addr (mirror-of ext) addr)))
 
+(defun memory-extents-for-range (mirror start length)
+  (with-recursive-lock-held ((lock-of mirror))
+    (loop with end = (+ start length)
+       for ext in (extents-of mirror)
+       for estart = (start-address-of ext)
+       for eend = (+ estart (length-of ext))
+       when (and (< estart end) (< start eend))
+       collect (list ext (max estart start) (min end eend)))))
+
 (defmethod get-bytes-for-addr ((mirror memory-mirror) addr size)
   (awhen (resolve-extent-for-addr mirror addr)
     (get-bytes-for-addr it addr size)))

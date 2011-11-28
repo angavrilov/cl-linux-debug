@@ -78,6 +78,7 @@
            #:get-memory-integer
            #:get-memory-global
            #:get-address-object-info
+           #:get-chunk-range-refs
            #:compile-helper
            #:call-helper
            #:describe-address-in-context

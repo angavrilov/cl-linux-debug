@@ -249,6 +249,13 @@
                       (ftype (function (uint32) (values (or null fixnum) fixnum)) ,name))
              ,@code))))))
 
+(defun malloc-chunk-range (chunk-map id &optional address)
+  (when id
+    (let ((vec (malloc-chunk-map-range-vector chunk-map)))
+      (let ((min (+ (aref vec id) 4))
+            (max (logand (aref vec (1+ id)) (lognot 1))))
+        (values min max (if address (<= min address max)))))))
+
 (defun lookup-malloc-object (chunk-map address)
   (with-malloc-chunk-lookup (lookup chunk-map :range-vec vec)
     (awhen (lookup address)
@@ -330,6 +337,43 @@
 (defun get-references (reftbl idx)
   (ensure-list (svref reftbl idx)))
 
+(defstruct static-chunk-ref
+  addr section region)
+
+(defun enum-malloc-section-pointers (mirror chunk-map section reftbl)
+  (let* ((last-target nil)
+         (last-cutoff 0)
+         (image (loaded-image-of section))
+         (last-rgn (find-region-by-address image (start-address-of section)))
+         (next-rgn (find-region-by-address image (start-address-of section) :next? t))
+         (next-rgn-offset 0)
+         (extents (memory-extents-for-range
+                   mirror (start-address-of section) (length-of section))))
+    (labels ((init-rgn (base addr)
+               (setf last-rgn (find-region-by-address image addr)
+                     next-rgn (find-region-by-address image addr :next? t)
+                     next-rgn-offset
+                     (if next-rgn (- (start-address-of next-rgn) base) most-positive-fixnum)))
+             (index (base s-off dst d-off)
+               (unless (or (not (or (= d-off 0) (= d-off #xC)))
+                           (and (eql dst last-target)
+                                (<= s-off last-cutoff)))
+                 (setf last-target dst
+                       last-cutoff (min next-rgn-offset (+ s-off 32)))
+                 (when (>= s-off next-rgn-offset)
+                   (init-rgn base (+ base s-off)))
+                 (push-reference reftbl dst
+                                 (make-static-chunk-ref :addr (+ base s-off) :section section
+                                                        :region last-rgn)))))
+      (loop
+         for (ext emin emax)
+         in (stable-sort extents #'< :key #'second)
+         do (setf last-target nil last-cutoff 0)
+         do (init-rgn emin emin)
+         do (enum-malloc-area-pointers ext chunk-map emin (- emax emin)
+                                       (lambda (s-off dst d-off)
+                                         (index emin s-off dst d-off)))))))
+
 (defun collect-chunk-references (mirror chunk-map)
   (let ((reftbl (make-array (malloc-chunk-count chunk-map) :initial-element nil)))
     (flet ((push-if-ok (src dst d-off)
@@ -339,14 +383,37 @@
       (enum-malloc-chunk-pointers mirror chunk-map
                                   (lambda (src s-off dst d-off)
                                     (declare (ignore s-off) (type fixnum d-off))
-                                    (push-if-ok src dst d-off)))
-      (dolist (global *known-globals*)
-        (let ((name (car global)))
-          (with-simple-restart (continue "Skip indexing ~A" (get-$-field-name name))
-            (let ((area (get-memory-global mirror name)))
-              (enum-malloc-area-pointers mirror chunk-map
-                                         (start-address-of area) (length-of area)
-                                         (lambda (s-off dst d-off)
-                                           (declare (ignore s-off) (type fixnum d-off))
-                                           (push-if-ok area dst d-off)))))))
-      reftbl)))
+                                    (push-if-ok src dst d-off))))
+    (dolist (section (sections-of (executable-of mirror)))
+      (when (writable? (origin-of section))
+        (enum-malloc-section-pointers mirror chunk-map section reftbl)))
+    reftbl))
+
+(defun list-chunk-refs-for-area (mirror chunk-map start length target)
+  (let ((refs nil))
+    (enum-malloc-area-pointers mirror chunk-map start length
+                               (lambda (s-off dst d-off)
+                                 (when (and (eql dst target)
+                                            (member d-off '(0 #xC)))
+                                   (push s-off refs))))
+    (nreverse refs)))
+
+(defgeneric decode-chunk-reference (memory context ref target)
+  (:method (memory (context malloc-chunk-map) (ref cons) target)
+    (let ((min (car ref))
+          (size (cdr ref)))
+      (values min
+              (make-instance 'padding :size size)
+              (list-chunk-refs-for-area memory context min size target))))
+  (:method (memory (context malloc-chunk-map) (ref fixnum) target)
+    (multiple-value-bind (min max)
+        (malloc-chunk-range context ref)
+      (decode-chunk-reference memory context (cons min (- max min)) target)))
+  (:method (memory (context malloc-chunk-map) (ref static-chunk-ref) target)
+    (let ((rgn (static-chunk-ref-region ref)))
+      (if (and rgn
+               (< -1 (- (static-chunk-ref-addr ref) (start-address-of rgn)) (length-of rgn)))
+          (decode-chunk-reference memory context (cons (start-address-of rgn) (length-of rgn)) target)
+          (values (static-chunk-ref-addr ref)
+                  (make-instance 'pointer)
+                  (list 0))))))

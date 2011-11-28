@@ -12,7 +12,8 @@
    (filtered-model :reader t)
    (obj-subset nil :accessor t)
    (obj-set #() :accessor t)
-   (obj-value-set #() :accessor t)))
+   (obj-value-set #() :accessor t)
+   (obj-addr-expand-set #() :accessor t)))
 
 (defun memory-object-list-select (list selection)
   (awhen (tree-selection-selected-rows selection)
@@ -24,7 +25,10 @@
           (populate-memory-object-tree (object-tree-of list)
                                        (if (typep vref 'memory-object-ref)
                                            vref
-                                           (aref (obj-set-of list) idx))))))))
+                                           (aref (obj-set-of list) idx))
+                                       :expand-to-addr
+                                       (aif (obj-addr-expand-set-of list)
+                                            (aref it idx))))))))
 
 (defun populate-store (list store subset)
   (let ((obj-set (obj-set-of list))
@@ -41,8 +45,9 @@
        do (list-store-insert-with-values
            store i idx (ensure-string vfmt) (ensure-string vinfo)))))
 
-(defun populate-memory-object-list (list objects)
+(defun populate-memory-object-list (list objects &key expand-to-addr)
   (setf (obj-set-of list) (coerce objects 'vector)
+        (obj-addr-expand-set-of list) (aif expand-to-addr (coerce it 'vector))
         (obj-value-set-of list)
         (coerce (mapcar (lambda (x) (ignore-errors ($ x t))) objects) 'vector)
         (obj-subset-of list) nil)
@@ -137,11 +142,11 @@
                                        (height-request 600))
   (construct-memory-object-list obj width-request height-request))
 
-(defmethod browse-object-in-new-window (memory (ref list) &key title)
+(defmethod browse-object-in-new-window (memory (ref list) &key title expand-to-addr)
   (within-main-loop
     (let* ((window (make-instance 'gtk-window))
            (view (make-instance 'memory-object-list :memory memory)))
-      (populate-memory-object-list view ref)
+      (populate-memory-object-list view ref :expand-to-addr expand-to-addr)
       (setf (gtk-window-title window)
             (format nil "List~@[: ~A~]" title))
       (container-add window (widget-of view))

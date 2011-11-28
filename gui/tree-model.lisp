@@ -87,6 +87,10 @@
          do (push (child-index-of parent cur) path))
       path)))
 
+(defun tree-path-of-list (list)
+  (aprog1 (make-instance 'tree-path)
+    (setf (tree-path-indices it) list)))
+
 (defgeneric destroy-node-tree (parent node)
   (:method ((parent object-node) (node object-node))
     (loop for child across (children-of node)

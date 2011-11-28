@@ -25,6 +25,9 @@
                   it nil)
               offset))))
 
+(defun lookup-next-chunk (table address)
+  (upper-bound (1+ address) table))
+
 ;; On-disk executable
 
 (def (class* e) image-section (data-chunk)
@@ -137,22 +140,27 @@
 (defmethod symbol-name-of ((lrgn loaded-region))
   (symbol-name-of (origin-of lrgn)))
 
-(defgeneric find-region-by-address (executable addr)
-  (:method ((image null) addr)
+(defgeneric find-region-by-address (executable addr &key next?)
+  (:method ((image null) addr &key next?)
+    (declare (ignore next?))
     nil)
-  (:method (image (addr null))
+  (:method (image (addr null) &key next?)
+    (declare (ignore next?))
     nil)
-  (:method ((image executable-image) addr)
-    (lookup-chunk (region-map-of image) addr))
-  (:method ((wrapper loaded-object) addr)
+  (:method ((image executable-image) addr &key next?)
+    (if next?
+        (lookup-next-chunk (region-map-of image) addr)
+        (lookup-chunk (region-map-of image) addr)))
+  (:method ((wrapper loaded-object) addr &key next?)
     (wrap-loaded-chunk (find-region-by-address
                         (origin-of wrapper)
-                        (- addr (relocation-offset-of wrapper)))
+                        (- addr (relocation-offset-of wrapper))
+                        :next? next?)
                        wrapper
                        :type 'loaded-region))
-  (:method ((exec loaded-executable) addr)
+  (:method ((exec loaded-executable) addr &key next?)
     (awhen (find-section-by-address exec addr)
-      (find-region-by-address (loaded-image-of it) addr))))
+      (find-region-by-address (loaded-image-of it) addr :next? next?))))
 
 (defgeneric find-regions-by-name (executable name)
   (:method ((image null) name)
