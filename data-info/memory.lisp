@@ -16,7 +16,21 @@
    (null-extent :reader t)
    (extents nil :accessor t)
    (extent-map (make-chunk-table) :reader t)
-   (section-map (make-chunk-table) :reader t)))
+   (extent-idx nil :reader t)
+   (section-idx nil :reader t)))
+
+(defun index-chunks (chunk)
+  (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
+         (cstarts (mapcar #'start-address-of cset)))
+    (cons (make-array (length cset) :element-type 'uint32 :initial-contents cstarts)
+          (coerce cset 'vector))))
+
+(defun lookup-indexed-chunk (index address)
+  (when index
+    (awhen (binsearch-uint32-<= (car index) address)
+      (let ((chunk (svref (cdr index) it)))
+        (when (<= 0 (- address (start-address-of chunk)) (length-of chunk))
+          chunk)))))
 
 (defmethod initialize-instance :after ((mirror memory-mirror) &key)
   (setf (slot-value mirror 'null-extent)
@@ -33,10 +47,11 @@
   (executable-of (process-of mirror)))
 
 (defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
-  (with-recursive-lock-held ((lock-of mirror))
-    (or (lookup-chunk (extent-map-of mirror) addr)
-        (lookup-chunk (section-map-of mirror) addr)
-        (null-extent-of mirror))))
+  (with-slots (lock extent-idx section-idx null-extent) mirror
+    (with-recursive-lock-held (lock)
+      (or (lookup-indexed-chunk extent-idx addr)
+          (lookup-indexed-chunk section-idx addr)
+          null-extent))))
 
 (defmethod resolve-extent-for-addr ((ext memory-extent) addr)
   (if (< -1 (- addr (start-address-of ext)) (length-of ext))
@@ -85,16 +100,15 @@
           new-ext))))
 
 (defun ensure-section-extent (mirror sect)
-  (trees:insert (make-instance 'section-extent
-                               :mirror mirror
-                               :section sect :mapping (mapping-of sect)
-                               :start-address (start-address-of sect)
-                               :length (length-of sect)
-                               :data-bytes (data-bytes-of sect)
-                               :start-offset (start-offset-of sect))
-                (section-map-of mirror)))
+  (make-instance 'section-extent
+                 :mirror mirror
+                 :section sect :mapping (mapping-of sect)
+                 :start-address (start-address-of sect)
+                 :length (length-of sect)
+                 :data-bytes (data-bytes-of sect)
+                 :start-offset (start-offset-of sect)))
 
-(defun sync-mirror-to-mappings (mirror mappings)
+(defun sync-mirror-to-mappings (mirror mappings &key save-old-data?)
   (with-recursive-lock-held ((lock-of mirror))
     (dolist (ext (extents-of mirror))
       (let* ((start (start-address-of ext))
@@ -102,34 +116,38 @@
         (if (null mapping)
             (delete-memory-extent mirror ext)
             (let ((msize (- (memory-mapping-end-addr mapping) start)))
-              (rotatef (slot-value ext 'data-bytes)
-                       (slot-value ext 'old-data))
+              (when save-old-data?
+                (rotatef (slot-value ext 'data-bytes)
+                         (slot-value ext 'old-data)))
               (when (or (/= msize (length-of ext))
                         (null (data-bytes-of ext)))
                 (setf (slot-value ext 'data-bytes)
                       (make-array msize :element-type 'uint8))
                 (setf (slot-value ext 'length) msize))
               (setf (slot-value ext 'mapping) mapping)))))
-    (dolist (sect (sections-of (executable-of mirror)))
-      (unless (null (data-bytes-of sect))
-        (ensure-section-extent mirror sect)))
-    (loop for map in mappings
-       when (and (memory-mapping-writable? map)
-                 (not (memory-mapping-shared? map))
-                 (not (aand (memory-mapping-file-path map)
-                            (starts-with-subseq "/dev/" it))))
-       collect (ensure-memory-extent mirror map))))
+    (aprog1
+        (loop for map in mappings
+           when (and (memory-mapping-writable? map)
+                     (not (memory-mapping-shared? map))
+                     (not (aand (memory-mapping-file-path map)
+                                (starts-with-subseq "/dev/" it))))
+           collect (ensure-memory-extent mirror map))
+      (with-slots (extent-idx section-idx) mirror
+        (setf extent-idx (index-chunks it)
+              section-idx (index-chunks (loop for sect in (sections-of (executable-of mirror))
+                                           unless (null (data-bytes-of sect))
+                                           collect (ensure-section-extent mirror sect))))))))
 
-(def-debug-task do-refresh-mirror (mirror)
+(def-debug-task do-refresh-mirror (mirror &key save-old-data?)
   (let* ((process (process-of mirror))
          (mappings (process-memory-maps process)))
     (with-any-thread-suspended (process thread)
-      (dolist (ext (sync-mirror-to-mappings mirror mappings))
+      (dolist (ext (sync-mirror-to-mappings mirror mappings :save-old-data? save-old-data?))
         (read-process-data thread (start-address-of ext) (data-bytes-of ext))))))
 
-(defgeneric refresh-memory-mirror (mirror)
-  (:method ((mirror memory-mirror))
-    (call-debug-task #'do-refresh-mirror mirror)))
+(defgeneric refresh-memory-mirror (mirror &key)
+  (:method ((mirror memory-mirror) &key save-old-data?)
+    (call-debug-task #'do-refresh-mirror mirror :save-old-data? save-old-data?)))
 
 (defun make-memory-mirror (process &optional (type 'memory-mirror))
   (let ((mirror (make-instance type :process process)))

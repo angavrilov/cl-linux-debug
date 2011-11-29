@@ -157,14 +157,17 @@
 
 ;; Pointer
 
+(defun make-pointer-ref (memory ptr type parent key)
+  (aprog1 (make-memory-ref memory ptr type :parent parent :key key)
+    (adjust-mem-ref-type (memory-object-ref-type it) it)))
+
 (defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
   (let ((size (effective-size-of type)))
-    (let ((ptr (or (with-bytes-for-ref (vector offset ref size)
-                     (parse-int vector offset size))
-                   (1- (ash 1 (* 8 size))))))
-      (when (/= ptr 0)
-        (aprog1 (resolve-offset-ref ref ptr (effective-contained-item-of type) t)
-          (adjust-mem-ref-type (memory-object-ref-type it) it))))))
+    (let ((ptr (with-bytes-for-ref (vector offset ref size)
+                 (parse-int vector offset size))))
+      (unless (eql ptr 0)
+        (make-pointer-ref (memory-object-ref-memory ref)
+                          (or ptr 0) (effective-contained-item-of type) ref t)))))
 
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-$ type ref t) key))
@@ -178,6 +181,17 @@
             (or (describe-address-in-context
                  (get-context-of-memory ref) (start-address-of value))
                 (list "unknown area")))))
+
+(defmethod walk-reference-by-type ((type pointer) ref report-cb)
+  (with-bytes-for-ref (vector offset ref 4)
+    (let ((it (parse-int vector offset 4)))
+      (unless (= it 0)
+        (funcall report-cb it (effective-contained-item-of type) ref t)))))
+
+(defmethod build-effective-pointer-walker (context (node pointer) offset ctx)
+  `(let ((ptr ,(access-walker-int ctx offset 4)))
+     (when (/= ptr 0)
+       ,(report-walker-ptr ctx 'ptr (effective-contained-item-of node)))))
 
 ;; Strings
 
@@ -206,7 +220,7 @@
   (multiple-value-bind (base size)
       (array-base-dimensions type ref)
     (when (and base
-               (integerp size) (>= size 0)
+               (typep size 'fixnum) (>= size 0)
                (or (< -1 index size)
                    (not check-bounds?)))
       (let ((elt-size (effective-element-size-of type)))
@@ -261,6 +275,82 @@
             (setf (gethash kv cache) item))))
       (gethash key cache))))
 
+(defgeneric build-array-base-dimensions (context node offset ctx)
+  (:method (context (node array-item) offset ctx)
+    `(multiple-value-bind (ref cnt)
+         (array-base-dimensions ,node
+                                ,(make-walker-temp-ref ctx node offset))
+       (if ref
+           (values (memory-object-ref-address ref) cnt)
+           (values 0 0)))))
+
+(defun %walk-pointer-array (memory ptr cnt elt-type report-cb &optional parent)
+  (declare (type fixnum cnt)
+           (type function report-cb))
+  (when (> cnt 0)
+    (with-bytes-for-ref (vec off memory (* 4 cnt) ptr)
+      (with-unsafe-int-read (get-int vec)
+        (let ((limit (+ off (* 4 cnt))))
+          (declare (optimize (speed 3))
+                   (type (integer 0 #.(- most-positive-fixnum 4)) off limit))
+          (loop for p fixnum from off by 4 below limit
+             and i fixnum from 0 below cnt
+             for pv of-type uint32 = (get-int p 4)
+             when (/= pv 0)
+             do (locally (declare (optimize (speed 1)))
+                  (funcall report-cb pv elt-type parent i))))))))
+
+(defmethod walk-reference-by-type ((type array-item) ref report-cb)
+  (multiple-value-bind (first size step)
+      (array-item-ref type ref 0)
+    (when first
+      (let ((elt-type (memory-object-ref-type first)))
+        (if (typep elt-type 'pointer)
+            (%walk-pointer-array (memory-object-ref-memory first)
+                                 (memory-object-ref-address first)
+                                 size (effective-contained-item-of elt-type)
+                                 report-cb ref)
+            (loop
+               for i from 0 below (min 100000 size)
+               do (walk-reference (offset-memory-reference first i step) report-cb)))))))
+
+(defmethod build-effective-pointer-walker (context (node array-item) offset ctx)
+  (with-unique-names (a-vec a-off a-cnt a-ptr a-idx)
+    (let* ((elt-type (effective-contained-item-of node))
+           (e-size (effective-element-size-of node))
+           (core
+            (if (typep elt-type 'pointer)
+                `(%walk-pointer-array ,(ptr-walker-ctx-memory ctx)
+                                      ,a-ptr ,a-cnt
+                                      ,(effective-contained-item-of elt-type)
+                                      ,(ptr-walker-ctx-report-cb ctx))
+                (let* ((n-ctx (make-ptr-walker-ctx :memory (ptr-walker-ctx-memory ctx)
+                                                   :report-cb (ptr-walker-ctx-report-cb ctx)
+                                                   :root-ptr a-ptr
+                                                   :root-node (effective-contained-item-of node)
+                                                   :base a-off
+                                                   :vector a-vec))
+                       (n-code (build-effective-pointer-walker
+                                context (effective-contained-item-of node) 0 n-ctx)))
+                  (assert (<= 0 (ptr-walker-ctx-min-offset n-ctx)
+                              (ptr-walker-ctx-max-offset n-ctx) e-size))
+                  `(when (> ,a-cnt 0)
+                     (with-bytes-for-ref (,a-vec ,a-off ,(ptr-walker-ctx-memory ctx)
+                                                 (* ,e-size ,a-cnt)
+                                                 ,a-ptr)
+                       (locally
+                           (declare (type (integer 0 ,(- most-positive-fixnum e-size)) ,a-off)
+                                    (type (simple-array uint8 (*)) ,a-vec))
+                         (loop for ,a-idx from 0 below ,a-cnt
+                            do ,n-code
+                            do (setf ,a-off (+ ,a-off ,e-size)
+                                     ,a-ptr (logand (+ ,a-ptr ,e-size) #xFFFFFFFF))))))))))
+      `(multiple-value-bind (,a-ptr ,a-cnt)
+           ,(build-array-base-dimensions context node offset ctx)
+         (declare (type fixnum ,a-cnt)
+                  (type uint32 ,a-ptr))
+         ,core)))) 
+
 ;; Static array
 
 (defmethod compute-effective-size (context (obj static-array))
@@ -271,6 +361,12 @@
 
 (defmethod array-base-dimensions ((type static-array) ref)
   (values (memory-object-ref-address ref) (count-of type)))
+
+(defmethod compute-effective-has-pointers? (context (obj static-array))
+  (effective-has-pointers? (effective-contained-item-of obj)))
+
+(defmethod build-array-base-dimensions (context (node static-array) offset ctx)
+  `(values (+ ,(ptr-walker-ctx-root-ptr ctx) ,offset) ,(count-of node)))
 
 ;; STL vector
 
@@ -288,6 +384,17 @@
       (values (start-address-of s)
               (/ (address- e s) (effective-element-size-of type))))))
 
+(defmethod build-array-base-dimensions (context (node stl-vector) offset ctx)
+  `(let* ((start ,(access-walker-int ctx offset 4))
+          (end ,(access-walker-int ctx (+ offset 4) 4))
+          (diff (logand (- end start) #xFFFFFFFF)))
+     (declare (type uint32 start end diff))
+     (if (and (<= start end)
+              (not (logtest diff 3))
+              (< diff most-positive-fixnum))
+         (values start (floor diff 4))
+         (values 0 0))))
+
 ;; Generic structure
 
 (defun find-field-by-name (compound name &optional (offset 0))
@@ -302,20 +409,26 @@
                                    name (+ offset (effective-offset-of field)))
           (return it)))))
 
+(defun make-field-ref (ref field &optional (key nil keyp) (bias 0))
+  (resolve-offset-ref ref (+ (memory-object-ref-address ref)
+                             (effective-offset-of field)
+                             bias)
+                      field (if keyp key
+                                (or (name-of field) (effective-tag-of field)))
+                      :local? t))
+
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref key)
   (aif (find-field-by-name type key)
-       (resolve-offset-ref ref (+ (memory-object-ref-address ref)
-                                  (car it) (effective-offset-of (cdr it)))
-                           (cdr it) key :local? t)
+       (make-field-ref ref (cdr it) key (car it))
        (call-next-method)))
 
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '*)))
-  (mapcar (lambda (it)
-            (resolve-offset-ref ref (+ (memory-object-ref-address ref)
-                                       (effective-offset-of it))
-                                it (or (name-of it) (effective-tag-of it))
-                                :local? t))
-          (effective-fields-of type)))
+  (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
+
+(defmethod walk-reference-by-type ((type virtual-compound-item) ref report-cb)
+  (loop for field in (effective-fields-of type)
+     when (effective-has-pointers? field)
+     do (walk-reference (make-field-ref ref field) report-cb)))
 
 ;; Class
 

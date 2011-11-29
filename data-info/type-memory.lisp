@@ -101,11 +101,9 @@
     (parse-int bytes offset size :signed? signed?)))
 
 (defun make-memory-ref (memory address type &key parent key local?)
+  (declare (optimize (speed 3)))
   (let* ((extent (if local? memory (resolve-extent-for-addr memory address)))
-         (real-type (if (is-$-keyword-namespace? type)
-                        (lookup-type-in-context (get-context-of-memory memory) type)
-                        (effective-main-type-of type)))
-         (tag (effective-tag-of real-type)))
+         (tag (effective-tag-of type)))
     (assert extent)
     (make-memory-object-ref :memory extent
                             :address address
@@ -192,3 +190,92 @@
 
 (defmethod $ ((ref memory-object-ref) key &optional default)
   (or (%memory-ref-$ (memory-object-ref-type ref) ref key) default))
+
+;; Ptr walker
+
+(defgeneric walk-reference-by-type (type ref report-cb)
+  (:method :around ((type data-item) ref report-cb)
+    (when (effective-has-pointers? type)
+      (call-next-method)))
+  (:method :around ((type global-type-proxy) ref report-cb)
+    (walk-reference-by-type (effective-main-type-of type) ref report-cb))
+  (:method ((type data-item) ref report-cb)
+    nil)
+  (:method ((type primitive-field) ref report-cb)
+    nil))
+
+(declaim (inline walk-reference))
+(defun walk-reference (ref report-cb)
+  (let ((type (memory-object-ref-type ref)))
+    (when (effective-has-pointers? type)
+      (walk-reference-by-type type ref report-cb))))
+
+(defstruct ptr-walker-ctx
+  memory root-node root-ptr report-cb
+  base (min-offset 0) (max-offset 0) vector
+  (get-int-cb (lambda (v b o s s?)
+                `(parse-int ,v (+ ,b ,o) ,s :signed? ,s?)))
+  (make-ref-cb (lambda (c n o)
+                 `(make-memory-ref ,(ptr-walker-ctx-memory c)
+                                   (+ ,(ptr-walker-ctx-root-ptr c) ,o)
+                                   ,n))))
+
+(defun access-walker-int (ctx offset size &key signed?)
+  (maxf (ptr-walker-ctx-max-offset ctx) (+ offset size))
+  (minf (ptr-walker-ctx-min-offset ctx) offset)
+  (funcall (ptr-walker-ctx-get-int-cb ctx)
+           (ptr-walker-ctx-vector ctx)
+           (ptr-walker-ctx-base ctx) offset size signed?))
+
+(defun make-walker-temp-ref (ctx node offset)
+  (funcall (ptr-walker-ctx-make-ref-cb ctx) ctx node offset))
+
+(defun report-walker-ptr (ctx ptr-value type)
+  `(funcall ,(ptr-walker-ctx-report-cb ctx)
+            (make-memory-ref ,(ptr-walker-ctx-memory ctx)
+                             ,ptr-value ,type)))
+
+(defgeneric build-effective-pointer-walker (context node offset walker-ctx)
+  (:method (context (node data-item) offset walker-ctx)
+    nil)
+  (:method :around (context (node global-type-proxy) offset walker-ctx)
+    (build-effective-pointer-walker context (effective-main-type-of node) offset walker-ctx))
+  (:method (context (node virtual-compound-item) offset walker-ctx)
+    `(progn
+       ,@(loop for item in (effective-fields-of node)
+            for code = (build-effective-pointer-walker context item
+                                                       (+ offset (effective-offset-of item))
+                                                       walker-ctx)
+            when code collect code)))
+  (:method (context (node container-item) offset ctx)
+    (assert nil)))
+
+(defun compile-effective-pointer-walker (context node)
+  (with-unique-names (base-ref report-cb)
+    (with-unique-names (n-memory n-ptr n-off n-vec)
+      (let* ((n-ctx (make-ptr-walker-ctx :memory n-memory
+                                         :root-ptr n-ptr
+                                         :root-node node
+                                         :base n-off
+                                         :vector n-vec
+                                         :report-cb report-cb))
+             (n-code (build-effective-pointer-walker context node 0 n-ctx))
+             (n-size (ptr-walker-ctx-max-offset n-ctx)))
+        (if n-code
+            `(lambda (,base-ref ,report-cb)
+               (declare (optimize (debug 3)))
+               (let ((,n-memory (get-context-of-memory ,base-ref))
+                     (,n-ptr (memory-object-ref-address ,base-ref)))
+                 (declare (type (integer 0 ,(- (ash 1 32) (ptr-walker-ctx-max-offset n-ctx) 1)) ,n-ptr))
+                 (with-bytes-for-ref (,n-vec ,n-off (memory-object-ref-memory ,base-ref) ,n-size ,n-ptr)
+                   (when (>= ,n-off ,(- (ptr-walker-ctx-min-offset n-ctx)))
+                     (locally
+                         (declare (type (integer 0 ,(- most-positive-fixnum n-size)) ,n-off)
+                                  (type (simple-array uint8 (*)) ,n-vec))
+                       ,n-code)))))
+            `(lambda (x y) (declare (ignore x y))))))))
+
+(defun get-effective-pointer-walker (context node)
+  (or (effective-pointer-walker-of node)
+      (setf (effective-pointer-walker-of node)
+            (compile nil (compile-effective-pointer-walker context node)))))

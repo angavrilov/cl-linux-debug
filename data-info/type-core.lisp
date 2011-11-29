@@ -67,7 +67,8 @@
                   (,name base)))))
   (delegate effective-size-of)
   (delegate effective-alignment-of)
-  (delegate effective-tag-of))
+  (delegate effective-tag-of)
+  (delegate effective-has-pointers?))
 
 ;; Misc
 
@@ -105,6 +106,18 @@
             :initial-value 1))
   (:method (context (obj unit-item))
     (max 1 (default-size-of obj))))
+
+(defgeneric compute-effective-has-pointers? (context obj)
+  (:method (context (obj data-item))
+    nil)
+  (:method (context (obj virtual-compound-item))
+    (some #'effective-has-pointers? (effective-fields-of obj)))
+  (:method (context (obj container-item))
+    (effective-has-pointers? (effective-contained-item-of obj)))
+  (:method (context (obj primitive-field))
+    nil)
+  (:method (context (obj pointer))
+    (not (typep (effective-contained-item-of obj) 'padding))))
 
 (defgeneric lookup-type-reference (context referrer name)
   (:method (context referrer (name null))
@@ -177,7 +190,9 @@
     (setf (effective-alignment-of obj)
           (compute-effective-alignment *type-context* obj)
           (effective-size-of obj)
-          (compute-effective-size *type-context* obj)))
+          (compute-effective-size *type-context* obj)
+          (effective-has-pointers? obj)
+          (compute-effective-has-pointers? *type-context* obj)))
   (:method :before ((obj virtual-compound-item))
     (let ((fields (compute-effective-fields obj)))
       (setf (effective-fields-of obj) fields)
@@ -220,4 +235,3 @@
       (dolist (type it)
         (setf (assoc-value *known-globals* (with-namespace (name-of type)) :test #'equal) type))))
   (values `(read-return-value ,defs) defs))
-

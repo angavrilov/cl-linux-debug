@@ -5,6 +5,7 @@
 (def (class* e) object-memory-mirror (memory-mirror type-context)
   ((malloc-chunks (make-malloc-chunk-map) :reader t)
    (malloc-chunk-reftbl nil :accessor t)
+   (malloc-chunk-types nil :accessor t)
    (find-by-id-cache (make-hash-table :test #'equal) :reader t)
    (vtable-names (make-hash-table :test #'eql) :reader t)))
 
@@ -18,7 +19,7 @@
    (region nil :accessor t)
    (is-code? nil :accessor t)))
 
-(defmethod refresh-memory-mirror :after ((mirror object-memory-mirror))
+(defmethod refresh-memory-mirror :after ((mirror object-memory-mirror) &key)
   (check-refresh-context mirror)
   (clrhash (find-by-id-cache-of mirror))
   (with-simple-restart (continue "Ignore malloc chunks")

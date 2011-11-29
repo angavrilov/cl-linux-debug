@@ -157,7 +157,9 @@
   (let ((main-arena (get-memory-global memory $glibc:main_arena)))
     (values main-arena
             (loop for arena = $main-arena.next then $arena.next
-               until (address= arena main-arena)
+               until (or (address= arena main-arena)
+                         (null arena)
+                         (= (start-address-of arena) 0))
                collect arena))))
 
 (defun find-aux-heap-chain (memory arena)
@@ -417,3 +419,36 @@
           (values (static-chunk-ref-addr ref)
                   (make-instance 'pointer)
                   (list 0))))))
+
+(defun collect-known-objects (memory chunk-map)
+  (let ((reftbl (make-array (malloc-chunk-count chunk-map) :initial-element nil))
+        (null-extent (null-extent-of memory))
+        (queue-head nil) (queue-tail nil)
+        (hash (make-hash-table)))
+    (declare (optimize (speed 3)))
+    (with-malloc-chunk-lookup (lookup chunk-map)
+      (labels ((queue-ref (addr type parent key &aux ref)
+                 (declare (type uint32 addr))
+                 (multiple-value-bind (id offset)
+                     (lookup addr)
+                   (if id
+                       (unless (or (/= 0 offset) (aref reftbl id))
+                         (setf ref (make-pointer-ref memory addr type parent key))
+                         (setf (aref reftbl id) ref))
+                       (unless (gethash addr hash)
+                         (setf ref (make-pointer-ref memory addr type parent key))
+                         (setf (gethash addr hash) ref)))
+                   (when (and ref (not (eq (memory-object-ref-memory ref) null-extent)))
+                     (chanl::pushend ref queue-head queue-tail))
+                   nil))
+               (walk-ref (ref)
+                 (walk-reference ref #'queue-ref)
+                 nil
+                 #+nil
+                 (funcall (get-effective-pointer-walker memory (effective-main-type-of ref))
+                          ref #'queue-ref)))
+        (dolist (global *known-globals*)
+          (walk-ref ($ memory (car global))))
+        (loop while queue-head
+           do (walk-ref (pop queue-head)))
+        reftbl))))

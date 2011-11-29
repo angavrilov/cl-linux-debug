@@ -34,8 +34,9 @@
    (effective-alignment :accessor t)
    (effective-size :accessor t)
    (effective-finalized? nil :accessor t)
-   (effective-has-pointers? nil :accessor t)
-   (effective-tag :accessor t))
+   (effective-has-pointers? :accessor t)
+   (effective-tag :accessor t)
+   (effective-pointer-walker nil :accessor t))
   (:documentation "An abstract base class for all type items."))
 
 (def (class* eas) code-helper (xml-serializer)
@@ -194,7 +195,7 @@
 
 (def (class* eas) pointer (unit-item container-item data-field concrete-item)
   ()
-  (:default-initargs :default-size 4 :effective-has-pointers? t)
+  (:default-initargs :default-size 4)
   (:documentation "A simple pointer to another object."))
 
 ;; String
@@ -210,7 +211,7 @@
 
 (def (class* eas) ptr-string (string-field virtual-compound-item concrete-item)
   ()
-  (:default-initargs :default-size 4 :effective-has-pointers? t)
+  (:default-initargs :default-size 4)
   (:documentation "A null-terminated string buffer pointer."))
 
 (def (class* eas) stl-string (ptr-string)
