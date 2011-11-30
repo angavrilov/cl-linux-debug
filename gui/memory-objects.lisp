@@ -91,26 +91,8 @@
           (t
            (col-type-of node)))))
 
-(defmethod col-type-of ((type data-item))
-  (xml:xml-tag-name-string type))
-
-(defmethod col-type-of ((type global-type-proxy))
-  (col-type-of (effective-main-type-of type)))
-
-(defmethod col-type-of ((type global-type-definition))
-  (get-$-field-name (type-name-of type)))
-
-(defmethod col-type-of ((type static-array))
-  (format nil "~A[]" (col-type-of (effective-contained-item-of type))))
-
-(defmethod col-type-of ((type pointer))
-  (format nil "~A*" (col-type-of (effective-contained-item-of type))))
-
-(defmethod col-type-of ((type stl-vector))
-  (format nil "<~A>" (col-type-of (effective-contained-item-of type))))
-
 (defmethod col-type-of ((node real-memory-object-node))
-  (col-type-of (ref-type-of node)))
+  (public-type-name-of (ref-type-of node)))
 
 (defmethod col-value-of ((node real-memory-object-node))
   (ensure-string (format-ref-value (ref-of node) (ref-value-of node))))
@@ -139,7 +121,13 @@
          (ref-start (start-address-of ref))
          ((:values info r-start r-len)
           (get-address-info-range (memory-of (view-of node)) ref-start)))
-    (declare (ignore info))
+    (when (typep (effective-main-type-of ref) 'padding)
+      (awhen (aand (malloc-chunk-range-of info)
+                   (cl-linux-debug.data-info::obj-type-of it))
+        (when (= ref-start r-start)
+          (setf ref (make-memory-ref (memory-object-ref-memory ref)
+                                     ref-start it
+                                     :parent (ref-of node) :key t)))))
     (setf (start-address-of child) ref-start)
     (layout-children-in-range node (list ref) child r-start r-len :root? t)))
 
@@ -372,6 +360,10 @@
                                              (if (and r-start r-len)
                                                  (- (+ r-start r-len) (start-address-of ref))
                                                  4)))))
+    (unless r-start
+      (setf r-start (- (start-address-of ref) 4096)))
+    (unless r-len
+      (setf r-len (- (+ (start-address-of ref) (length-of ref) 4096) r-start)))
     (values master info
             (layout-children-in-range master (list ref) master r-start r-len :root? t))))
 

@@ -191,7 +191,10 @@
 (defmethod build-effective-pointer-walker (context (node pointer) offset ctx)
   `(let ((ptr ,(access-walker-int ctx offset 4)))
      (when (/= ptr 0)
-       ,(report-walker-ptr ctx 'ptr (effective-contained-item-of node)))))
+       (funcall ,(ptr-walker-ctx-report-cb ctx) ptr
+                ',(get-effective-pointer-walker
+                   context (effective-contained-item-of node))
+                nil t))))
 
 ;; Strings
 
@@ -275,30 +278,25 @@
             (setf (gethash kv cache) item))))
       (gethash key cache))))
 
-(defgeneric build-array-base-dimensions (context node offset ctx)
-  (:method (context (node array-item) offset ctx)
-    `(multiple-value-bind (ref cnt)
-         (array-base-dimensions ,node
-                                ,(make-walker-temp-ref ctx node offset))
-       (if ref
-           (values (memory-object-ref-address ref) cnt)
-           (values 0 0)))))
+(defgeneric build-set-array-base-dimensions (context node offset ctx ptr-var cnt-var))
 
 (defun %walk-pointer-array (memory ptr cnt elt-type report-cb &optional parent)
   (declare (type fixnum cnt)
-           (type function report-cb))
+           (type function memory report-cb))
   (when (> cnt 0)
-    (with-bytes-for-ref (vec off memory (* 4 cnt) ptr)
-      (with-unsafe-int-read (get-int vec)
-        (let ((limit (+ off (* 4 cnt))))
-          (declare (optimize (speed 3))
-                   (type (integer 0 #.(- most-positive-fixnum 4)) off limit))
-          (loop for p fixnum from off by 4 below limit
-             and i fixnum from 0 below cnt
-             for pv of-type uint32 = (get-int p 4)
-             when (/= pv 0)
-             do (locally (declare (optimize (speed 1)))
-                  (funcall report-cb pv elt-type parent i))))))))
+    (multiple-value-bind (vec off)
+        (funcall memory ptr (* 4 cnt))
+      (when vec
+        (with-unsafe-int-read (get-int vec)
+          (let ((limit (+ off (* 4 cnt))))
+            (declare (optimize (speed 3))
+                     (type (integer 0 #.(- most-positive-fixnum 4)) off limit))
+            (loop for p fixnum from off by 4 below limit
+               and i fixnum from 0 below cnt
+               for pv of-type uint32 = (get-int p 4)
+               when (/= pv 0)
+               do (locally (declare (optimize (speed 1)))
+                    (funcall report-cb pv elt-type parent i)))))))))
 
 (defmethod walk-reference-by-type ((type array-item) ref report-cb)
   (multiple-value-bind (first size step)
@@ -315,41 +313,29 @@
                do (walk-reference (offset-memory-reference first i step) report-cb)))))))
 
 (defmethod build-effective-pointer-walker (context (node array-item) offset ctx)
-  (with-unique-names (a-vec a-off a-cnt a-ptr a-idx)
+  (with-unique-names (a-ptr a-cnt a-idx)
     (let* ((elt-type (effective-contained-item-of node))
            (e-size (effective-element-size-of node))
+           (memory (ptr-walker-ctx-memory ctx))
+           (report-cb (ptr-walker-ctx-report-cb ctx))
            (core
             (if (typep elt-type 'pointer)
-                `(%walk-pointer-array ,(ptr-walker-ctx-memory ctx)
-                                      ,a-ptr ,a-cnt
-                                      ,(effective-contained-item-of elt-type)
-                                      ,(ptr-walker-ctx-report-cb ctx))
-                (let* ((n-ctx (make-ptr-walker-ctx :memory (ptr-walker-ctx-memory ctx)
-                                                   :report-cb (ptr-walker-ctx-report-cb ctx)
-                                                   :root-ptr a-ptr
-                                                   :root-node (effective-contained-item-of node)
-                                                   :base a-off
-                                                   :vector a-vec))
-                       (n-code (build-effective-pointer-walker
-                                context (effective-contained-item-of node) 0 n-ctx)))
-                  (assert (<= 0 (ptr-walker-ctx-min-offset n-ctx)
-                              (ptr-walker-ctx-max-offset n-ctx) e-size))
-                  `(when (> ,a-cnt 0)
-                     (with-bytes-for-ref (,a-vec ,a-off ,(ptr-walker-ctx-memory ctx)
-                                                 (* ,e-size ,a-cnt)
-                                                 ,a-ptr)
-                       (locally
-                           (declare (type (integer 0 ,(- most-positive-fixnum e-size)) ,a-off)
-                                    (type (simple-array uint8 (*)) ,a-vec))
-                         (loop for ,a-idx from 0 below ,a-cnt
-                            do ,n-code
-                            do (setf ,a-off (+ ,a-off ,e-size)
-                                     ,a-ptr (logand (+ ,a-ptr ,e-size) #xFFFFFFFF))))))))))
-      `(multiple-value-bind (,a-ptr ,a-cnt)
-           ,(build-array-base-dimensions context node offset ctx)
+                `(%walk-pointer-array ,memory ,a-ptr ,a-cnt
+                                      ',(get-effective-pointer-walker
+                                         context (effective-contained-item-of elt-type))
+                                      ,report-cb)
+                (with-walker-ctx (memory a-ptr report-cb elt-type a-ctx
+                                         :size-gap `(* ,e-size (1- ,a-cnt)))
+                  `(loop for ,a-idx from 0 below ,a-cnt
+                      do ,(build-effective-pointer-walker context elt-type 0 a-ctx)
+                      do (setf ,(ptr-walker-ctx-base ctx)
+                               (sb-ext:truly-the fixnum (+ ,(ptr-walker-ctx-base ctx) ,e-size))))))))
+      `(let ((,a-ptr 0) (,a-cnt 0))
          (declare (type fixnum ,a-cnt)
                   (type uint32 ,a-ptr))
-         ,core)))) 
+         ,(build-set-array-base-dimensions context node offset ctx a-ptr a-cnt)
+         (when (< 0 ,a-cnt ,(floor most-positive-fixnum e-size))
+           ,core)))))
 
 ;; Static array
 
@@ -365,8 +351,24 @@
 (defmethod compute-effective-has-pointers? (context (obj static-array))
   (effective-has-pointers? (effective-contained-item-of obj)))
 
-(defmethod build-array-base-dimensions (context (node static-array) offset ctx)
-  `(values (+ ,(ptr-walker-ctx-root-ptr ctx) ,offset) ,(count-of node)))
+(defmethod build-effective-pointer-walker (context (node static-array) offset ctx)
+  (with-unique-names (a-base a-limit)
+    (let* ((elt-type (effective-contained-item-of node))
+           (e-size (effective-element-size-of node))
+           (gap (* e-size (1- (count-of node))))
+           (a-ctx (copy-ptr-walker-ctx ctx)))
+      (assert (<= (ptr-walker-ctx-min-offset ctx)
+                  (+ offset (effective-min-offset-of elt-type))
+                  (+ offset gap (effective-max-offset-of elt-type))
+                  (ptr-walker-ctx-max-offset ctx)))
+      (setf (ptr-walker-ctx-base a-ctx) a-base)
+      `(let* ((,a-base (+ ,(ptr-walker-ctx-base ctx) ,offset))
+              (,a-limit (+ ,a-base ,gap)))
+         (declare (type (integer 0 ,(- most-positive-fixnum (effective-max-offset-of elt-type)))
+                        ,a-base ,a-limit))
+         (loop while (<= ,a-base ,a-limit)
+            do ,(build-effective-pointer-walker context elt-type 0 a-ctx)
+            do (incf ,a-base ,e-size))))))
 
 ;; STL vector
 
@@ -384,16 +386,15 @@
       (values (start-address-of s)
               (/ (address- e s) (effective-element-size-of type))))))
 
-(defmethod build-array-base-dimensions (context (node stl-vector) offset ctx)
+(defmethod build-set-array-base-dimensions (context (node stl-vector) offset ctx ptr-var cnt-var)
   `(let* ((start ,(access-walker-int ctx offset 4))
           (end ,(access-walker-int ctx (+ offset 4) 4))
           (diff (logand (- end start) #xFFFFFFFF)))
      (declare (type uint32 start end diff))
-     (if (and (<= start end)
-              (not (logtest diff 3))
-              (< diff most-positive-fixnum))
-         (values start (floor diff 4))
-         (values 0 0))))
+     (when (and (<= start end)
+                (not (logtest diff 3))
+                (< diff most-positive-fixnum))
+       (setf ,ptr-var start ,cnt-var (ash diff -2)))))
 
 ;; Generic structure
 

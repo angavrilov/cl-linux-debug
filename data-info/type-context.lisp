@@ -124,6 +124,11 @@
                 (lookup-type-in-context context it))))))
 
 (defgeneric check-refresh-context (context)
+  (:method :around ((context type-context))
+    (when (or (< (last-types-version-of context) *known-types-version*)
+              (< (last-globals-version-of context) *known-globals-version*))
+      (call-next-method)
+      t))
   (:method ((context type-context))
     ;; Check types
     (when (< (last-types-version-of context) *known-types-version*)

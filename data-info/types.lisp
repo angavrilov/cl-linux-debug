@@ -36,7 +36,9 @@
    (effective-finalized? nil :accessor t)
    (effective-has-pointers? :accessor t)
    (effective-tag :accessor t)
-   (effective-pointer-walker nil :accessor t))
+   (effective-pointer-walker nil :accessor t)
+   (effective-min-offset :accessor t)
+   (effective-max-offset :accessor t))
   (:documentation "An abstract base class for all type items."))
 
 (def (class* eas) code-helper (xml-serializer)
@@ -46,6 +48,14 @@
 (def (class* eas) code-helper-mixin ()
   ((code-helpers nil :accessor t)
    (effective-code-helpers nil :accessor t)))
+
+(defgeneric public-type-name-of (node)
+  (:method ((node data-item))
+    (let ((cache (load-time-value (make-hash-table :test #'eq)))
+          (class (class-of node)))
+      (or (gethash class cache)
+          (setf (gethash class cache)
+                (xml:xml-tag-name-string node))))))
 
 (defgeneric auto-code-helpers (node)
   (:method-combination append :most-specific-first)
@@ -198,6 +208,9 @@
   (:default-initargs :default-size 4)
   (:documentation "A simple pointer to another object."))
 
+(defmethod public-type-name-of ((name pointer))
+  (concatenate 'string (public-type-name-of (effective-contained-item-of name)) "*"))
+
 ;; String
 
 (def (class* eas) string-field (primitive-field)
@@ -223,10 +236,16 @@
 (def (class* eas) static-array (array-item data-field concrete-item)
   ((count nil :accessor t :type integer-or-null)))
 
+(defmethod public-type-name-of ((name static-array))
+  (concatenate 'string (public-type-name-of (effective-contained-item-of name)) "[]"))
+
 ;; STL containers
 
 (def (class* eas) stl-vector (array-item unit-item data-field concrete-item)
   ())
+
+(defmethod public-type-name-of ((name stl-vector))
+  (concatenate 'string "<" (public-type-name-of (effective-contained-item-of name)) ">"))
 
 ;; Global entity definition
 
@@ -236,6 +255,9 @@
 
 (defmethod name-of ((type global-type-definition))
   (type-name-of type))
+
+(defmethod public-type-name-of ((name global-type-definition))
+  (cl-linux-debug.data-info::get-$-field-name (type-name-of name)))
 
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))

@@ -28,6 +28,40 @@
 (defun lookup-next-chunk (table address)
   (upper-bound (1+ address) table))
 
+(macrolet ((frob (elt-type)
+             `(progn
+                (defun ,(symbolicate '#:index-chunks/ elt-type) (chunk)
+                  (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
+                         (cstarts (mapcar #'start-address-of cset)))
+                    (list (make-array (length cset) :element-type ',elt-type :initial-contents cstarts)
+                          (coerce (mapcar #'length-of cset) 'vector)
+                          (coerce cset 'vector))))
+                (declaim (ftype (function (t ,elt-type) (values t fixnum fixnum))
+                                ,(symbolicate '#:lookup-indexed-chunk/ elt-type)))
+                (defun ,(symbolicate '#:lookup-indexed-chunk/ elt-type) (index address)
+                  (declare (type ,elt-type address)
+                           (optimize (speed 3)))
+                  (let ((robj nil)
+                        (roff 0)
+                        (rgap 0))
+                    (declare (type fixnum roff rgap))
+                    (when index
+                      (destructuring-bind (addrs lengths objs) index
+                        (declare (type (simple-array ,elt-type (*)) addrs)
+                                 (type simple-vector lengths objs))
+                        (with-binsearch-in-array (lookup addrs ,elt-type #'<= :array-var av)
+                          (awhen (lookup address)
+                            (let* ((base (aref addrs it))
+                                   (size (svref lengths it))
+                                   (obj (svref objs it))
+                                   (diff (logand (- address base) #xFFFFFFFF)))
+                              (declare (type (integer 0 #.most-positive-fixnum) size)
+                                       (type ,elt-type base diff))
+                              (when (< diff size)
+                                (setq robj obj roff (the fixnum diff) rgap (- size diff))))))))
+                    (values robj roff rgap))))))
+  (frob uint32))
+
 ;; On-disk executable
 
 (def (class* e) image-section (data-chunk)

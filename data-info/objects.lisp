@@ -11,7 +11,8 @@
 
 (def (class* e) malloc-chunk-range (address-chunk)
   ((chunk-id :reader t)
-   (references :reader t)))
+   (references :reader t)
+   (obj-type :reader t)))
 
 (def (class* ea) memory-object-info ()
   ((malloc-chunk-range nil :accessor t)
@@ -19,14 +20,20 @@
    (region nil :accessor t)
    (is-code? nil :accessor t)))
 
+(defmethod check-refresh-context :after ((mirror object-memory-mirror))
+  (setf (malloc-chunk-types-of mirror)
+        (collect-known-objects mirror (malloc-chunks-of mirror))))
+
 (defmethod refresh-memory-mirror :after ((mirror object-memory-mirror) &key)
-  (check-refresh-context mirror)
   (clrhash (find-by-id-cache-of mirror))
   (with-simple-restart (continue "Ignore malloc chunks")
     (collect-malloc-objects mirror (malloc-chunks-of mirror))
     (with-simple-restart (continue "Skip cross-referencing chunks")
       (setf (malloc-chunk-reftbl-of mirror)
-            (collect-chunk-references mirror (malloc-chunks-of mirror))))))
+            (collect-chunk-references mirror (malloc-chunks-of mirror)))))
+  (unless (check-refresh-context mirror)
+    (setf (malloc-chunk-types-of mirror)
+          (collect-known-objects mirror (malloc-chunks-of mirror)))))
 
 (defmethod get-id-search-cache ((context object-memory-mirror) address type field)
   (let ((key (list address type field)))
@@ -51,13 +58,24 @@
                                       :chunk-id malloc-id
                                       :start-address malloc-min :length (- malloc-max malloc-min)
                                       :references
-                                      (get-references (malloc-chunk-reftbl-of mirror) malloc-id)))
+                                      (get-references (malloc-chunk-reftbl-of mirror) malloc-id)
+                                      :obj-type
+                                      (awhen (malloc-chunk-types-of mirror)
+                                        (aref it malloc-id))))
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))
 
 (defmethod decode-chunk-reference (memory (context object-memory-mirror) ref target)
   (decode-chunk-reference memory (malloc-chunks-of context) ref target))
+
+(defmethod decode-chunk-reference (memory (context object-memory-mirror) (ref fixnum) target)
+  (multiple-value-bind (start type refs)
+      (call-next-method)
+    (aif (awhen (malloc-chunk-types-of context)
+           (aref it ref))
+         (values start it refs)
+         (values start type refs))))
 
 (defmethod decode-chunk-reference (memory (context object-memory-mirror) (ref static-chunk-ref) target)
   (multiple-value-bind (start type refs)
@@ -76,11 +94,15 @@
        collect
          (multiple-value-bind (start type refs)
              (decode-chunk-reference context context ref (chunk-id-of info))
-           (list (if (typep type 'memory-object-ref)
-                     type
-                     (make-ad-hoc-memory-ref context start type
-                                             :parent :back-refs
-                                             :key (chunk-id-of info)))
+           (list (cond ((typep type 'memory-object-ref)
+                        type)
+                       ((effective-finalized? type)
+                        (make-memory-ref context start type
+                                         :parent :back-refs :key (chunk-id-of info)))
+                       (t
+                        (make-ad-hoc-memory-ref context start type
+                                                :parent :back-refs
+                                                :key (chunk-id-of info))))
                  refs)))))
 
 (defmethod describe-address-in-context append ((it loaded-section) addr)
@@ -91,12 +113,13 @@
 
 (defmethod describe-address-in-context append ((it malloc-chunk-range) addr)
   (list (let ((s (start-address-of it)))
-          (format nil "heap ~A~@[~A~] (~A bytes~@[, ~A refs~])"
+          (format nil "heap ~A~@[~A~] (~A bytes~@[, ~A refs~])~@[: ~A~]"
                   (format-hex-offset s)
                   (when (/= addr s)
                     (format-hex-offset (- addr s)  :force-sign?  t))
                   (format-hex-offset (length-of it))
-                  (aif (references-of it) (length it))))))
+                  (aif (references-of it) (length it))
+                  (aif (obj-type-of it) (public-type-name-of it))))))
 
 (defmethod describe-address-in-context append ((it loaded-region) addr)
   (list (format nil "~A~@[~A~]"
@@ -124,7 +147,8 @@
     (values info r-start r-len)))
 
 (defmethod get-vtable-class-name ((context object-memory-mirror) address)
-  (let* ((vtbl (make-memory-ref context address $glibc:vtable))
+  (let* ((vtbl (make-memory-ref context address
+                                (lookup-type-in-context context $glibc:vtable)))
          (tptr $vtbl.type_info)
          (tinfo (get-address-info-range context tptr))
          (vinfo (get-address-info-range context $vtbl.methods[0])))

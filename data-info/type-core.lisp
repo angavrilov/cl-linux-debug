@@ -68,7 +68,10 @@
   (delegate effective-size-of)
   (delegate effective-alignment-of)
   (delegate effective-tag-of)
-  (delegate effective-has-pointers?))
+  (delegate effective-has-pointers?)
+  (delegate effective-min-offset-of)
+  (delegate effective-max-offset-of)
+  (delegate public-type-name-of))
 
 ;; Misc
 
@@ -146,6 +149,18 @@
       (error "When TYPE-NAME is given, direct fields are not allowed."))
     (lookup-type-reference *type-context* obj (type-name-of obj))))
 
+(defgeneric compute-offset-range (context obj)
+  (:method (context (obj data-item))
+    (values 0 (effective-size-of obj)))
+  (:method (context (obj virtual-compound-item))
+    (multiple-value-bind (min max)
+        (call-next-method)
+      (loop for item in (effective-fields-of obj)
+         for offset = (effective-offset-of item)
+         minimizing (+ offset (effective-min-offset-of item)) into minv
+         maximizing (+ offset (effective-max-offset-of item)) into maxv
+         finally (return (values (min min minv) (max max maxv)))))))
+
 (defgeneric layout-fields (obj fields)
   (:method :before ((obj virtual-compound-item) fields)
     (dolist (field fields)
@@ -192,7 +207,10 @@
           (effective-size-of obj)
           (compute-effective-size *type-context* obj)
           (effective-has-pointers? obj)
-          (compute-effective-has-pointers? *type-context* obj)))
+          (compute-effective-has-pointers? *type-context* obj)
+          (values (effective-min-offset-of obj)
+                  (effective-max-offset-of obj))
+          (compute-offset-range *type-context* obj)))
   (:method :before ((obj virtual-compound-item))
     (let ((fields (compute-effective-fields obj)))
       (setf (effective-fields-of obj) fields)

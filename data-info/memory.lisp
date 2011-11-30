@@ -19,19 +19,6 @@
    (extent-idx nil :reader t)
    (section-idx nil :reader t)))
 
-(defun index-chunks (chunk)
-  (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
-         (cstarts (mapcar #'start-address-of cset)))
-    (cons (make-array (length cset) :element-type 'uint32 :initial-contents cstarts)
-          (coerce cset 'vector))))
-
-(defun lookup-indexed-chunk (index address)
-  (when index
-    (awhen (binsearch-uint32-<= (car index) address)
-      (let ((chunk (svref (cdr index) it)))
-        (when (<= 0 (- address (start-address-of chunk)) (length-of chunk))
-          chunk)))))
-
 (defmethod initialize-instance :after ((mirror memory-mirror) &key)
   (setf (slot-value mirror 'null-extent)
         (make-instance 'memory-extent
@@ -49,8 +36,8 @@
 (defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
   (with-slots (lock extent-idx section-idx null-extent) mirror
     (with-recursive-lock-held (lock)
-      (or (lookup-indexed-chunk extent-idx addr)
-          (lookup-indexed-chunk section-idx addr)
+      (or (lookup-indexed-chunk/uint32 extent-idx addr)
+          (lookup-indexed-chunk/uint32 section-idx addr)
           null-extent))))
 
 (defmethod resolve-extent-for-addr ((ext memory-extent) addr)
@@ -77,6 +64,24 @@
          (bias (start-offset-of ext)))
     (when (<= 0 offset (- (length-of ext) size))
       (values (data-bytes-of ext) (+ offset bias) (- start bias)))))
+
+(defmethod %get-bytes-for-addr/fast-cb ((ext memory-extent))
+  (%get-bytes-for-addr/fast-cb (mirror-of ext)))
+
+(defmethod %get-bytes-for-addr/fast-cb ((mirror memory-mirror))
+  (let ((extent-idx (extent-idx-of mirror))
+        (section-idx (section-idx-of mirror)))
+    (lambda (addr size)
+      (declare (type fixnum size))
+      (multiple-value-bind (ext off sz)
+          (lookup-indexed-chunk/uint32 extent-idx addr)
+        (if (and ext (< size sz))
+            (values (data-bytes-of ext) off)
+            (multiple-value-bind (ext off sz)
+                (lookup-indexed-chunk/uint32 section-idx addr)
+              (if (and ext (< size sz))
+                  (values (data-bytes-of ext) off)
+                  (values nil 0))))))))
 
 ;; Mirror synchronization
 
@@ -133,10 +138,11 @@
                                 (starts-with-subseq "/dev/" it))))
            collect (ensure-memory-extent mirror map))
       (with-slots (extent-idx section-idx) mirror
-        (setf extent-idx (index-chunks it)
-              section-idx (index-chunks (loop for sect in (sections-of (executable-of mirror))
-                                           unless (null (data-bytes-of sect))
-                                           collect (ensure-section-extent mirror sect))))))))
+        (setf extent-idx (index-chunks/uint32 it)
+              section-idx (index-chunks/uint32
+                           (loop for sect in (sections-of (executable-of mirror))
+                              unless (null (data-bytes-of sect))
+                              collect (ensure-section-extent mirror sect))))))))
 
 (def-debug-task do-refresh-mirror (mirror &key save-old-data?)
   (let* ((process (process-of mirror))

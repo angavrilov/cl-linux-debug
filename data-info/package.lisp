@@ -26,6 +26,7 @@
   (:export #:copy-data-definition #:name-with-namespace
            #:auto-code-helpers
            #:name ; to avoid conflict
+           #:public-type-name-of
            ))
 
 (pushnew (find-package :cl-linux-debug.data-defs)
