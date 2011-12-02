@@ -70,6 +70,21 @@
         (tree-view-scroll-to-cell tview lpath (first (tree-view-columns tview)))))
     (first nodes)))
 
+(defun memory-object-tree-ranges (node sv lv)
+  (nconc (awhen (start-address-of node)
+           (unless (and sv (<= 0 (- it sv) (- lv (length-of node))))
+             (setf sv it lv (length-of node))
+             (list (cons sv lv))))
+         (reduce #'nconc
+                 (map 'list (lambda (x) (memory-object-tree-ranges x sv lv))
+                      (children-of node)))))
+
+(defun refresh-memory-object-tree (view)
+  (let ((ranges (memory-object-tree-ranges (tree-root-of view) nil nil)))
+    (print ranges)
+    (refresh-memory-mirror-ranges (memory-of view) ranges)
+    (refresh-node-values (tree-root-of view))))
+
 ;; Callbacks
 
 (defgeneric get-node-menu-items (node)
@@ -137,6 +152,16 @@
     (box-pack-start v-box label :expand nil)
     (box-pack-start v-box scroll :expand t)
     (container-add scroll view)
+    (connect-signal v-box "key-press-event"
+                    (lambda (v ev)
+                      (declare (ignore v))
+                      (when (eq (event-key-type ev) :key-press)
+                        (case (event-key-keyval ev)
+                          (65474 (refresh-memory-object-tree tree))
+                          (otherwise
+                           (format t "~A~%" (event-key-keyval ev)))))
+                      nil))
+    (print (widget-events v-box))
     (flet ((add-column (id title min-width xalign expand? &key weight? expander?)
              (let ((column (make-instance 'tree-view-column :title title
                                           :min-width min-width
@@ -166,7 +191,7 @@
 
 (defmethod initialize-instance :after ((obj memory-object-browser) &key
                                        (width-request 800)
-                                       (height-request 600))
+                                       (height-request 400))
   (construct-memory-object-tree obj width-request height-request))
 
 (defgeneric browse-object-in-new-window (memory ref &key title)

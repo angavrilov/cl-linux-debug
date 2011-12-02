@@ -155,6 +155,23 @@
   (:method ((mirror memory-mirror) &key save-old-data?)
     (call-debug-task #'do-refresh-mirror mirror :save-old-data? save-old-data?)))
 
+;; Partial sync
+
+(def-debug-task do-sync-mirror-ranges (mirror ranges)
+  (let* ((process (process-of mirror)))
+    (with-any-thread-suspended (process thread)
+      (with-recursive-lock-held ((lock-of mirror))
+        (dolist (range ranges)
+          (with-bytes-for-ref (vector offset mirror (cdr range) (car range))
+            (read-process-data thread (car range) vector
+                               :start offset :end (+ offset (cdr range)))))))))
+
+(defgeneric refresh-memory-mirror-ranges (mirror ranges)
+  (:method ((mirror memory-mirror) ranges)
+    (call-debug-task #'do-sync-mirror-ranges mirror ranges)))
+
+;;
+
 (defun make-memory-mirror (process &optional (type 'memory-mirror))
   (let ((mirror (make-instance type :process process)))
     (refresh-memory-mirror mirror)

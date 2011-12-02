@@ -30,6 +30,21 @@
 (defun address- (ref1 ref2)
   (- (start-address-of ref1) (start-address-of ref2)))
 
+(defgeneric value= (ref1 ref2)
+  (:method (a b)
+    (equal a b))
+  (:method ((a null) b) nil)
+  (:method (a (b null)) nil)
+  (:method ((a cons) (b list))
+    (and (= (length a) (length b))
+         (every #'value= a b)))
+  (:method ((a cons) b)
+    (every (lambda (x) (value= x b)) a))
+  (:method (a (b cons))
+    (every (lambda (x) (value= a x)) b))
+  (:method ((a memory-object-ref) (b memory-object-ref))
+    (address= a b)))
+
 (defgeneric adjust-mem-ref-type (type ref)
   (:method (type ref) ref))
 

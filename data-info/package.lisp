@@ -58,7 +58,7 @@
            #:memory-object-ref-parent
            #:memory-object-ref-parent-key
            #:effective-main-type-of
-           #:address= #:address-
+           #:address= #:address- #:value=
            #:format-field-seq
            #:format-ref-value
            #:comment-string-of
@@ -75,6 +75,7 @@
            #:make-memory-mirror
            #:check-refresh-context
            #:refresh-memory-mirror
+           #:refresh-memory-mirror-ranges
            #:get-memory-bytes
            #:get-memory-integer
            #:get-memory-global

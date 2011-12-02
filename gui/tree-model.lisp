@@ -7,6 +7,7 @@
    (store-node :reader t)
    (parent nil :reader t)
    (children (make-array 0 :adjustable t :fill-pointer t) :reader t)
+   (cached-col-values nil :accessor t)
    (expanded? nil :reader t)
    (separator? nil :accessor t)))
 
@@ -32,16 +33,33 @@
     (when parent
       (add-child parent node add-child-index))))
 
+(defun compute-cached-col-values (view node)
+  (setf (cached-col-values-of node)
+        (mapcar (lambda (cb) (funcall cb node))
+                (column-accessors-of view))))
+
 (defgeneric build-node-tree (parent node index)
   (:method ((parent object-node) (node object-node) index)
     (let* ((view (view-of node))
-           (values (mapcar (lambda (cb) (funcall cb node))
-                           (column-accessors-of view))))
+           (values (or (cached-col-values-of node)
+                       (compute-cached-col-values view node))))
       (setf (slot-value node 'store-node)
             (apply #'tree-store-insert-with-values
                    (tree-model-of view) (store-node-of parent) index values))
       (loop for child across (children-of node) and i from 0
          do (build-node-tree node child i)))))
+
+(defgeneric refresh-column-values (node)
+  (:method ((node object-node))
+    (let ((old-values (cached-col-values-of node))
+          (new-values (compute-cached-col-values (view-of node) node))
+          (store (tree-model-of (view-of node))))
+      (unless (equal new-values old-values)
+        (when (slot-boundp node 'store-node)
+          (loop with iter = (store-node-of node)
+             for new in new-values and old in old-values and i from 0
+             unless (equal new old)
+             do (setf (tree-store-value store iter i) new)))))))
 
 (defun build-added-subtree (node child index &key first?)
   (build-node-tree node child index)

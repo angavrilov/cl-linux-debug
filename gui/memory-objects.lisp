@@ -41,6 +41,10 @@
 (defgeneric col-name-weight-of (node)
   (:method ((node memory-object-node)) 400))
 
+(defgeneric refresh-node-values (node)
+  (:method ((node memory-object-node))
+    (map nil #'refresh-node-values (children-of node))))
+
 (def (class* e) memory-object-placeholder-node (memory-object-node)
   ((col-name "Processing..." :accessor t)
    (col-type "" :accessor t)
@@ -61,8 +65,13 @@
   ((ref :reader t)
    (ref-type nil :accessor t)
    (ref-value nil :accessor t)
+   (ref-prev-value nil :accessor t)
    (ref-info nil :accessor t)
    (ref-links nil :accessor t)))
+
+(defmethod col-row-color-of ((node real-memory-object-node))
+  (if (ref-prev-value-of node) "red"
+      (call-next-method)))
 
 (defgeneric evaluate-node-ref (node)
   (:method ((node real-memory-object-node))
@@ -74,6 +83,13 @@
             (ref-links-of node) (get-ref-links ref value)
             (start-address-of node) (start-address-of ref)
             (length-of node) (length-of ref)))))
+
+(defmethod refresh-node-values :before ((node real-memory-object-node))
+  (setf (ref-prev-value-of node) (ref-value-of node))
+  (evaluate-node-ref node)
+  (when (value= (ref-prev-value-of node) (ref-value-of node))
+    (setf (ref-prev-value-of node) nil))
+  (refresh-column-values node))
 
 (defmethod initialize-instance :after ((node real-memory-object-node) &key)
   (evaluate-node-ref node))
@@ -98,12 +114,14 @@
   (ensure-string (format-ref-value (ref-of node) (ref-value-of node))))
 
 (defmethod col-comment-of ((node real-memory-object-node))
-  (format nil "~{~A~%~}~A"
+  (format nil "~{~A~%~}~A~@[~%Old value: ~A~]"
           (ref-info-of node)
           (atypecase (comment-of (effective-main-type-of (ref-of node)))
             (comment (xml::content it))
             (null "No comment specified.")
-            (t it))))
+            (t it))
+          (awhen (ref-prev-value-of node)
+            (format-ref-value (ref-of node) it))))
 
 (defmethod col-info-of ((node real-memory-object-node))
   (format nil "~{~A~^; ~}" (ref-info-of node)))

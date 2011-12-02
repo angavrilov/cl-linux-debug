@@ -139,7 +139,7 @@
 
 (defmethod initialize-instance :after ((obj memory-object-list) &key
                                        (width-request 1000)
-                                       (height-request 600))
+                                       (height-request 400))
   (construct-memory-object-list obj width-request height-request))
 
 (defmethod browse-object-in-new-window (memory (ref list) &key title expand-to-addr)
