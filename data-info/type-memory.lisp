@@ -175,6 +175,9 @@
       (if (eq key '*)
           refs
           ($ refs t))))
+  (:method (type ref (key null))
+    (declare (ignore type))
+    nil)
   (:method (type ref (key (eql t)))
     (declare (ignore type))
     ref)

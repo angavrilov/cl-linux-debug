@@ -46,9 +46,9 @@
   (:method (mirror (address null)) nil)
   (:method (mirror (address memory-object-ref))
     (get-address-object-info mirror (start-address-of address)))
-  (:method ((mirror object-memory-mirror) (address integer))
+  (:method ((mirror object-memory-mirror) (address number))
     (bind (((:values malloc-id malloc-min malloc-max malloc-ok?)
-            (lookup-malloc-object (malloc-chunks-of mirror) address))
+            (lookup-malloc-object (malloc-chunks-of mirror) (floor address)))
            (section (find-section-by-address (executable-of mirror) address))
            (region (find-region-by-address (executable-of mirror) address)))
       (make-instance 'memory-object-info

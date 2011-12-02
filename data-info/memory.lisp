@@ -36,8 +36,8 @@
 (defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
   (with-slots (lock extent-idx section-idx null-extent) mirror
     (with-recursive-lock-held (lock)
-      (or (lookup-indexed-chunk/uint32 extent-idx addr)
-          (lookup-indexed-chunk/uint32 section-idx addr)
+      (or (lookup-indexed-chunk/uint32 extent-idx (floor addr))
+          (lookup-indexed-chunk/uint32 section-idx (floor addr))
           null-extent))))
 
 (defmethod resolve-extent-for-addr ((ext memory-extent) addr)
