@@ -7,6 +7,7 @@
    (processed-types (make-hash-table :test #'equal) :accessor t)
    (last-globals-version 0 :accessor t)
    (processed-globals (make-hash-table :test #'equal) :accessor t)
+   (strong-dep-table (make-hash-table) :accessor t)
    (vtable-class-cache (make-hash-table :test #'equal) :accessor t)
    (data-definition-files nil :accessor t)))
 
@@ -48,17 +49,24 @@
        into result
        finally (return (values result (nconc refuse (mapcan #'cdr aux-groups)))))))
 
+(defmacro tag-attr (tag attr &optional (default nil d-p))
+  `(getf (cdr ,tag) ,attr ,@(if d-p (list default))))
+
 (defgeneric tag-type-tree (type old-copy)
   (:method ((type data-item) (old-copy null))
-    (setf (effective-tag-of type) (cons type nil)))
+    (unless (slot-boundp type 'effective-tag)
+      (setf (effective-tag-of type) (cons type nil))))
   (:method ((type data-item) (old-copy data-item))
-    (aprog1 (effective-tag-of old-copy)
-      (setf (effective-tag-of type) it
-            (car it) type)))
+    (if (slot-boundp type 'effective-tag)
+        (assert (eq (effective-tag-of type) (effective-tag-of old-copy)))
+        (aprog1 (effective-tag-of old-copy)
+          (setf (effective-tag-of type) it
+                (car it) type
+                (cdr it) nil))))
   (:method :around ((type global-type-proxy) old-copy)
     nil)
   (:method :around (type (old-copy global-type-proxy))
-    (tag-type-tree type (effective-main-type-of old-copy)))
+    (tag-type-tree type nil))
   (:method :before ((type container-item) old-copy)
     (tag-type-tree (effective-contained-item-of type)
                    (if (typep old-copy 'container-item)
@@ -74,27 +82,52 @@
 
 (defparameter *cur-ctx-namespace* nil)
 (defparameter *types-in-processing* nil)
-(defparameter *old-processed-types* nil)
-(defparameter *old-processed-globals* nil)
 
-(defun do-layout-in-context (full-name ddef table old-table)
-  (let ((*cur-ctx-namespace* (namespace-by-name full-name)))
+;; When re-processing changed types, hold temporary tables
+(defparameter *new-processed-types* nil)
+(defparameter *new-processed-globals* nil)
+
+(defun do-layout-in-context (full-name ddef work-table old-table dep-table)
+  (let* ((*cur-ctx-namespace* (namespace-by-name full-name))
+         (*strong-ref-table* (make-hash-table))
+         (old-def (if old-table (gethash full-name old-table)))
+         (old-tag (if old-def (effective-tag-of old-def))))
+    ;; Assign the root tag
+    (if (and old-tag (not (typep old-def 'global-type-proxy)))
+        (setf (effective-tag-of ddef) old-tag
+              (car old-tag) ddef)
+        (setf (effective-tag-of ddef) (list ddef)
+              old-tag nil))
+    ;; Layout
     (layout-type-rec ddef)
-    (tag-type-tree ddef (if old-table (gethash full-name old-table)))
-    (when table
-      (setf (gethash full-name table) ddef))
+    ;(effective-size-of ddef) ; ensure strong ref on itself
+    ;; Assign all tags
+    (when old-tag
+      (setf (cdr old-tag) nil)) ; forget attributes
+    (tag-type-tree ddef old-def)
+    ;; Update tables
+    (when old-table
+      (setf (gethash full-name old-table) ddef)
+      (unless (eq work-table old-table)
+        (setf (gethash full-name work-table) ddef))
+      (when dep-table
+        (setf (gethash ddef dep-table) (hash-table-keys *strong-ref-table*))
+        (remhash old-def dep-table)))
     ddef))
 
 (defmethod lookup-type-reference ((context type-context) obj name)
   (let ((full-name (name-with-namespace name *cur-ctx-namespace*))
-        (table (processed-types-of context)))
+        (table (or *new-processed-types*
+                   (processed-types-of context))))
     (or (gethash full-name table)
         (assoc-value *types-in-processing* full-name :test #'equal)
         (awhen (assoc-value *known-types* full-name :test #'equal)
           (aprog1 (copy-data-definition it)
             (let ((*types-in-processing*
                    (list* (cons full-name it) *types-in-processing*)))
-              (do-layout-in-context full-name it table *old-processed-types*))))
+              (do-layout-in-context full-name it
+                                    table (processed-types-of context)
+                                    (strong-dep-table-of context)))))
         (call-next-method))))
 
 (defmethod lookup-type-in-context ((context type-context) type-name)
@@ -103,15 +136,17 @@
     (lookup-type-reference context nil type-name)))
 
 (defmethod layout-ad-hoc-in-context ((context type-context) type-tree)
-  (do-layout-in-context nil type-tree nil nil))
+  (do-layout-in-context nil type-tree nil nil nil))
 
 (defmethod lookup-global-in-context ((context type-context) full-name)
   (let ((*cur-ctx-namespace* (namespace-by-name full-name))
-        (table (processed-globals-of context)))
+        (table (or *new-processed-globals*
+                   (processed-globals-of context))))
     (or (gethash full-name table)
         (awhen (assoc-value *known-globals* full-name :test #'equal)
           (do-layout-in-context full-name (copy-data-definition it)
-                                table *old-processed-globals*))
+                                table (processed-globals-of context)
+                                (strong-dep-table-of context)))
         (error "No such global: ~A" (get-$-field-name full-name)))))
 
 (defgeneric get-vtable-class-name (context address))
@@ -124,6 +159,30 @@
                            (assoc-value *known-classes* it :test #'equal))
                 (lookup-type-in-context context it))))))
 
+(defun compute-stable-subset (obj-list dep-table)
+  (let ((ssubset (make-hash-table))
+        (changed? t))
+    (loop while changed?
+       do (setf changed? nil)
+       do (loop for obj in obj-list
+             when (and (not (gethash obj ssubset))
+                       (loop for d in (gethash obj dep-table)
+                          always (gethash d ssubset)))
+             do (setf (gethash obj ssubset) t
+                      changed? t)))
+    ssubset))
+
+(defun same-pairs (hash assoc)
+  (loop for name being the hash-keys of hash using (hash-value def)
+     when (eq (copy-origin-of def) (assoc-value assoc name :test #'equal))
+     collect def))
+
+(defun copy-stable (hash old-hash stable-map)
+  (loop for name being the hash-keys of old-hash using (hash-value def)
+     do (if (gethash def stable-map)
+            (setf (gethash name hash) def)
+            (format t "Would update ~A~%" (get-$-field-name name)))))
+
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
     (reload-data-definitions context)
@@ -132,23 +191,33 @@
       (call-next-method)
       t))
   (:method ((context type-context))
-    ;; Check types
-    (when (< (last-types-version-of context) *known-types-version*)
-      (let ((*old-processed-types* (processed-types-of context)))
-        (setf (processed-types-of context) (make-hash-table :test #'equal))
-        (loop for name being the hash-keys in *old-processed-types*
-           do (with-simple-restart (continue "Skip this type")
-                (lookup-type-in-context context name))))
-      (setf (last-types-version-of context) *known-types-version*)
-      (clrhash (vtable-class-cache-of context)))
-    ;; Check globals
-    (when (< (last-globals-version-of context) *known-globals-version*)
-      (let ((*old-processed-globals* (processed-globals-of context)))
-        (setf (processed-globals-of context) (make-hash-table :test #'equal))
-        (loop for name being the hash-keys in *old-processed-globals*
-           do (with-simple-restart (continue "Skip this global")
-                (lookup-global-in-context context name))))
-      (setf (last-globals-version-of context) *known-globals-version*))))
+    (let* ((same-objs (nconc (same-pairs (processed-types-of context) *known-types*)
+                             (same-pairs (processed-globals-of context) *known-globals*)))
+           (ssubset (compute-stable-subset same-objs (strong-dep-table-of context)))
+           (changed? nil))
+      ;; Check types
+      (let ((*new-processed-types* (make-hash-table :test #'equal))
+            (types (processed-types-of context)))
+        (copy-stable *new-processed-types* types ssubset)
+        (loop for name being the hash-keys in types
+           unless (gethash name *new-processed-types*)
+           do (with-simple-restart (continue "Skip type ~A" name)
+                (setf changed? t)
+                (lookup-type-in-context context name)))
+        (setf (last-types-version-of context) *known-types-version*))
+      ;; Check globals
+      (let ((*new-processed-globals* (make-hash-table :test #'equal))
+            (globals (processed-globals-of context)))
+        (copy-stable *new-processed-globals* globals ssubset)
+        (loop for name being the hash-keys in globals
+           unless (gethash name *new-processed-globals*)
+           do (with-simple-restart (continue "Skip global ~A" name)
+                (setf changed? t)
+                (lookup-global-in-context context name)))
+        (setf (last-globals-version-of context) *known-globals-version*))
+      ;; Finalize
+      (when changed?
+        (clrhash (vtable-class-cache-of context))))))
 
 (defun load-data-definition (path)
   (let ((*package* (find-package :cl-linux-debug.data-xml)))

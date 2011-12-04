@@ -46,28 +46,38 @@
 ;; Proxy
 
 (def (class* eas) global-type-proxy (data-field concrete-item)
-  ((type-name nil :accessor t :type $-keyword-namespace)
-   (effective-main-type :accessor t))
+  ((type-name nil :accessor t :type $-keyword-namespace))
   (:documentation "A proxy type object; used to stand in for global types as fields."))
 
-(defmethod effective-main-type-of ((obj data-item)) obj)
+(defgeneric effective-main-type-of (obj)
+  (:method ((obj data-item)) obj)
+  (:method ((obj global-type-proxy))
+    (car (effective-tag-of obj))))
 
 (defmethod initialize-instance :after ((type global-type-proxy) &key effective-main-type)
   (when effective-main-type
+    (setf (effective-tag-of type) (effective-tag-of effective-main-type))
     (setf (type-name-of type) (type-name-of effective-main-type))))
 
 (defmethod copy-data-definition ((type global-type-proxy))
   (aprog1 (call-next-method)
-    (setf (effective-main-type-of it) (effective-main-type-of type))))
+    (setf (effective-tag-of it) (effective-tag-of type))))
+
+(defparameter *strong-ref-table* nil)
+
+(declaim (inline verify-finalized))
+(defun verify-finalized (type ref)
+  (assert (and type (effective-finalized? type)))
+  (awhen *strong-ref-table*
+    (pushnew ref (gethash type *strong-ref-table*))))
 
 (macrolet ((delegate (name)
              `(defmethod ,name ((proxy global-type-proxy))
                 (let ((base (effective-main-type-of proxy)))
-                  (assert (and base (effective-finalized? base)))
+                  (verify-finalized base proxy)
                   (,name base)))))
   (delegate effective-size-of)
   (delegate effective-alignment-of)
-  (delegate effective-tag-of)
   (delegate effective-has-pointers?)
   (delegate effective-min-offset-of)
   (delegate effective-max-offset-of)
@@ -223,7 +233,10 @@
          (progn
            (unless (and (null (size-of obj)) (null (alignment-of obj)))
              (error "COMPOUND with a TYPE-NAME can't have size."))
-           (change-class obj 'global-type-proxy :effective-main-type it
+           (unless (typep it '(and global-type-definition struct-compound-item))
+             (error "COMPOUND can only refer to global struct types"))
+           (change-class obj 'global-type-proxy
+                         :effective-tag (effective-tag-of it)
                          :effective-finalized? t))
          (call-next-method)))
   (:method :after ((obj code-helper-mixin))
