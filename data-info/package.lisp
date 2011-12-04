@@ -87,6 +87,7 @@
            #:get-address-info-range
            #:guess-types-by-data
            #:load-data-definition
+           #:register-data-definition
            #:find-stl-strings
            ))
 

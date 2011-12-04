@@ -238,19 +238,28 @@
   (let ((elt (effective-contained-item-of obj)))
     (setf (effective-element-size-of obj) (effective-size-of elt))))
 
+(defun add-if-changed (table-sym cnt-sym name type)
+  (let ((xml-fmt (format nil "~A" type))
+        (old-obj (assoc-value (symbol-value table-sym) name :test #'equal)))
+    (if (and old-obj (equal (effective-xml-form-of old-obj) xml-fmt))
+        old-obj
+        (prog1
+            (setf (assoc-value (symbol-value table-sym) name :test #'equal) type)
+          (setf (effective-xml-form-of type) xml-fmt)
+          (incf (symbol-value cnt-sym))))))
+
 (defmethod read-return-value ((defs data-definition))
   (flet ((with-namespace (name)
            (name-with-namespace name (namespace-of defs))))
     (awhen (global-type-definitions-of defs)
-      (incf *known-types-version*)
       (dolist (type it)
-        (let ((name (with-namespace (type-name-of type))))
-          (setf (assoc-value *known-types* name :test #'equal) type)
+        (let* ((name (with-namespace (type-name-of type))))
+          (add-if-changed '*known-types* '*known-types-version* name type)
           (awhen (and (typep type 'class-type)
                       (mangled-name-of type))
             (setf (assoc-value *known-classes* it :test #'equal) name)))))
     (awhen (global-objects-of defs)
-      (incf *known-globals-version*)
       (dolist (type it)
-        (setf (assoc-value *known-globals* (with-namespace (name-of type)) :test #'equal) type))))
+        (add-if-changed '*known-globals* '*known-globals-version*
+                        (with-namespace (name-of type)) type))))
   (values `(read-return-value ,defs) defs))

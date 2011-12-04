@@ -251,7 +251,8 @@
 ;; Global entity definition
 
 (def (class* eas) global-type-definition (data-item code-helper-mixin)
-  ((type-name nil :accessor t :type $-keyword))
+  ((type-name nil :accessor t :type $-keyword)
+   (effective-xml-form nil :accessor t))
   (:documentation "An abstract global entity definition."))
 
 (defmethod name-of ((type global-type-definition))
@@ -284,7 +285,7 @@
           (format nil "~A~A" (length (mangled-name-of type)) (mangled-name-of type)))))
 
 (def (class* eas) global-object (compound)
-  ()
+  ((effective-xml-form nil :accessor t))
   (:documentation "A global variable definition."))
 
 (defmethod read-return-value :after ((type global-object))

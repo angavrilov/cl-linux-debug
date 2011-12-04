@@ -7,7 +7,8 @@
    (processed-types (make-hash-table :test #'equal) :accessor t)
    (last-globals-version 0 :accessor t)
    (processed-globals (make-hash-table :test #'equal) :accessor t)
-   (vtable-class-cache (make-hash-table :test #'equal) :accessor t)))
+   (vtable-class-cache (make-hash-table :test #'equal) :accessor t)
+   (data-definition-files nil :accessor t)))
 
 (defmethod get-context-of-memory ((context type-context)) context)
 
@@ -125,6 +126,7 @@
 
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
+    (reload-data-definitions context)
     (when (or (< (last-types-version-of context) *known-types-version*)
               (< (last-globals-version-of context) *known-globals-version*))
       (call-next-method)
@@ -151,3 +153,27 @@
 (defun load-data-definition (path)
   (let ((*package* (find-package :cl-linux-debug.data-xml)))
     (load path)))
+
+(defun reload-data-definitions (context)
+  (loop for rec in (data-definition-files-of context)
+     for (path . date) = rec
+     do (loop
+           for cur-date = (file-write-date path)
+           while (> cur-date date)
+           do (setf (cdr rec) cur-date)
+           do (restart-case
+                  (progn
+                    (format t "Loading ~A...~%" path)
+                    (load-data-definition path)
+                    (return))
+                (retry () :report (lambda (s) (format s "Retry loading ~A" path)))
+                (abort () :report (lambda (s) (format s "Abort loading ~A" path))
+                       (return))))))
+
+(defun register-data-definition (context path)
+  (let ((cur-date (file-write-date path)))
+    (unless cur-date
+      (error "Could not find file: ~A" path))
+    (unless (find path (data-definition-files-of context) :key #'car :test #'equal)
+      (push (cons path cur-date) (data-definition-files-of context))
+      (load-data-definition path))))
