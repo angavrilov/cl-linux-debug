@@ -36,7 +36,6 @@
    (effective-finalized? nil :accessor t)
    (effective-has-pointers? :accessor t)
    (effective-tag :accessor t)
-   (effective-pointer-walker nil :accessor t)
    (effective-min-offset :accessor t)
    (effective-max-offset :accessor t))
   (:documentation "An abstract base class for all type items."))

@@ -217,23 +217,6 @@
 
 ;; Ptr walker
 
-(defgeneric walk-reference-by-type (type ref report-cb)
-  (:method :around ((type data-item) ref report-cb)
-    (when (effective-has-pointers? type)
-      (call-next-method)))
-  (:method :around ((type global-type-proxy) ref report-cb)
-    (walk-reference-by-type (effective-main-type-of type) ref report-cb))
-  (:method ((type data-item) ref report-cb)
-    nil)
-  (:method ((type primitive-field) ref report-cb)
-    nil))
-
-(declaim (inline walk-reference))
-(defun walk-reference (ref report-cb)
-  (let ((type (memory-object-ref-type ref)))
-    (when (effective-has-pointers? type)
-      (walk-reference-by-type type ref report-cb))))
-
 (defstruct ptr-walker-ctx
   memory root-ptr report-cb
   vector base size (min-offset 0) (max-offset 0))
@@ -258,9 +241,7 @@
                                                   walker-ctx)
        when code collect code into items
        finally (when items
-                 (return `(progn ,@items)))))
-  (:method (context (node container-item) offset ctx)
-    (assert nil)))
+                 (return `(progn ,@items))))))
 
 (defmacro with-walker-ctx ((memory ptr report-cb node ctx-var &key (size-gap 0)) &body code)
   (with-unique-names (vector base min-o max-o)
@@ -299,11 +280,13 @@
                       #+sbcl (sb-ext:muffle-conditions sb-ext:compiler-note))
              ,n-code)))))
 
-(defun get-effective-pointer-walker (context node)
-  (or (effective-pointer-walker-of node)
-      (aprog1
-          (setf (effective-pointer-walker-of node) (cons node nil))
-        (setf (cdr it)
-              (aif (compile-effective-pointer-walker context node)
-                   (compile nil it)
-                   nil)))))
+(defun call-pointer-walker (context memory addr tag report-cb)
+  (declare (optimize (speed 3)))
+  (let* ((none '#:none)
+         (walker (tag-attr tag 'pointer-walker none)))
+    (when (eq walker none)
+      (setf walker (awhen (compile-effective-pointer-walker context (car tag))
+                     (compile nil it))
+            (tag-attr tag 'pointer-walker) walker))
+    (when walker
+      (funcall (the function walker) memory addr report-cb))))

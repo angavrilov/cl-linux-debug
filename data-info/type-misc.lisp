@@ -182,19 +182,11 @@
                  (get-context-of-memory ref) (start-address-of value))
                 (list "unknown area")))))
 
-(defmethod walk-reference-by-type ((type pointer) ref report-cb)
-  (with-bytes-for-ref (vector offset ref 4)
-    (let ((it (parse-int vector offset 4)))
-      (unless (= it 0)
-        (funcall report-cb it (effective-contained-item-of type) ref t)))))
-
 (defmethod build-effective-pointer-walker (context (node pointer) offset ctx)
   `(let ((ptr ,(access-walker-int ctx offset 4)))
      (when (/= ptr 0)
        (funcall ,(ptr-walker-ctx-report-cb ctx) ptr
-                ',(get-effective-pointer-walker
-                   context (effective-contained-item-of node))
-                nil t))))
+                ',(effective-tag-of (effective-contained-item-of node))))))
 
 ;; Strings
 
@@ -280,7 +272,7 @@
 
 (defgeneric build-set-array-base-dimensions (context node offset ctx ptr-var cnt-var))
 
-(defun %walk-pointer-array (memory ptr cnt elt-type report-cb &optional parent)
+(defun %walk-pointer-array (memory ptr cnt elt-tag report-cb)
   (declare (type fixnum cnt)
            (type function memory report-cb))
   (when (> cnt 0)
@@ -296,21 +288,7 @@
                for pv of-type uint32 = (get-int p 4)
                when (/= pv 0)
                do (locally (declare (optimize (speed 1)))
-                    (funcall report-cb pv elt-type parent i)))))))))
-
-(defmethod walk-reference-by-type ((type array-item) ref report-cb)
-  (multiple-value-bind (first size step)
-      (array-item-ref type ref 0)
-    (when first
-      (let ((elt-type (memory-object-ref-type first)))
-        (if (typep elt-type 'pointer)
-            (%walk-pointer-array (memory-object-ref-memory first)
-                                 (memory-object-ref-address first)
-                                 size (effective-contained-item-of elt-type)
-                                 report-cb ref)
-            (loop
-               for i from 0 below (min 100000 size)
-               do (walk-reference (offset-memory-reference first i step) report-cb)))))))
+                    (funcall report-cb pv elt-tag)))))))))
 
 (defmethod build-effective-pointer-walker (context (node array-item) offset ctx)
   (with-unique-names (a-ptr a-cnt a-idx)
@@ -321,8 +299,7 @@
            (core
             (if (typep elt-type 'pointer)
                 `(%walk-pointer-array ,memory ,a-ptr ,a-cnt
-                                      ',(get-effective-pointer-walker
-                                         context (effective-contained-item-of elt-type))
+                                      ',(effective-tag-of (effective-contained-item-of elt-type))
                                       ,report-cb)
                 (with-walker-ctx (memory a-ptr report-cb elt-type a-ctx
                                          :size-gap `(* ,e-size (1- ,a-cnt)))
@@ -425,11 +402,6 @@
 
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '*)))
   (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
-
-(defmethod walk-reference-by-type ((type virtual-compound-item) ref report-cb)
-  (loop for field in (effective-fields-of type)
-     when (effective-has-pointers? field)
-     do (walk-reference (make-field-ref ref field) report-cb)))
 
 ;; Class
 

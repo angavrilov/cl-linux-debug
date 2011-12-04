@@ -85,6 +85,9 @@
 
 ;; Misc
 
+(defmacro tag-attr (tag attr &optional (default nil d-p))
+  `(getf (cdr ,tag) ,attr ,@(if d-p (list default))))
+
 (defgeneric type-field-sequence (type)
   (:method ((obj data-item))
     (aif (name-of obj) (list it)))

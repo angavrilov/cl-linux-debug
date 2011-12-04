@@ -61,7 +61,7 @@
                                       (get-references (malloc-chunk-reftbl-of mirror) malloc-id)
                                       :obj-type
                                       (awhen (malloc-chunk-types-of mirror)
-                                        (aref it malloc-id))))
+                                        (car (aref it malloc-id)))))
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))
@@ -73,7 +73,7 @@
   (multiple-value-bind (start type refs)
       (call-next-method)
     (aif (awhen (malloc-chunk-types-of context)
-           (aref it ref))
+           (car (aref it ref)))
          (values start it refs)
          (values start type refs))))
 

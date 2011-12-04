@@ -49,9 +49,6 @@
        into result
        finally (return (values result (nconc refuse (mapcan #'cdr aux-groups)))))))
 
-(defmacro tag-attr (tag attr &optional (default nil d-p))
-  `(getf (cdr ,tag) ,attr ,@(if d-p (list default))))
-
 (defgeneric tag-type-tree (type old-copy)
   (:method ((type data-item) (old-copy null))
     (unless (slot-boundp type 'effective-tag)
