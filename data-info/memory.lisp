@@ -147,9 +147,9 @@
 (def-debug-task do-refresh-mirror (mirror &key save-old-data?)
   (let* ((process (process-of mirror))
          (mappings (process-memory-maps process)))
-    (with-any-thread-suspended (process thread)
+    (with-threads-suspended (process :all)
       (dolist (ext (sync-mirror-to-mappings mirror mappings :save-old-data? save-old-data?))
-        (read-process-data thread (start-address-of ext) (data-bytes-of ext))))))
+        (read-process-data process (start-address-of ext) (data-bytes-of ext))))))
 
 (defgeneric refresh-memory-mirror (mirror &key)
   (:method ((mirror memory-mirror) &key save-old-data?)
@@ -159,11 +159,11 @@
 
 (def-debug-task do-sync-mirror-ranges (mirror ranges)
   (let* ((process (process-of mirror)))
-    (with-any-thread-suspended (process thread)
+    (with-threads-suspended (process :all)
       (with-recursive-lock-held ((lock-of mirror))
         (dolist (range ranges)
           (with-bytes-for-ref (vector offset mirror (cdr range) (car range))
-            (read-process-data thread (car range) vector
+            (read-process-data process (car range) vector
                                :start offset :end (+ offset (cdr range)))))))))
 
 (defgeneric refresh-memory-mirror-ranges (mirror ranges)

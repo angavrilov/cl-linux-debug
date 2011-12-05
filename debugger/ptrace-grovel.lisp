@@ -9,6 +9,7 @@
 (include "sys/types.h")
 (include "sys/user.h")
 (include "sys/mman.h")
+(include "sys/wait.h")
 
 ;; Signals
 
@@ -25,6 +26,9 @@
 (constant (CLD_CONTINUED "CLD_CONTINUED"))
 
 (constant (WNOHANG "WNOHANG"))
+(constant (WEXITED "WEXITED"))
+(constant (WSTOPPED "WSTOPPED"))
+(constant (__WALL "__WALL"))
 
 (constant (SIGTRAP "SIGTRAP"))
 (constant (SIGSTOP "SIGSTOP"))

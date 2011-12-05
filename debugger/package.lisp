@@ -28,6 +28,7 @@
            #:def-debug-task #:call-debug-task
            #:process-memory-maps
            #:with-thread-suspended
+           #:with-threads-suspended
            #:with-any-thread-suspended
            #:read-process-data
            #:*debugged-processes*

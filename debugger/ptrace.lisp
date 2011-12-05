@@ -27,7 +27,24 @@
   (options :int))
 
 (defun wait-pending? (process)
-  (= (waitpid process (null-pointer) WNOHANG) process))
+  (= (waitpid process (null-pointer) (logior WNOHANG __WALL)) process))
+
+(defun wait-for-process (pid)
+  (with-foreign-object (status :int)
+    (let ((rv (with-errno (waitpid pid status (logior WNOHANG __WALL)))))
+      (when (> rv 0)
+        (let* ((sv (mem-ref status :int))
+               (sig (logand sv #x7F))
+               (core? (logtest sv #x80))
+               (code (logand (ash sv -8) #xFF)))
+          (cond ((= sv #xFFFF)
+                 (values rv 0 CLD_CONTINUED))
+                ((= sig 0)
+                 (values rv code CLD_EXITED))
+                ((= sig #x7F)
+                 (values rv code (if (= code SIGTRAP) CLD_TRAPPED CLD_STOPPED)))
+                (t
+                 (values rv sig (if core? CLD_DUMPED CLD_KILLED)))))))))
 
 (defcfun "syscall" :int
   (id :int)
@@ -38,20 +55,41 @@
 (defun kill-thread (process thread signal)
   (with-errno (syscall SYS_tgkill process thread signal)))
 
-(defvar *sigchld-lock* (bordeaux-threads:make-lock "SIGCHLD LOCK"))
+(defvar *sigchld-lock* (bordeaux-threads:make-recursive-lock "SIGCHLD LOCK"))
 (defvar *sigchld-callbacks* (make-hash-table :test #'eql))
+(defvar *sigchld-notify* (bt:make-condition-variable :name "SIGCHLD"))
+(defvar *sigchld-check-thread* nil)
+
+(defun sigchld-check-thread ()
+  (let ((changed? nil))
+    (loop
+       (loop for (cb pid status code) in
+            (bt:with-recursive-lock-held (*sigchld-lock*)
+              (if changed?
+                  (setf changed? nil)
+                  (bt:condition-wait *sigchld-notify* *sigchld-lock*))
+              (loop for try-pid being the hash-keys of *sigchld-callbacks*
+                 when (multiple-value-bind (pid status code)
+                          (wait-for-process try-pid)
+                        (when pid
+                          (list (gethash pid *sigchld-callbacks*)
+                                pid status code)))
+                 collect it))
+          do (when cb
+               (setf changed? t)
+               (funcall cb pid status code))))))
 
 (defun sigchld-handler (signal info context)
-  (with-foreign-slots ((si_pid si_status si_code) info siginfo_t)
-    (awhen (with-lock-held (*sigchld-lock*)
-             (gethash si_pid *sigchld-callbacks*))
-      (funcall it si_pid si_status si_code)))
+  (bt:condition-notify *sigchld-notify*)
   (sb-unix::sigchld-handler signal info context))
 
 (sb-unix::enable-interrupt sb-unix::sigchld #'sigchld-handler)
 
 (defun set-sigchld-handler (process-id callback &key allow-overwrite?)
-  (with-lock-held (*sigchld-lock*)
+  (with-recursive-lock-held (*sigchld-lock*)
+    (unless (aand *sigchld-check-thread* (bt:thread-alive-p it))
+      (setf *sigchld-check-thread*
+            (make-thread #'sigchld-check-thread :name "SIGCHLD LOOP")))
     (if callback
         (progn
           (when (and (not allow-overwrite?)

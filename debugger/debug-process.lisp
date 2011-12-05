@@ -6,28 +6,34 @@
 
 (defvar *debug-process-lock* (make-recursive-lock "DEBUG-PROCESS LOCK"))
 (defvar *debug-worker-thread* nil)
+
 (defvar *debug-event-channel* (make-instance 'unbounded-channel))
 (defvar *debug-task-scheduler* (make-instance 'debug-task-scheduler :name "DEBUG"))
 
 (defvar *debugged-processes* nil)
 
-(defun debug-worker-thread ()
+(defun debug-worker-thread (channel)
   "The thread that executes all ptrace requests for the debugger."
   (catch 'quit-worker-thread
     (loop
-       (let ((message (recv *debug-event-channel*)))
+       (let ((message (recv channel)))
          (with-recursive-lock-held (*debug-process-lock*)
            (with-simple-restart (abort "Abort executing ~S" message)
              (apply (first message) (rest message))))
          (format t "Handled ~S~%" message)))))
 
-(defun %submit-debug-command (command &rest args)
-  (when (null *debug-worker-thread*)
-    (setf *debug-worker-thread*
-          (make-thread #'debug-worker-thread
-                       :name "DEBUG-PROCESS WORKER"
+(defun start-worker-thread (var channel name)
+  (let ((val (symbol-value var)))
+    (when (or (null val)
+              (not (bordeaux-threads:thread-alive-p val)))
+    (setf (symbol-value var)
+          (make-thread (lambda () (debug-worker-thread channel))
+                       :name name
                        :initial-bindings `((*standard-output* . ,*standard-output*)
-                                           (*error-output* . ,*error-output*)))))
+                                           (*error-output* . ,*error-output*)))))))
+
+(defun %submit-debug-command (command &rest args)
+  (start-worker-thread '*debug-worker-thread* *debug-event-channel* "DEBUG-WORKER-THREAD")
   (send *debug-event-channel* (list* command args)))
 
 (defun run-scheduled-debug-tasks ()
@@ -64,41 +70,42 @@
 
 ;; SIGCHLD event dispatch
 
+(defun %handle-debug-sigchld (thread pid status code)
+  (unless (= pid (thread-id-of thread))
+    (format t "PID mismatch: ~A != ~A" pid (thread-id-of thread)))
+  (awhen (case code
+           (#.CLD_EXITED
+            (make-instance 'debug-thread-state-exited
+                           :thread thread
+                           :return-code status))
+           ((#.CLD_KILLED #.CLD_DUMPED)
+            (make-instance 'debug-thread-state-killed
+                           :thread thread
+                           :signal-id status
+                           :dumped? (= code CLD_DUMPED)))
+           ((#.CLD_TRAPPED #.CLD_STOPPED)
+            (case (logand status #xFF)
+              (#.SIGTRAP
+               (make-instance 'debug-thread-state-trapped
+                              :thread thread
+                              :ptrace-event
+                              (foreign-enum-keyword
+                               'ptrace-event (ash status -8) :errorp nil)))
+              (#.SIGSTOP
+               (make-instance 'debug-thread-state-paused :thread thread))
+              (otherwise
+               (make-instance 'debug-thread-state-signalled
+                              :thread thread :signal-id status)))))
+    (when (typep it 'debug-thread-state-dead)
+      (set-sigchld-handler pid nil))
+    (with-recursive-lock-held (*debug-process-lock*)
+      (setf (slot-value thread 'pending-state) it)
+      (%submit-debug-command 'process-thread-state-change thread it))))
+
 (defun %register-debug-chld-handler (thread)
-  (flet ((thread-chld-handler (pid status code)
-           (unless (= pid (thread-id-of thread))
-             (format t "PID mismatch: ~A != ~A" pid (thread-id-of thread)))
-           (unless (wait-pending? pid)
-             (format t "SIGCHLD without pending wait: ~A" pid))
-           (awhen (case code
-                    (#.CLD_EXITED
-                     (make-instance 'debug-thread-state-exited
-                                    :thread thread
-                                    :return-code status))
-                    ((#.CLD_KILLED #.CLD_DUMPED)
-                     (make-instance 'debug-thread-state-killed
-                                    :thread thread
-                                    :signal-id status
-                                    :dumped? (= code CLD_DUMPED)))
-                    ((#.CLD_TRAPPED #.CLD_STOPPED)
-                     (case (logand status #xFF)
-                       (#.SIGTRAP
-                        (make-instance 'debug-thread-state-trapped
-                                       :thread thread
-                                       :ptrace-event
-                                       (foreign-enum-keyword
-                                        'ptrace-event (ash status -8) :errorp nil)))
-                       (#.SIGSTOP
-                        (make-instance 'debug-thread-state-paused :thread thread))
-                       (otherwise
-                        (make-instance 'debug-thread-state-signalled
-                                       :thread thread :signal-id status)))))
-             (when (typep it 'debug-thread-state-dead)
-               (set-sigchld-handler pid nil))
-             (with-recursive-lock-held (*debug-process-lock*)
-               (setf (slot-value thread 'pending-state) it)
-               (%submit-debug-command 'process-thread-state-change thread it)))))
-    (set-sigchld-handler (thread-id-of thread) #'thread-chld-handler)))
+  (set-sigchld-handler (thread-id-of thread)
+                       (lambda (pid status code)
+                         (%handle-debug-sigchld thread pid status code))))
 
 (defun %add-debug-thread (process thread-id &key initial-state)
   (assert (not (member thread-id (threads-of process) :key #'thread-id-of)))
@@ -184,6 +191,7 @@
           (setf (slot-value new-state 'register-values) regs
                 (slot-value thread 'register-values) regs)))
       ;; Deliver the state change
+      (format t "Assigned state ~S to ~S~%" new-state thread)
       (%set-thread-state thread new-state)
       (setf (slot-value process 'last-changed-thread) thread)
       ;; Wake up tasks
