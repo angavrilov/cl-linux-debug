@@ -63,6 +63,9 @@
 
 ;; Binary data parsing
 
+(defun make-byte-vector (size)
+  (make-array size :element-type 'uint8))
+
 (defun parse-int (vector start size-bytes &key signed? &aux (result 0))
   (declare (type (vector uint8) vector))
   (loop for i from 0 below size-bytes

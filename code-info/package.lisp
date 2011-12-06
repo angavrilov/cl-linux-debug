@@ -8,6 +8,7 @@
         :anaphora :metabang-bind
         :hu.dwim.def
         :hu.dwim.defclass-star
+        :com.gigamonkeys.binary-data
         :elf :trees
         :cl-ppcre)
   (:shadow #:parse-string)
@@ -39,4 +40,5 @@
            #:with-unsafe-int-read
            #:with-binsearch-in-array
            #:binsearch-generic #:binsearch-uint32-< #:binsearch-uint32-<=
+           #:make-byte-vector
            ))

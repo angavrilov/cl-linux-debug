@@ -30,7 +30,9 @@
                              (:file "dwarf" :depends-on ("package" "utils"))
                              (:file "classes" :depends-on ("package" "dwarf"))
                              (:file "symbols" :depends-on ("classes" "bea-engine"))
-                             (:file "executable" :depends-on ("classes" "symbols"))))
+                             (:file "elf" :depends-on ("classes" "symbols"))
+                             (:file "exe" :depends-on ("classes" "symbols"))
+                             (:file "executable" :depends-on ("classes" "elf" "exe"))))
                (:module
                 "debugger"
                 :depends-on ("code-info")

@@ -66,9 +66,6 @@
 
 (def (class* e) image-section (data-chunk)
   ((image :reader t)
-   (elf-section :reader t)
-   (elf-type :reader t)
-   (linked-elf :reader t)
    (file-offset :reader t)
    (section-name :reader t)
    (loaded? :reader t)
@@ -89,11 +86,36 @@
 
 (def (class* e) executable-image (section-set)
   ((path :reader t)
-   (elf-data :reader t)
    (entry-address :reader t)
    (shared-lib? :reader t)
    (region-map (make-chunk-table) :reader t)
    (region-name-map (make-hash-table :test #'equal) :reader t)))
+
+(defun set-executable-sections (exec sections)
+  (setf (slot-value exec 'sections) sections)
+  (dolist (section sections)
+    (when (start-address-of section)
+      (insert section (section-map-of exec)))))
+
+;; ELF
+
+(def (class* e) elf-image-section (image-section)
+  ((elf-section :reader t)
+   (elf-type :reader t)
+   (linked-elf :reader t)))
+
+(def (class* e) elf-executable-image (executable-image)
+  ((elf-data :reader t)))
+
+;; PE
+
+(def (class* e) pe-image-section (image-section)
+  ((header :reader t)))
+
+(def (class* e) pe-executable-image (executable-image)
+  ((dos-header :reader t)
+   (win-header :reader t)
+   (aux-header :reader t)))
 
 ;; Region data
 
@@ -165,6 +187,8 @@
   ((main-image nil :reader t)
    (all-images nil :accessor t)
    (function-map (make-chunk-table) :reader t)))
+
+(defgeneric detect-image-relocation (image executable mappings))
 
 ;;
 
