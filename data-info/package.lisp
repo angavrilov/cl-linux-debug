@@ -89,6 +89,7 @@
            #:load-data-definition
            #:register-data-definition
            #:find-stl-strings
+           #:os-type-of
            ))
 
 (pushnew (find-package :cl-linux-debug.data-info)

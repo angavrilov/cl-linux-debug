@@ -9,7 +9,8 @@
    (processed-globals (make-hash-table :test #'equal) :accessor t)
    (strong-dep-table (make-hash-table) :accessor t)
    (vtable-class-cache (make-hash-table :test #'equal) :accessor t)
-   (data-definition-files nil :accessor t)))
+   (data-definition-files nil :accessor t)
+   (os-type $linux :accessor t)))
 
 (defmethod get-context-of-memory ((context type-context)) context)
 

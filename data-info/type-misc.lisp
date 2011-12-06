@@ -207,6 +207,31 @@
 (defmethod format-ref-value-by-type ((type string-field) ref (value string))
   (format nil "~S" value))
 
+(defmethod xml:xml-tag-name-symbol ((str stl-string)) 'stl-string)
+
+(def (class* eas) stl-string/linux (stl-string ptr-string)
+  ())
+
+(def (class* eas) stl-string/windows (stl-string)
+  ())
+
+(defmethod layout-type-rec :before ((str stl-string))
+  (case (os-type-of *type-context*)
+    ($windows (change-class str 'stl-string/windows))
+    (otherwise (change-class str 'stl-string/linux))))
+
+(defmethod compute-effective-fields ((type stl-string/windows))
+  (list (make-instance 'compound :is-union t
+                       :fields (list
+                                (make-instance 'static-string :name $buffer :size 16)
+                                (make-instance 'pointer :name $ptr :type-name $static-string)))
+        (make-instance 'int32_t :name $length)
+        (make-instance 'int32_t :name $capacity)
+        (make-instance 'padding :name $pad :size 4)))
+
+(defmethod %memory-ref-$ ((type stl-string/windows) ref (key (eql t)))
+  (if (< $ref.capacity 16) $ref.buffer $ref.ptr[t]))
+
 ;; Abstract array
 
 (defgeneric array-base-dimensions (type ref))
@@ -353,9 +378,12 @@
   (copy-data-definition (effective-contained-item-of type)))
 
 (defmethod compute-effective-fields ((type stl-vector))
-  (list (make-instance 'pointer :name $start :fields (list (copy-item-def type)))
-        (make-instance 'pointer :name $end)
-        (make-instance 'pointer :name $block-end)))
+  (flatten (list
+            (make-instance 'pointer :name $start :fields (list (copy-item-def type)))
+            (make-instance 'pointer :name $end)
+            (make-instance 'pointer :name $block-end)
+            (when (eq (os-type-of *type-context*) $windows)
+              (make-instance 'padding :name $pad :size 4 :alignment 4)))))
 
 (defmethod array-base-dimensions ((type stl-vector) ref)
   (let ((s $ref.start) (e $ref.end))

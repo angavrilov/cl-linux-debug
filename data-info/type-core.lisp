@@ -99,6 +99,8 @@
   (:method :around ((obj global-type-proxy))
     (type-field-sequence (effective-main-type-of obj))))
 
+(defgeneric os-type-of (context))
+
 ;; Type layout
 
 (defgeneric compute-effective-size (context obj)

@@ -20,6 +20,12 @@
    (region nil :accessor t)
    (is-code? nil :accessor t)))
 
+(defmethod initialize-instance :after ((mirror object-memory-mirror) &key)
+  (awhen (process-of mirror)
+    (when (typep (origin-of (main-image-of (executable-of it)))
+                 'pe-executable-image)
+      (setf (os-type-of mirror) $windows))))
+
 (defmethod check-refresh-context :after ((mirror object-memory-mirror))
   (setf (malloc-chunk-types-of mirror)
         (collect-known-objects mirror (malloc-chunks-of mirror))))

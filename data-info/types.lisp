@@ -222,12 +222,11 @@
   (:default-initargs :default-size 0 :effective-alignment 1)
   (:documentation "A null-terminated string buffer embedded in the object."))
 
-(def (class* eas) ptr-string (string-field virtual-compound-item concrete-item)
+(def (class* eas) ptr-string (virtual-compound-item string-field concrete-item)
   ()
-  (:default-initargs :default-size 4)
   (:documentation "A null-terminated string buffer pointer."))
 
-(def (class* eas) stl-string (ptr-string)
+(def (class* eas) stl-string (virtual-compound-item string-field concrete-item)
   ()
   (:documentation "An STL string buffer pointer."))
 
