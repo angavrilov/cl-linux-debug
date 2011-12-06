@@ -207,7 +207,8 @@
     nil)
   (:method ((image executable-image) addr &key next?)
     (if next?
-        (lookup-next-chunk (region-map-of image) addr)
+        (when (not (trees:emptyp (region-map-of image)))
+          (lookup-next-chunk (region-map-of image) addr))
         (lookup-chunk (region-map-of image) addr)))
   (:method ((wrapper loaded-object) addr &key next?)
     (wrap-loaded-chunk (find-region-by-address

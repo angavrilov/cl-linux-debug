@@ -58,7 +58,9 @@
                              (:file "xml-helper" :depends-on ("package" "type-core" "type-memory"))
                              (:file "memory" :depends-on ("package" "type-context"
                                                                     "type-memory" "xml-helper"))
-                             (:file "malloc" :depends-on ("package" "memory"))
+                             (:file "glibc" :depends-on ("package" "memory"))
+                             (:file "wine" :depends-on ("package" "memory" "glibc"))
+                             (:file "malloc" :depends-on ("package" "memory" "glibc" "wine"))
                              (:file "objects" :depends-on ("package" "memory" "malloc"))
                              (:file "search" :depends-on ("package" "objects"))))))
 

@@ -12,6 +12,8 @@
 (deftype int16 () '(signed-byte 16))
 (deftype int32 () '(signed-byte 32))
 
+(defconstant +uint32-mask+ (1- (ash 1 32)))
+
 (def (structure ea) memory-mapping
   (start-addr 0)
   (end-addr 0)

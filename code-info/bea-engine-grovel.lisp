@@ -194,7 +194,7 @@
   ((:accelerator "ACCELERATOR_INSTRUCTION"))
   ((:round "ROUND_INSTRUCTION")))
 
-(cenum (branch-type-id :base-type :uint32)
+(cenum (branch-type-id :base-type :int32)
   ((:none "NotUsedPrefix"))
   ((:jo "JO"))
   ((:jc "JC"))
