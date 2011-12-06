@@ -19,8 +19,10 @@
                 "xmlisp"
                 :components ((:file "package")
                              (:file "XMLisp" :depends-on ("package"))))
+               (:file "patches")
                (:module
                 "code-info"
+                :depends-on ("patches")
                 :components ((:file "package")
                              (:file "utils" :depends-on ("package"))
                              (cffi-grovel:grovel-file "bea-engine-grovel" :depends-on ("package"))

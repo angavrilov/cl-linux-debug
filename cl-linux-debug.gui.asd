@@ -8,8 +8,10 @@
   :author ("Alexander Gavrilov <angavrilov@gmail.com>")
   :depends-on (:cl-linux-debug
                :cl-gtk2-gtk)
-  :components ((:module
+  :components ((:file "patches.gui")
+               (:module
                 "gui"
+                :depends-on ("patches.gui")
                 :components ((:file "package")
                              (:file "tree-model" :depends-on ("package"))
                              (:file "memory-objects" :depends-on ("package" "tree-model"))
