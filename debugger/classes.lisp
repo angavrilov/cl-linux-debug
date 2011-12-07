@@ -70,6 +70,7 @@
   ((process-id :reader t)
    (main-thread nil :reader t)
    (threads nil :reader t)
+   (ignored-signals nil :accessor t)
    (executable (make-instance 'loaded-executable) :reader t)
    (mem-file :reader t)
    (injection-info (make-instance 'code-injection-info) :reader t)

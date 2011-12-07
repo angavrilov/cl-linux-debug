@@ -187,7 +187,14 @@
                             :new-child-pid new-pid
                             :thread thread)))
            (:PTRACE_EVENT_EXEC
-            (change-class new-state 'debug-thread-state-about-to-exec)))))
+            (change-class new-state 'debug-thread-state-about-to-exec))))
+        ;; Auto-resume
+        (debug-thread-state-signalled
+         (let ((sig-id (signal-id-of new-state))
+               (ign-list (ignored-signals-of process)))
+           (when (member sig-id ign-list)
+             (when (ptrace-continue (thread-id-of thread) sig-id)
+               (return-from process-thread-state-change))))))
       ;; Fetch registers
       (when (typep new-state 'debug-thread-state-stopped)
         (let ((regs (ptrace-get-registers (thread-id-of thread))))

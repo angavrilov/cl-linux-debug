@@ -22,6 +22,7 @@
            #:task-finished?
            #:return-values-of
            #:signalled-condition-of
+           #:ignored-signals-of
            #:exit-task #:abort-task #:yield-task
            #:with-exit-unwind
            #:make-debug-r/w-lock #:with-r/w-lock-held
