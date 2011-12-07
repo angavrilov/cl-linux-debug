@@ -17,7 +17,8 @@
    (extents nil :accessor t)
    (extent-map (make-chunk-table) :reader t)
    (extent-idx nil :reader t)
-   (section-idx nil :reader t)))
+   (section-idx nil :reader t)
+   (garbage-word nil :accessor t)))
 
 (defmethod initialize-instance :after ((mirror memory-mirror) &key)
   (setf (slot-value mirror 'null-extent)
