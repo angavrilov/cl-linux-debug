@@ -48,26 +48,29 @@
          (values (setf (gethash key (find-by-id-cache-of context))
                        (make-hash-table :test #'equal)) nil))))
 
+(defun lookup-malloc-chunk-range (mirror address)
+  (multiple-value-bind (malloc-id malloc-min malloc-max malloc-ok?)
+      (lookup-malloc-object mirror (malloc-chunks-of mirror) (floor address))
+    (when malloc-ok?
+      (make-instance 'malloc-chunk-range
+                     :chunk-id malloc-id
+                     :start-address malloc-min :length (- malloc-max malloc-min)
+                     :references
+                     (get-references (malloc-chunk-reftbl-of mirror) malloc-id)
+                     :obj-type
+                     (awhen (malloc-chunk-types-of mirror)
+                       (car (aref it malloc-id)))))))
+
 (defgeneric get-address-object-info (mirror address)
   (:method (mirror (address null)) nil)
   (:method (mirror (address memory-object-ref))
     (get-address-object-info mirror (start-address-of address)))
   (:method ((mirror object-memory-mirror) (address number))
-    (bind (((:values malloc-id malloc-min malloc-max malloc-ok?)
-            (lookup-malloc-object (malloc-chunks-of mirror) (floor address)))
-           (section (find-section-by-address (executable-of mirror) address))
+    (bind ((section (find-section-by-address (executable-of mirror) address))
            (region (find-region-by-address (executable-of mirror) address)))
       (make-instance 'memory-object-info
                      :malloc-chunk-range
-                     (when malloc-ok?
-                       (make-instance 'malloc-chunk-range
-                                      :chunk-id malloc-id
-                                      :start-address malloc-min :length (- malloc-max malloc-min)
-                                      :references
-                                      (get-references (malloc-chunk-reftbl-of mirror) malloc-id)
-                                      :obj-type
-                                      (awhen (malloc-chunk-types-of mirror)
-                                        (car (aref it malloc-id)))))
+                     (lookup-malloc-chunk-range mirror address)
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
                      :region region))))

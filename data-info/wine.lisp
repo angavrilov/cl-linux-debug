@@ -153,12 +153,21 @@
   (vector-push-extend (logior limit 1) result-vector)
   (values start-address limit))
 
+(defun %adjust-wine-chunk-size (memory start max)
+  (awhen (get-memory-integer memory start 4)
+    (let* ((magic (logand it #xFFFFFF))
+           (size (logand (ash it -24) #xFF)))
+      (cond ((= magic +wine-arena-inuse-magic+)
+             (- max 4 size))
+            ((= magic +wine-arena-pending-magic+)
+             start)))))
+
 (defun get-wine-heap-ranges (heap)
   (append
    (loop for subheap in (walk-wine-list $heap.subheap_list $wine:subheap $entry)
       for base = $subheap.base
       collect (list (+ base $subheap.headerSize) (+ base $subheap.commitSize)
-                    #'enumerate-wine-malloc-chunks))
+                    #'enumerate-wine-malloc-chunks #'%adjust-wine-chunk-size))
    (loop for bigchunk in (walk-wine-list $heap.large_list $wine:arena_large $entry)
       for base = (+ (start-address-of bigchunk) (length-of bigchunk))
       collect (list (- base 4) (+ base $bigchunk.data_size) #'enumerate-wine-large-chunk))))

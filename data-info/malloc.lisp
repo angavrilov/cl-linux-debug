@@ -2,10 +2,13 @@
 
 (in-package :cl-linux-debug.data-info)
 
+(defconstant +num-extents+ (/ (ash 1 32) +max-glibc-heap-size+))
+
 (defstruct malloc-chunk-map
   (range-vector (make-binsearch-uint32-vec 1048576))
   (extent-list nil)
-  (extent-tbl (make-array (/ (ash 1 32) +max-glibc-heap-size+) :initial-element nil)))
+  (extent-tbl (make-array +num-extents+ :initial-element nil))
+  (extent-handler-tbl (make-array +num-extents+ :initial-element nil)))
 
 (defun malloc-chunk-count (chunk-map)
   (length (malloc-chunk-map-range-vector chunk-map)))
@@ -16,7 +19,8 @@
         (heaps (append (find-glibc-heap-ranges memory)
                        (find-wine-heap-ranges memory)))
         (last-pos 1)
-        (etbl (malloc-chunk-map-extent-tbl chunk-map)))
+        (etbl (malloc-chunk-map-extent-tbl chunk-map))
+        (htbl (malloc-chunk-map-extent-handler-tbl chunk-map)))
     ;; Wipe the range vector, and push the left guard
     (setf (fill-pointer vector) 0)
     (vector-push-extend 1 vector)
@@ -26,14 +30,16 @@
       (multiple-value-bind (start-addr end-addr)
           (funcall (third range) memory vector (first range) (second range))
         ;; If added, register
-        (let ((cur-pos (fill-pointer vector)))
+        (let ((cur-pos (fill-pointer vector))
+              (handler (fourth range)))
           (when (> cur-pos last-pos)
             (push (list start-addr end-addr last-pos cur-pos) ranges)
             (loop for i from (floor start-addr +max-glibc-heap-size+)
                to (floor end-addr +max-glibc-heap-size+)
-               do (aif (aref etbl i)
+               do (aif (svref etbl i)
                        (setf (cdr it) cur-pos)
-                       (setf (aref etbl i) (cons last-pos cur-pos))))
+                       (setf (svref etbl i) (cons last-pos cur-pos)))
+               do (pushnew handler (svref htbl i)))
             (setf last-pos cur-pos)))))
     ;; Finish
     (setf (malloc-chunk-map-extent-list chunk-map) (nreverse ranges))
@@ -65,19 +71,25 @@
                       (ftype (function (uint32) (values (or null fixnum) fixnum)) ,name))
              ,@code))))))
 
-(defun malloc-chunk-range (chunk-map id &optional address)
+(defun malloc-chunk-range (memory chunk-map id &optional address)
   (when id
     (let ((vec (malloc-chunk-map-range-vector chunk-map)))
-      (let ((min (+ (aref vec id) 4))
-            (max (logand (aref vec (1+ id)) (lognot 1))))
+      (let* ((start (aref vec id))
+             (min (+ start 4))
+             (max (logand (aref vec (1+ id)) -2))
+             (handlers (malloc-chunk-map-extent-handler-tbl chunk-map)))
+        (loop for handler in (svref handlers (floor start +max-glibc-heap-size+))
+           do (awhen (funcall handler memory start max)
+                (setf max it)
+                (return)))
         (values min max (if address (<= min address max)))))))
 
-(defun lookup-malloc-object (chunk-map address)
-  (with-malloc-chunk-lookup (lookup chunk-map :range-vec vec)
+(defun lookup-malloc-object (memory chunk-map address)
+  (with-malloc-chunk-lookup (lookup chunk-map)
     (awhen (lookup address)
-      (let ((min (+ (aref vec it) 4))
-            (max (logand (aref vec (1+ it)) (lognot 1))))
-        (values it min max (<= address max))))))
+      (multiple-value-bind (min max ok?)
+          (malloc-chunk-range memory chunk-map it address)
+        (values it min max ok?)))))
 
 (defmacro do-malloc-chunks ((bytes offset limit &optional (min-addr (gensym)) (max-addr (gensym)))
                             (memory chunk-map &key int-reader (index (gensym))) &body code)
@@ -223,7 +235,7 @@
               (list-chunk-refs-for-area memory context min size target))))
   (:method (memory (context malloc-chunk-map) (ref fixnum) target)
     (multiple-value-bind (min max)
-        (malloc-chunk-range context ref)
+        (malloc-chunk-range memory context ref)
       (decode-chunk-reference memory context (cons min (- max min)) target)))
   (:method (memory (context malloc-chunk-map) (ref static-chunk-ref) target)
     (let ((rgn (static-chunk-ref-region ref)))
