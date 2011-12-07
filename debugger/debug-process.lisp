@@ -12,6 +12,8 @@
 
 (defvar *debugged-processes* nil)
 
+(defvar *print-log-messages* nil)
+
 (defun debug-worker-thread (channel)
   "The thread that executes all ptrace requests for the debugger."
   (catch 'quit-worker-thread
@@ -20,7 +22,8 @@
          (with-recursive-lock-held (*debug-process-lock*)
            (with-simple-restart (abort "Abort executing ~S" message)
              (apply (first message) (rest message))))
-         (format t "Handled ~S~%" message)))))
+         (when *print-log-messages*
+           (format t "Handled ~S~%" message))))))
 
 (defun start-worker-thread (var channel name)
   (let ((val (symbol-value var)))
@@ -191,7 +194,8 @@
           (setf (slot-value new-state 'register-values) regs
                 (slot-value thread 'register-values) regs)))
       ;; Deliver the state change
-      (format t "Assigned state ~S to ~S~%" new-state thread)
+      (when *print-log-messages*
+        (format t "Assigned state ~S to ~S~%" new-state thread))
       (%set-thread-state thread new-state)
       (setf (slot-value process 'last-changed-thread) thread)
       ;; Wake up tasks
