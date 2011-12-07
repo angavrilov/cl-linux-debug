@@ -157,7 +157,7 @@
 
 (defmethod get-vtable-class-name ((context object-memory-mirror) address)
   (let* ((vtbl (make-memory-ref context address
-                                (lookup-type-in-context context $glibc:vtable)))
+                                (lookup-type-in-context context (vtable-type-by-os context))))
          (tptr $vtbl.type_info)
          (tinfo (get-address-info-range context tptr))
          (vinfo (get-address-info-range context $vtbl.methods[0])))
@@ -165,7 +165,9 @@
                (is-code? vinfo)
                (section-of tinfo)
                (not (is-code? tinfo)))
-      $tptr.class_name)))
+      (if (eq (os-type-of context) $windows)
+          $tptr.pTypeDescriptor.name
+          $tptr.class_name))))
 
 (defun detect-garbage (mirror value)
   (awhen (garbage-word-of mirror)
@@ -291,7 +293,7 @@
                       (get-vtable-class-name mirror (second (first infolist))))
             (consume (aif (resolve-class-in-context mirror (second (first infolist)))
                           (make-instance 'global-type-proxy :effective-main-type it)
-                          (make-instance 'pointer :type-name $glibc:vtable)))
+                          (make-instance 'pointer :type-name (vtable-type-by-os mirror))))
             (align))
           (do ((tail infolist (rest tail)))
               ((null tail))

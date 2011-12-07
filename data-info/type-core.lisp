@@ -12,8 +12,6 @@
 (defvar *known-globals* nil)
 (defvar *known-globals-version* 0)
 
-(defvar *known-classes* nil)
-
 (defparameter *type-context* nil)
 
 (defun align-up (offset alignment)
@@ -272,10 +270,7 @@
     (awhen (global-type-definitions-of defs)
       (dolist (type it)
         (let* ((name (with-namespace (type-name-of type))))
-          (add-if-changed '*known-types* '*known-types-version* name type)
-          (awhen (and (typep type 'class-type)
-                      (mangled-name-of type))
-            (setf (assoc-value *known-classes* it :test #'equal) name)))))
+          (add-if-changed '*known-types* '*known-types-version* name type))))
     (awhen (global-objects-of defs)
       (dolist (type it)
         (add-if-changed '*known-globals* '*known-globals-version*

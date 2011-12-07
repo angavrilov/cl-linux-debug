@@ -46,6 +46,44 @@
     <uint32_t name='size'/>
     <uint32_t name='magic'/>
   </struct-type>
+
+  <struct-type type-name='vtable'>
+    <pointer name='type_info' offset='-0x4' type-name='RTTICompleteObjectLocator'/>
+    <static-array name='methods' count='16' type-name='pointer'/>
+
+    <code-helper name='describe'>
+      (fmt "Class: ~A" $.type_info.pTypeDescriptor.name)
+    </code-helper>
+  </struct-type>
+
+  <struct-type type-name='RTTICompleteObjectLocator'>
+    <uint32_t name='signature'/>
+    <uint32_t name='offset'/>
+    <uint32_t name='cdOffset'/>
+    <pointer name='pTypeDescriptor' type-name='TypeDescriptor'/>
+    <pointer name='pClassDescriptor' type-name='RTTIClassHierarchyDescriptor'/>
+  </struct-type>
+
+  <struct-type type-name='TypeDescriptor' key-field='name'>
+    <pointer name='pVFTable'/>
+    <pointer name='spare'/>
+    <static-string name='name' size='0'/>
+  </struct-type>
+
+  <struct-type type-name='RTTIClassHierarchyDescriptor'>
+    <uint32_t name='signature'/>
+    <uint32_t name='attributes'/>
+    <uint32_t name='numBaseClasses'/>
+    <pointer name='pBaseClassArray'>
+      <static-array count='100'>
+        <pointer key-field='pTypeDescriptor'>
+          <pointer name='pTypeDescriptor' type-name='TypeDescriptor'/>
+          <uint32_t name='numContainedBases'/>
+          etc
+        </pointer>
+      </static-array>
+    </pointer>
+  </struct-type>
 </data-definition>
 
 (defconstant +wine-arena-large-size+ #xfedcba90)

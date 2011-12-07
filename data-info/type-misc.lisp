@@ -433,10 +433,13 @@
 
 ;; Class
 
+(defun vtable-type-by-os (mirror)
+  (if (eq (os-type-of mirror) $windows) $wine:vtable $glibc:vtable))
+
 (defmethod compute-effective-fields ((type class-type))
   (list* (aif (inherits-from-of type)
               (make-instance 'compound :type-name it)
-              (make-instance 'pointer :name $_vtable :type-name $glibc:vtable))
+              (make-instance 'pointer :name $_vtable :type-name (vtable-type-by-os *type-context*)))
          (call-next-method)))
 
 (defmethod adjust-mem-ref-type ((type class-type) ref)

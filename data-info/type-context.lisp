@@ -9,6 +9,7 @@
    (processed-globals (make-hash-table :test #'equal) :accessor t)
    (strong-dep-table (make-hash-table) :accessor t)
    (vtable-class-cache (make-hash-table :test #'equal) :accessor t)
+   (known-classes nil :accessor t)
    (data-definition-files nil :accessor t)
    (os-type $linux :accessor t)))
 
@@ -154,8 +155,19 @@
     (if found rv
         (setf (gethash address (vtable-class-cache-of context))
               (awhen (aand (get-vtable-class-name context address)
-                           (assoc-value *known-classes* it :test #'equal))
+                           (assoc-value (known-classes-of context) it :test #'equal))
                 (lookup-type-in-context context it))))))
+
+(defgeneric compute-mangled-name (context type)
+  (:method (context type) nil)
+  (:method (context (type class-type))
+    (let ((name (or (original-name-of type)
+                    (get-$-field-name (type-name-of type)))))
+      (ecase (os-type-of context)
+        ($windows (or (windows-mangling-of type)
+                      (format nil ".?AV~A@@" name)))
+        ($linux (or (linux-mangling-of type)
+                    (format nil "~A~A" (length name) name)))))))
 
 (defun compute-stable-subset (obj-list dep-table)
   (let ((ssubset (make-hash-table))
@@ -193,6 +205,11 @@
                              (same-pairs (processed-globals-of context) *known-globals*)))
            (ssubset (compute-stable-subset same-objs (strong-dep-table-of context)))
            (changed? nil))
+      ;; Update manglings
+      (setf (known-classes-of context)
+            (loop for (name . type) in *known-types*
+               for mname = (compute-mangled-name context type)
+               when mname collect (cons mname name)))
       ;; Check types
       (let ((*new-processed-types* (make-hash-table :test #'equal))
             (types (processed-types-of context)))

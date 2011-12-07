@@ -271,16 +271,10 @@
   (:documentation "A type that can inherit."))
 
 (def (class* eas) class-type (global-type-definition struct-compound-item inheriting-type concrete-item)
-  ((mangled-name nil :accessor t :type string))
+  ((original-name nil :accessor t :type string)
+   (linux-mangling nil :accessor t :type string)
+   (windows-mangling nil :accessor t :type string))
   (:documentation "A global class type definition."))
-
-(defmethod initialize-instance :after ((type class-type) &key)
-  (unless (mangled-name-of type)
-    (setf (mangled-name-of type)
-          (cl-linux-debug.data-info::get-$-field-name (type-name-of type))))
-  (when (loop for c across (mangled-name-of type) always (not (xml::digit-char-p c)))
-    (setf (mangled-name-of type)
-          (format nil "~A~A" (length (mangled-name-of type)) (mangled-name-of type)))))
 
 (def (class* eas) global-object (compound)
   ((effective-xml-form nil :accessor t))
