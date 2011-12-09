@@ -136,6 +136,11 @@
   (make-memory-ref (memory-object-ref-memory base) address type
                    :parent base :key key :local? local?))
 
+(defun make-ad-hoc-type-reference (type)
+  (if (typep type 'global-type-definition)
+      (make-proxy-field nil type)
+      (copy-data-definition (or (copy-origin-of type) type))))
+
 (defun make-ad-hoc-memory-ref (memory address type-tree &key no-copy? parent key local?)
   (assert (not (effective-finalized? type-tree)))
   (let ((type (layout-ad-hoc-in-context

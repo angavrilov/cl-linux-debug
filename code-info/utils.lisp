@@ -29,12 +29,13 @@
 (deftype offset () '(or signed-byte ratio null))
 (deftype address () '(or unsigned-byte ratio null))
 
-(defun format-hex-offset (offset &key force-sign?)
+(defun format-hex-offset (offset &key force-sign? (prefix "0x"))
   (multiple-value-bind (int rest) (floor offset 1)
     (string-downcase
-     (format nil "~@[~A~]0x~X~@[.~A~]"
+     (format nil "~@[~A~]~A~X~@[.~A~]"
              (cond ((< int 0) "-")
                    (force-sign? "+"))
+             prefix
              (abs int)
              (ecase rest
                (0 nil)

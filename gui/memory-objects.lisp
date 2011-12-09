@@ -218,7 +218,7 @@
 ;; Padding
 
 (def (class* e) padding-object-node (real-memory-object-node lazy-memory-object-node)
-  ())
+  ((guessed-items :accessor t)))
 
 (defmethod col-row-color-of ((node padding-object-node)) "darkgray")
 
@@ -240,6 +240,7 @@
 
 (defmethod on-lazy-expand-node ((node padding-object-node))
   (let ((items (guess-types-by-data (memory-of (view-of node)) (ref-of node))))
+    (setf (guessed-items-of node) items)
     (add-array-contents node items (master-node-of node))))
 
 (def (class* e) bit-padding-object-node (padding-object-node)

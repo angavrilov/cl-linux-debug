@@ -180,6 +180,12 @@
 (defun is-possible-garbage? (mirror pad)
   (and pad (aif (garbage-word-of mirror) (= it pad) t)))
 
+(defun make-guessed-pointer (info)
+  (make-instance 'pointer
+                 :fields (aif (aand (malloc-chunk-range-of info)
+                                    (obj-type-of it))
+                              (list (make-ad-hoc-type-reference it)))))
+
 (defun match-type-by-info (mirror infolist)
   (destructuring-bind (addrv val info start end) (first infolist)
     (declare (ignore addrv))
@@ -243,22 +249,21 @@
               (eql start (fourth nnext))
               (<= val (second next) (second nnext)))
          (bind ((ptr (get-memory-integer mirror val 4))
-                ((:values info ds de)
+                ((:values pv-info ds de)
                  (get-address-info-range mirror ptr))
                 (size (- (second next) val))
                 (elt-type (cond ((and ds de (= ds ptr))
-                                  (make-instance 'pointer))
+                                 (make-guessed-pointer pv-info))
                                 ((logtest size 1)
                                  (make-instance 'int8_t))
                                 ((logtest size 2)
                                  (make-instance 'int16_t))
                                 (t
                                  (make-instance 'int32_t)))))
-           (declare (ignore info))
            (make-instance 'stl-vector :fields (list elt-type))))
         ;; random pointer
         (t
-         (make-instance 'pointer))))))
+         (make-guessed-pointer info))))))
 
 (defun guess-types-by-data (mirror ref)
   (with-bytes-for-ref (vector offset ref (length-of ref))

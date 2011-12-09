@@ -103,7 +103,38 @@
      (let ((info (get-address-object-info (memory-of (view-of node)) (start-address-of node))))
        (when (and info (malloc-chunk-range-of info))
          (list (list "Browse referencing objects"
-                     (lambda () (browse-references-for memory node info)))))))))
+                     (lambda () (browse-references-for memory node info))))))
+     (list (list "Browse as raw data"
+                 (lambda () (browse-object-in-new-window
+                        memory (make-ad-hoc-memory-ref memory (start-address-of node)
+                                                       (make-instance 'padding :size (length-of node)))
+                        :title (format nil "Raw data at ~X - ~A"
+                                       (start-address-of node) (col-name-of node)))))))))
+
+(defun print-guessed-item (stream item base-addr)
+  (bind ((addr (start-address-of item))
+         (type (memory-object-ref-type item))
+         (name (name-of type)))
+    (unwind-protect
+         (progn
+           (setf (name-of type)
+                 (or name
+                     (cl-linux-debug.data-info::get-$-field
+                      (format-hex-offset (- addr base-addr) :prefix "unk_"))))
+           (format stream "~A" type))
+      (setf (name-of type) name))))
+
+(defmethod get-node-menu-items append ((node padding-object-node))
+  (list
+   (list "Copy items to clipboard"
+         (lambda ()
+           (setf (expanded? node) t)
+           (let* ((start (start-address-of (or (master-node-of node) node))))
+             (clipboard-set-text (widget-clipboard (tree-view-of (view-of node)) *selection-clipboard*)
+                                 (with-output-to-string (str)
+                                   (dolist (item (guessed-items-of node))
+                                     (print-guessed-item str item start)
+                                     (format str "~%")))))))))
 
 (defmethod on-tree-node-activated ((view memory-object-browser) (node pointer-object-node) column)
   (awhen (ref-value-of node)

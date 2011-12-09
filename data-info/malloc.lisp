@@ -234,7 +234,8 @@
           (size (cdr ref)))
       (values min
               (make-instance 'padding :size size)
-              (list-chunk-refs-for-area memory context min size target))))
+              (or (list-chunk-refs-for-area memory context min size target)
+                  (list 0)))))
   (:method (memory (context malloc-chunk-map) (ref fixnum) target)
     (multiple-value-bind (min max)
         (malloc-chunk-range memory context ref)
@@ -245,8 +246,7 @@
                (< -1 (- (static-chunk-ref-addr ref) (start-address-of rgn)) (length-of rgn)))
           (decode-chunk-reference memory context (cons (start-address-of rgn) (length-of rgn)) target)
           (values (static-chunk-ref-addr ref)
-                  (make-instance 'compound :fields
-                                 (list (make-instance 'pointer)))
+                  (make-instance 'padding :size 16)
                   (list 0))))))
 
 (defun collect-known-objects (memory chunk-map)

@@ -47,6 +47,8 @@
   ((type-name nil :accessor t :type $-keyword-namespace))
   (:documentation "A proxy type object; used to stand in for global types as fields."))
 
+(defmethod xml:xml-tag-name-symbol ((str global-type-proxy)) 'compound)
+
 (defgeneric effective-main-type-of (obj)
   (:method ((obj data-item)) obj)
   (:method ((obj global-type-proxy))
