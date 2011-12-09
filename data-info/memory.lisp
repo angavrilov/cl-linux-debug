@@ -163,9 +163,11 @@
     (with-threads-suspended (process :all)
       (with-recursive-lock-held ((lock-of mirror))
         (dolist (range ranges)
-          (with-bytes-for-ref (vector offset mirror (cdr range) (car range))
-            (read-process-data process (car range) vector
-                               :start offset :end (+ offset (cdr range)))))))))
+          (let ((start (floor (car range)))
+                (len (ceiling (cdr range))))
+            (with-bytes-for-ref (vector offset mirror len start)
+              (read-process-data process start vector
+                                 :start offset :end (+ offset len)))))))))
 
 (defgeneric refresh-memory-mirror-ranges (mirror ranges)
   (:method ((mirror memory-mirror) ranges)
@@ -197,4 +199,6 @@
   (or (get-memory-global obj key) default))
 
 (defmethod $ ((obj memory-mirror) (key (eql '*)) &optional default)
-  (or (mapcar (lambda (k) (get-memory-global obj (car k))) *known-globals*) default))
+  (or (sort (remove-if #'null (mapcar (lambda (k) (get-memory-global obj (car k))) *known-globals*))
+            #'< :key #'start-address-of)
+      default))

@@ -25,6 +25,7 @@
     (setf (fill-pointer vector) 0)
     (vector-push-extend 1 vector)
     (fill etbl nil)
+    (fill htbl nil)
     ;; Enumerate chunks
     (dolist (range (sort heaps #'< :key #'first))
       (multiple-value-bind (start-addr end-addr)
@@ -39,7 +40,8 @@
                do (aif (svref etbl i)
                        (setf (cdr it) cur-pos)
                        (setf (svref etbl i) (cons last-pos cur-pos)))
-               do (pushnew handler (svref htbl i)))
+               do (when handler
+                    (pushnew handler (svref htbl i))))
             (setf last-pos cur-pos)))))
     ;; Finish
     (setf (malloc-chunk-map-extent-list chunk-map) (nreverse ranges))

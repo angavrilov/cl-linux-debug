@@ -87,8 +87,14 @@
 (defmethod refresh-node-values :before ((node real-memory-object-node))
   (setf (ref-prev-value-of node) (ref-value-of node))
   (evaluate-node-ref node)
-  (when (value= (ref-prev-value-of node) (ref-value-of node))
-    (setf (ref-prev-value-of node) nil))
+  (if (and (value= (ref-prev-value-of node) (ref-value-of node))
+             (or (not (typep (ref-value-of node) 'memory-object-ref))
+                 (equal (format-ref-value (ref-of node) (ref-prev-value-of node))
+                        (format-ref-value (ref-of node) (ref-value-of node)))))
+      (setf (ref-prev-value-of node) nil)
+      ;; A hack to make booleans work
+      (when (null (ref-prev-value-of node))
+        (setf (ref-prev-value-of node) 'nil)))
   (refresh-column-values node))
 
 (defmethod initialize-instance :after ((node real-memory-object-node) &key)
