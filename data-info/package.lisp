@@ -88,7 +88,7 @@
            #:guess-types-by-data
            #:load-data-definition
            #:register-data-definition
-           #:find-stl-strings
+           #:find-stl-strings #:find-heap-strings
            #:os-type-of #:garbage-word-of
            ))
 
