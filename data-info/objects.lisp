@@ -187,7 +187,7 @@
                               (list (make-ad-hoc-type-reference it)))))
 
 (defun match-type-by-info (mirror infolist)
-  (destructuring-bind (addrv val info start end) (first infolist)
+  (destructuring-bind (addrv val info start length) (first infolist)
     (declare (ignore addrv))
     (bind (((&optional next nnext item3 item4 item5 item6 &rest tail) (rest infolist))
            (section (section-of info))
@@ -205,7 +205,7 @@
                      (if (= cap 15)
                          (multiple-value-bind (idx off) (floor len 4)
                            (= (ldb (byte 8 (* 8 off)) (second (nth idx infolist))) 0))
-                         (and (eql val start) (<= cap (- end start))
+                         (and (eql val start) (<= cap length)
                               (eql (get-memory-integer mirror (+ start len) 1) 0)))))))
          (make-instance 'stl-string))
         ;; garbage
@@ -236,10 +236,14 @@
                       (return-from match-type-by-info
                         (make-instance 'stl-vector))))
                   ;; Make arrays
-                  (if (> cnt 12)
-                      (make-instance 'static-array :count cnt :fields (ensure-list item)
-                                     :comment (format nil "Value is 0x~X" val))
-                      item)))
+                  (cond ((typep item 'padding)
+                         (setf (size-of item) (* (size-of item) cnt))
+                         item)
+                        ((> cnt 12)
+                         (make-instance 'static-array :count cnt :fields (ensure-list item)
+                                        :comment (format nil "Value is 0x~X" val)))
+                        (t
+                         item))))
                ((or start (executable? (origin-of section)))
                 (make-instance 'pointer))
                (t
