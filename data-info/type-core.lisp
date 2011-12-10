@@ -50,7 +50,7 @@
 (defmethod xml:xml-tag-name-symbol ((str global-type-proxy)) 'compound)
 
 (defgeneric effective-main-type-of (obj)
-  (:method ((obj data-item)) obj)
+  (:method ((obj abstract-item)) obj)
   (:method ((obj global-type-proxy))
     (car (effective-tag-of obj))))
 
@@ -89,7 +89,7 @@
   `(getf (cdr ,tag) ,attr ,@(if d-p (list default))))
 
 (defgeneric type-field-sequence (type)
-  (:method ((obj data-item))
+  (:method ((obj abstract-field))
     (aif (name-of obj) (list it)))
   (:method ((obj data-field))
     (nconc (call-next-method) (type-field-sequence (effective-parent-of obj))))
@@ -178,7 +178,7 @@
          finally (return (values (min min minv) (max max maxv)))))))
 
 (defgeneric layout-fields (obj fields)
-  (:method :before ((obj virtual-compound-item) fields)
+  (:method :before ((obj abstract-compound-item) fields)
     (dolist (field fields)
       (setf (effective-parent-of field) obj)
       (layout-type-rec field)))
@@ -197,7 +197,7 @@
         (incf offset (effective-size-of field))))))
 
 (defgeneric compute-effective-fields (obj)
-  (:method ((obj virtual-compound-item)) nil)
+  (:method ((obj abstract-compound-item)) nil)
   (:method ((obj compound-item))
     (fields-of obj))
   (:method :before ((obj container-item))
@@ -215,7 +215,7 @@
     nil))
 
 (defgeneric layout-type-rec (obj)
-  (:method :after ((obj data-item))
+  (:method :after ((obj abstract-item))
     (setf (effective-finalized? obj) t))
   (:method ((obj data-item))
     (setf (effective-alignment-of obj)
@@ -227,7 +227,7 @@
           (values (effective-min-offset-of obj)
                   (effective-max-offset-of obj))
           (compute-offset-range *type-context* obj)))
-  (:method :before ((obj virtual-compound-item))
+  (:method :before ((obj abstract-compound-item))
     (let ((fields (compute-effective-fields obj)))
       (setf (effective-fields-of obj) fields)
       (layout-fields obj fields)))

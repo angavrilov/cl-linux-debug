@@ -26,16 +26,19 @@
   ()
   (:documentation "A mixin for concrete (instantiatable) types."))
 
-(def (class* eas) data-item (xml-serializer)
+(def (class* eas) abstract-item (xml-serializer)
   ((comment nil :accessor t)
-   (size nil :accessor t :type integer-or-null)
-   (alignment nil :accessor t :type integer-or-null)
    (copy-origin nil :accessor t)
+   (effective-finalized? nil :accessor t)
+   (effective-tag :accessor t))
+  (:documentation "An abstract base class for all type items."))
+
+(def (class* eas) data-item (abstract-item)
+  ((size nil :accessor t :type integer-or-null)
+   (alignment nil :accessor t :type integer-or-null)
    (effective-alignment :accessor t)
    (effective-size :accessor t)
-   (effective-finalized? nil :accessor t)
    (effective-has-pointers? :accessor t)
-   (effective-tag :accessor t)
    (effective-min-offset :accessor t)
    (effective-max-offset :accessor t))
   (:documentation "An abstract base class for all type items."))
@@ -49,7 +52,7 @@
    (effective-code-helpers nil :accessor t)))
 
 (defgeneric public-type-name-of (node)
-  (:method ((node data-item))
+  (:method ((node abstract-item))
     (let ((cache (load-time-value (make-hash-table :test #'eq)))
           (class (class-of node)))
       (or (gethash class cache)
@@ -60,11 +63,11 @@
   (:method-combination append :most-specific-first)
   (:method append ((node code-helper-mixin)) nil))
 
-(defmethod initialize-instance :before ((obj data-item) &key)
+(defmethod initialize-instance :before ((obj abstract-item) &key)
   (unless (typep obj 'concrete-item)
     (error "Could not instantiate an abstract type class: ~S" obj)))
 
-(defmethod print-slots ((obj data-item))
+(defmethod print-slots ((obj abstract-item))
   (stable-sort
    (remove-if (lambda (x &aux
                   (sym (closer-mop:slot-definition-name x))
@@ -84,7 +87,7 @@
   (:method ((obj cons))
     (cons (copy-data-definition (car obj))
           (copy-data-definition (cdr obj))))
-  (:method ((obj data-item))
+  (:method ((obj abstract-item))
     (let* ((slots (print-slots obj))
            (vals (loop for slot in slots
                     for name = (closer-mop:slot-definition-name slot)
@@ -99,11 +102,38 @@
 
 ;; Abstract type classes
 
-(def (class* eas) data-field (data-item)
+(def (class* eas) abstract-field (abstract-item)
   ((name nil :accessor t :type $-keyword)
-   (offset nil :accessor t :type offset)
    (syntax-parent nil :accessor t)
-   (effective-parent :accessor t)
+   (effective-parent :accessor t))
+  (:documentation "An abstract type that can be inside a compound structure."))
+
+(def (class* eas) abstract-compound-item (abstract-item)
+  ((effective-fields :accessor t))
+  (:documentation "An abstract type that may contain fake fields."))
+
+(def (class* eas) abstract-real-compound-item (abstract-compound-item)
+  ((fields nil :accessor t))
+  (:documentation "An abstract type that may contain real fields."))
+
+(defmethod initialize-instance :after ((obj abstract-real-compound-item) &key)
+  (dolist (field (fields-of obj))
+    (setf (syntax-parent-of field) obj)))
+
+(defgeneric can-add-subfield? (parent subobj))
+
+(defmethod add-subobject ((obj abstract-real-compound-item) (subobj abstract-field))
+  (unless (can-add-subfield? obj subobj)
+    (error "Cannot use <~A/> as a subfield of <~A/>"
+           (xml:xml-tag-name-string subobj)
+           (xml:xml-tag-name-string obj)))
+  (nconcf (fields-of obj) (list subobj))
+  (setf (syntax-parent-of subobj) obj))
+
+;; Abstract field classes
+
+(def (class* eas) data-field (data-item abstract-field)
+  ((offset nil :accessor t :type offset)
    (effective-offset :accessor t))
   (:documentation "An abstract type that can be inside a compound structure."))
 
@@ -111,24 +141,17 @@
   ((default-size :accessor t))
   (:documentation "An abstract type for a type that is complete without any arguments."))
 
-(def (class* eas) virtual-compound-item (data-item)
-  ((effective-fields :accessor t))
+(def (class* eas) virtual-compound-item (data-item abstract-compound-item)
+  ()
   (:documentation "An abstract type that may contain fake fields."))
 
-(def (class* eas) compound-item (virtual-compound-item)
-  ((fields nil :accessor t)
-   (is-union nil :accessor t :type boolean))
+(def (class* eas) compound-item (virtual-compound-item abstract-real-compound-item)
+  ((is-union nil :accessor t :type boolean))
   (:documentation "An abstract type that may contain real fields."))
 
 (defmethod is-union-p ((item virtual-compound-item)) nil)
 
-(defmethod add-subobject ((obj compound-item) (subobj data-field))
-  (nconcf (fields-of obj) (list subobj))
-  (setf (syntax-parent-of subobj) obj))
-
-(defmethod initialize-instance :after ((obj compound-item) &key)
-  (dolist (field (fields-of obj))
-    (setf (syntax-parent-of field) obj)))
+(defmethod can-add-subfield? ((obj compound-item) (subobj data-field)) t)
 
 (def (class* eas) struct-compound-item (compound-item)
   ((key-field nil :accessor t :type $-keyword))

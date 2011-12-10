@@ -232,7 +232,7 @@
   `(,(ptr-walker-ctx-vector ctx) (+ ,(ptr-walker-ctx-base ctx) ,offset) ,size :signed? ,signed?))
 
 (defgeneric build-effective-pointer-walker (context node offset walker-ctx)
-  (:method (context (node data-item) offset walker-ctx)
+  (:method (context (node abstract-item) offset walker-ctx)
     nil)
   (:method :around (context (node data-item) offset walker-ctx)
     (when (effective-has-pointers? node)
