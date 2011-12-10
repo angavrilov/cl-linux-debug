@@ -121,6 +121,14 @@
   (with-bytes-for-ref (bytes offset memory size addr)
     (parse-int bytes offset size :signed? signed?)))
 
+(defgeneric request-memory-write (memory addr size))
+
+(defun (setf get-memory-integer) (value memory addr size)
+  (with-bytes-for-ref (bytes offset memory size addr)
+    (setf (parse-int bytes offset size) value)
+    (request-memory-write memory addr size))
+  value)
+
 (defun make-memory-ref (memory address type &key parent key local?)
   (declare (optimize (speed 3)))
   (let* ((extent (if local? memory (resolve-extent-for-addr memory address)))

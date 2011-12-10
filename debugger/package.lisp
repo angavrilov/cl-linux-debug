@@ -31,7 +31,7 @@
            #:with-thread-suspended
            #:with-threads-suspended
            #:with-any-thread-suspended
-           #:read-process-data
+           #:read-process-data #:write-process-data
            #:*debugged-processes*
            #:start-debug #:stop-debug
            #:resume-all-threads #:stop-all-threads))

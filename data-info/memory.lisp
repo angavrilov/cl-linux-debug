@@ -158,20 +158,25 @@
 
 ;; Partial sync
 
-(def-debug-task do-sync-mirror-ranges (mirror ranges)
+(def-debug-task do-sync-mirror-ranges (mirror ranges write?)
   (let* ((process (process-of mirror)))
     (with-threads-suspended (process :all)
-      (with-recursive-lock-held ((lock-of mirror))
-        (dolist (range ranges)
-          (let ((start (floor (car range)))
-                (len (ceiling (cdr range))))
-            (with-bytes-for-ref (vector offset mirror len start)
-              (read-process-data process start vector
-                                 :start offset :end (+ offset len)))))))))
+      (dolist (range ranges)
+        (let* ((start (floor (car range)))
+               (len (- (ceiling (+ (car range) (cdr range))) start)))
+          (with-bytes-for-ref (vector offset mirror len start)
+            (if write?
+                (write-process-data process start vector
+                                    :start offset :end (+ offset len))
+                (read-process-data process start vector
+                                   :start offset :end (+ offset len)))))))))
 
 (defgeneric refresh-memory-mirror-ranges (mirror ranges)
   (:method ((mirror memory-mirror) ranges)
-    (call-debug-task #'do-sync-mirror-ranges mirror ranges)))
+    (call-debug-task #'do-sync-mirror-ranges mirror ranges nil)))
+
+(defmethod request-memory-write (memory addr size)
+  (call-debug-task #'do-sync-mirror-ranges memory (list (cons addr size)) t))
 
 ;;
 

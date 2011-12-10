@@ -89,3 +89,9 @@
                             address vector :start start :end real-end)
           (ptrace-copy-bytes (thread-id-of thread) address vector
                              :start start :end real-end)))))
+
+(def-debug-task write-process-data (process address vector &key (start 0) end)
+  (with-any-thread-suspended (process thread)
+    (let* ((real-end (or end (length vector))))
+      (ptrace-copy-bytes (thread-id-of thread) address vector
+                         :start start :end real-end :write? t))))

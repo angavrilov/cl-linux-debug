@@ -80,6 +80,13 @@
               result)
           size-bytes))
 
+(defun (setf parse-int) (value vector start size-bytes)
+  (loop for i from 0 below size-bytes
+     and j from start
+     do (setf (aref vector j)
+              (ldb (byte 8 (* 8 i)) value)))
+  value)
+
 (define-compiler-macro parse-int (&whole whole vector start size-bytes &key signed?)
   (cond ((not (and (typep size-bytes '(integer 1 8))
                    (member signed? '(nil t))))
