@@ -178,9 +178,24 @@
 
 ;; Concrete compound class
 
-(def (class* eas) compound (data-field struct-compound-item ref-compound-item concrete-item)
+(def (class* eas) proxifiable-item-mixin (concrete-item)
+  ()
+  (:documentation "An item that can be turned into a proxy"))
+
+(def (generic e) can-proxify-for-type? (proxifiable global-type)
+  (:method ((pf proxifiable-item-mixin) (gt data-item)) nil)
+  (:method :after ((compound abstract-real-compound-item) type)
+    (unless (null (fields-of compound))
+      (error "Cannot have both TYPE-NAME and fields in: ~A" compound)))
+  (:method :after ((compound compound-item) type)
+    (unless (null (is-union-p compound))
+      (error "Cannot have both TYPE-NAME and IS-UNION in: ~A" compound))))
+
+(def (class* eas) compound (proxifiable-item-mixin data-field struct-compound-item ref-compound-item)
   ()
   (:documentation "A structure/union type, that may be a proxy for a global type."))
+
+(defmethod can-proxify-for-type? ((type compound) (global struct-compound-item)) t)
 
 ;; Primitive fields
 
@@ -199,8 +214,12 @@
 
 ;; Integers
 
-(def (class* eas) integer-field (primitive-field)
+(def (class* eas) integer-item (unit-item)
   ((effective-int-signed? nil :accessor t :type boolean))
+  (:documentation "An abstract type for an integer primitive object."))
+
+(def (class* eas) integer-field (integer-item primitive-field)
+  ()
   (:documentation "An abstract type for an integer primitive field."))
 
 (macrolet ((def-simple-int (name size signed?)
@@ -269,6 +288,29 @@
 (defmethod public-type-name-of ((name stl-vector))
   (concatenate 'string "<" (public-type-name-of (effective-contained-item-of name)) ">"))
 
+;; Enums
+
+(def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)
+  ((base-type nil :accessor t :type $-keyword)
+   (effective-base-type :accessor t))
+  (:documentation "Abstract type for enums."))
+
+(def (class* eas) enum-item (abstract-field concrete-item)
+  ((value nil :accessor t :type integer-or-null)
+   (effective-value :accessor t)))
+
+(defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
+
+(def (class* eas) enum (proxifiable-item-mixin abstract-enum-item integer-field)
+  ((type-name nil :accessor t :type $-keyword-namespace))
+  (:documentation "Ad-hoc enum field"))
+
+(defmethod can-proxify-for-type? ((type enum) (global abstract-enum-item)) t)
+
+(defmethod can-proxify-for-type? :after ((type enum) global)
+  (unless (null (base-type-of type))
+    (error "Cannot have both TYPE-NAME and BASE-TYPE in: ~A" type)))
+
 ;; Global entity definition
 
 (def (class* eas) global-type-definition (data-item code-helper-mixin)
@@ -298,6 +340,10 @@
    (linux-mangling nil :accessor t :type string)
    (windows-mangling nil :accessor t :type string))
   (:documentation "A global class type definition."))
+
+(def (class* eas) enum-type (global-type-definition abstract-enum-item concrete-item)
+  ()
+  (:documentation "A global enum type definition."))
 
 (def (class* eas) global-object (compound)
   ((effective-xml-form nil :accessor t))

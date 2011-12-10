@@ -106,12 +106,12 @@
 
 ;; Integers
 
-(defmethod %memory-ref-$ ((type integer-field) ref (key (eql t)))
+(defmethod %memory-ref-$ ((type integer-item) ref (key (eql t)))
   (let ((size (effective-size-of type)))
     (with-bytes-for-ref (vector offset ref size)
       (parse-int vector offset size :signed? (effective-int-signed? type)))))
 
-(defmethod describe-ref-value-by-type append ((type integer-field) ref (value integer))
+(defmethod describe-ref-value-by-type append ((type integer-item) ref (value integer))
   (list (format-hex-offset (unsigned value (* 8 (effective-size-of type))))))
 
 ;; Boolean
@@ -122,6 +122,46 @@
 
 (defmethod format-ref-value-by-type ((type bool) ref value)
   (if value "Y" "N"))
+
+;; Enum
+
+(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key (eql t)))
+  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
+    ($ type iv iv)))
+
+(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key (eql $int-value)))
+  (%memory-ref-$ (effective-base-type-of type) ref t))
+
+(defmethod describe-ref-value-by-type append ((type abstract-enum-item) ref (value symbol))
+  (awhen ($ type value)
+    (list it)))
+
+(defmethod $ ((type abstract-enum-item) (key null) &optional default) default)
+
+(defmethod $ ((type abstract-enum-item) (key symbol) &optional default)
+  (or (awhen (find key (effective-fields-of type) :key #'name-of) (effective-value-of it)) default))
+
+(defmethod $ ((type abstract-enum-item) (key integer) &optional default)
+  (or (awhen (find key (effective-fields-of type) :key #'effective-value-of) (name-of it)) default))
+
+(defmethod layout-type-rec :before ((type abstract-enum-item))
+  (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
+    (unless (typep btype 'integer-field)
+      (error "Enum base type must be an integer: (base-type-of type)"))
+    (layout-type-rec btype)
+    (setf (effective-base-type-of type) btype)))
+
+(defmethod compute-effective-size (context (type abstract-enum-item))
+  (effective-size-of (effective-base-type-of type)))
+
+(defmethod compute-effective-alignment (context (type abstract-enum-item))
+  (effective-alignment-of (effective-base-type-of type)))
+
+(defmethod layout-fields ((type abstract-enum-item) fields)
+  (let ((val -1))
+    (dolist (field fields)
+      (setf (effective-value-of field)
+            (setf val (or (value-of field) (1+ val)))))))
 
 ;; Bit
 

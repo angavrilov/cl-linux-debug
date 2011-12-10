@@ -14,7 +14,7 @@
         :cl-linux-debug.data-info
         :gtk :gdk :gobject)
   (:shadowing-import-from :cl-linux-debug.data-defs
-                          #:alignment #:pointer)
+                          #:alignment #:pointer #:value #:enum-item)
   (:shadowing-import-from :cl-linux-debug.code-info
                           #:parse-int #:parse-bytes #:parse-string)
   (:import-from :cl-linux-debug.data-info

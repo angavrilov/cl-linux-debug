@@ -25,7 +25,7 @@
                 #:format-hex-offset #:parse-hex-offset)
   (:export #:copy-data-definition #:name-with-namespace
            #:auto-code-helpers
-           #:name ; to avoid conflict
+           #:name #:value ; to avoid conflict
            #:public-type-name-of
            ))
 

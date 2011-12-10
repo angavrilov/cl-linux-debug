@@ -13,3 +13,13 @@
 
 (defun get-int (obj offset size &key signed?)
   (get-memory-integer obj offset size :signed? signed?))
+
+(defun enum-to-int (enum value)
+  (check-type value (or symbol integer))
+  (if (integerp value) value
+      ($ $global.enum[enum] value value)))
+
+(defun enum-to-key (enum value)
+  (check-type value (or symbol integer))
+  (if (symbolp value) value
+      ($ $global.enum[enum] value value)))
