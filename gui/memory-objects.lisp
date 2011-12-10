@@ -119,8 +119,21 @@
 (defmethod col-value-of ((node real-memory-object-node))
   (ensure-string (format-ref-value (ref-of node) (ref-value-of node))))
 
+(defun format-hex-info (ref count &key ellipsis? address? (length (length-of ref)))
+  (with-bytes-for-ref (vector offset ref 1)
+    (let* ((bytes (loop for i from 0 below (min count length)
+                     and j from offset below (length vector)
+                     collect (aref vector j)))
+           (chars (loop for c in bytes
+                     collect (if (>= c 32) (code-char c) #\?))))
+      (format nil "~@[~A: ~]~{~2,'0X~^ ~}~A (~A)"
+              (if address? (format-hex-offset (start-address-of ref)))
+              bytes (if (and ellipsis? (> length count)) "..." "")
+              (coerce chars 'string)))))
+
 (defmethod col-comment-of ((node real-memory-object-node))
-  (format nil "~{~A~%~}~A~@[~%Old value: ~A~]"
+  (format nil "~A~%~{~A~%~}~A~@[~%Old value: ~A~]"
+          (format-hex-info (ref-of node) 16 :address? t)
           (ref-info-of node)
           (atypecase (comment-of (effective-main-type-of (ref-of node)))
             (comment (xml::content it))
@@ -226,16 +239,9 @@
   (format nil "(~A=0x~X bytes)" (length-of node) (length-of node)))
 
 (defmethod col-info-of ((node padding-object-node))
-  (or (with-bytes-for-ref (vector offset (ref-of node) 1)
-        (let* ((bytes (loop for i from 0 below (min 8 (length-of node))
-                         and j from offset below (length vector)
-                         collect (aref vector j)))
-               (chars (loop for c in bytes
-                         collect (if (>= c 32) (code-char c) #\?))))
-          (format nil "~{~2,'0X~^ ~}~A (~A)"
-                  bytes
-                  (if (> (length-of node) 8) "..." "")
-                  (coerce chars 'string))))
+  (or (format-hex-info (ref-of node) 8
+                       :ellipsis? t :address? nil
+                       :length (length-of node))
       "?"))
 
 (defmethod on-lazy-expand-node ((node padding-object-node))
