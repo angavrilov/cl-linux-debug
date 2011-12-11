@@ -97,7 +97,7 @@
                             (memory chunk-map &key int-reader (index (gensym))) &body code)
   (with-unique-names (range-vec heap start-addr end-addr min-idx max-idx start-offset base)
     (once-only (chunk-map)
-      `(with-simple-vector-fill (,range-vec (malloc-chunk-map-range-vector ,chunk-map) uint32)
+      `(with-vector-array (,range-vec (malloc-chunk-map-range-vector ,chunk-map) uint32)
          (dolist (,heap (malloc-chunk-map-extent-list ,chunk-map))
            (destructuring-bind (,start-addr ,end-addr ,min-idx ,max-idx) ,heap
              (declare (type uint32 ,start-addr ,end-addr)
