@@ -90,6 +90,7 @@
            #:register-data-definition
            #:find-stl-strings #:find-heap-strings
            #:os-type-of #:garbage-word-of
+           #:export-csv
            ))
 
 (pushnew (find-package :cl-linux-debug.data-info)

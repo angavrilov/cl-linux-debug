@@ -62,5 +62,6 @@
                              (:file "wine" :depends-on ("package" "memory" "glibc"))
                              (:file "malloc" :depends-on ("package" "memory" "glibc" "wine"))
                              (:file "objects" :depends-on ("package" "memory" "malloc"))
-                             (:file "search" :depends-on ("package" "objects"))))))
+                             (:file "search" :depends-on ("package" "objects"))
+                             (:file "csv-export" :depends-on ("package" "objects"))))))
 
