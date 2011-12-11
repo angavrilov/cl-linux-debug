@@ -88,7 +88,6 @@
 
 (defun delete-memory-extent (mirror extent)
   (setf (slot-value extent 'cl-linux-debug.code-info::data-bytes) nil)
-  (removef (extents-of mirror) extent)
   (trees:delete (start-address-of extent) (extent-map-of mirror)))
 
 (defun ensure-memory-extent (mirror mapping)
@@ -138,6 +137,7 @@
                      (not (aand (memory-mapping-file-path map)
                                 (starts-with-subseq "/dev/" it))))
            collect (ensure-memory-extent mirror map))
+      (setf (extents-of mirror) it)
       (with-slots (extent-idx section-idx) mirror
         (setf extent-idx (index-chunks/uint32 it)
               section-idx (index-chunks/uint32
