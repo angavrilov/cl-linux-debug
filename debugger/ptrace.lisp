@@ -168,9 +168,9 @@
       (do ((base abase (+ base wsize))
            (idx (- start in-first) (+ idx wsize)))
           ((>= idx end))
-        (when (or (not write?) (< idx 0) (> (+ idx wsize) end))
+        (when (or (not write?) (< idx start) (> (+ idx wsize) end))
           (setf (mem-ref word :long)
-                (with-errno (ptrace :PTRACE_PEEKDATA process (make-pointer base) (null-pointer)))))
+                (ptrace :PTRACE_PEEKDATA process (make-pointer base) (null-pointer))))
         (loop for i from 0 below wsize and j from idx when (<= start j (1- end))
            do (if write?
                   (setf (mem-ref word :unsigned-char i)

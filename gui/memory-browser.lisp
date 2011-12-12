@@ -85,11 +85,25 @@
     (refresh-memory-mirror-ranges (memory-of view) ranges)
     (refresh-node-values (tree-root-of view))))
 
+(defun rebuild-subtree (node)
+  (let* ((view (view-of node))
+         (parent (parent-of node))
+         (dummy (make-instance 'memory-object-placeholder-node :view view))
+         (child (layout-ref-tree-node dummy (ref-of node) (master-node-of node)))
+         (idx (child-index-of parent node)))
+    (apply-expand-from-tree child node)
+    (remove-child dummy child)
+    (remove-child parent node)
+    (add-child parent child idx)))
+
 ;; Callbacks
 
 (defgeneric get-node-menu-items (node)
   (:method-combination append :most-specific-first)
   (:method append ((node memory-object-node)) nil))
+
+(defun copy-to-clipboard (widget text)
+  (clipboard-set-text (widget-clipboard widget *selection-clipboard*) text))
 
 (defmethod get-node-menu-items append ((node real-memory-object-node))
   (let ((memory (memory-of (view-of node))))
@@ -109,7 +123,12 @@
                         memory (make-ad-hoc-memory-ref memory (start-address-of node)
                                                        (make-instance 'padding :size (length-of node)))
                         :title (format nil "Raw data at ~X - ~A"
-                                       (start-address-of node) (col-name-of node)))))))))
+                                       (start-address-of node) (col-name-of node)))))
+           (list "Copy address to clipboard"
+                 (lambda () (copy-to-clipboard (tree-view-of (view-of node))
+                                          (format-hex-offset (start-address-of node) :prefix ""))))
+           (list "Rebuild subtree"
+                 (lambda () (rebuild-subtree node)))))))
 
 (defun print-guessed-item (stream item base-addr)
   (bind ((addr (start-address-of item))
@@ -130,11 +149,11 @@
          (lambda ()
            (setf (expanded? node) t)
            (let* ((start (start-address-of (or (master-node-of node) node))))
-             (clipboard-set-text (widget-clipboard (tree-view-of (view-of node)) *selection-clipboard*)
-                                 (with-output-to-string (str)
-                                   (dolist (item (guessed-items-of node))
-                                     (print-guessed-item str item start)
-                                     (format str "~%")))))))))
+             (copy-to-clipboard (tree-view-of (view-of node))
+                                (with-output-to-string (str)
+                                  (dolist (item (guessed-items-of node))
+                                    (print-guessed-item str item start)
+                                    (format str "~%")))))))))
 
 (defmethod on-tree-node-activated ((view memory-object-browser) (node pointer-object-node) column)
   (awhen (ref-value-of node)
