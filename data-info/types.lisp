@@ -169,7 +169,8 @@
   (:documentation "An abstract type that points to a set of elements."))
 
 (def (class* eas) array-item (container-item code-helper-mixin)
-  ((index-refers-to nil :accessor t :type string))
+  ((index-refers-to nil :accessor t :type string)
+   (index-enum nil :accessor t :type $-keyword-namespace))
   (:documentation "An abstract container that contains an integer-indexed sequence of items."))
 
 (defmethod auto-code-helpers append ((item array-item))
@@ -200,7 +201,9 @@
 ;; Primitive fields
 
 (def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
-  ((refers-to nil :accessor t :type string))
+  ((refers-to nil :accessor t :type string)
+   (ref-target nil :accessor t :type $-keyword-namespace)
+   (aux-value nil :accessor t :type string))
   (:documentation "An abstract type for a primitive field."))
 
 (defmethod auto-code-helpers append ((item primitive-field))

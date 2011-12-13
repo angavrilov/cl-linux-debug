@@ -24,10 +24,14 @@
 (defmacro %group-all (&rest args)
   (if (rest args) `(list ,@args) (first args)))
 
+(defun parse-helper (text)
+  (when text
+    (let* ((*package* (find-package :cl-linux-debug.data-xml))
+           (str (concatenate 'string "(" text ")")))
+      (read-from-string str))))
+
 (defun compile-helper (text &key group?)
-  (let* ((*package* (find-package :cl-linux-debug.data-xml))
-         (str (concatenate 'string "(" text ")"))
-         (code (read-from-string str)))
+  (let* ((code (if (stringp text) (parse-helper text) text)))
     (compile nil `(lambda ($ $$)
                     (declare (ignorable $ $$))
                     ,@(if group? `((%group-all ,@code)) code)))))
@@ -222,6 +226,10 @@
   (:method ((obj container-item))
     nil))
 
+(defgeneric special-code-helpers (obj)
+  (:method-combination append)
+  (:method append ((obj code-helper-mixin)) nil))
+
 (defgeneric layout-type-rec (obj)
   (:method :after ((obj abstract-item))
     (setf (effective-finalized? obj) t))
@@ -242,11 +250,13 @@
       (layout-fields obj fields)))
   (:method :after ((obj code-helper-mixin))
     (setf (effective-code-helpers-of obj)
-          (mapcar (lambda (ch)
-                    (cons (name-of ch)
-                          (compile-helper (xml::content ch) :group? t)))
-                  (append (code-helpers-of obj)
-                          (auto-code-helpers obj)))))
+          (append
+           (mapcar (lambda (ch)
+                     (cons (name-of ch)
+                           (compile-helper (xml::content ch) :group? t)))
+                   (append (code-helpers-of obj)
+                           (auto-code-helpers obj)))
+           (special-code-helpers obj))))
   (:method :around ((obj global-type-proxy))
     (setf (effective-finalized? obj) t))
   (:method :around ((obj proxifiable-item-mixin))

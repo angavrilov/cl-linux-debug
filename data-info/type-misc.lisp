@@ -46,8 +46,11 @@
   (:method append (type ref value)
     (get-ref-child-links (memory-object-ref-parent-ref ref) ref))
   (:method append ((type primitive-field) ref value)
-    (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
-      (list (list $refers-to it)))))
+    (append
+     (awhen (call-helper-if-found type $refers-to value ref :context-ref ref)
+       (list (list $refers-to it)))
+     (awhen (call-helper-if-found type $ref-target value ref :context-ref ref)
+       (list (list $ref-target it))))))
 
 (defun get-ref-links (ref value)
   (get-ref-links-by-type (memory-object-ref-type ref) ref value))
@@ -56,7 +59,9 @@
   (:method-combination append :most-specific-first)
   (:method append (type ref value key) nil)
   (:method append ((type array-item) ref value (key integer))
-    (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref))))
+    (append
+     (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref))
+     (ensure-list (call-helper-if-found type $index-enum-key key ref :context-ref ref)))))
 
 (defun describe-ref-child (ref child)
   (when (typep ref 'memory-object-ref)
@@ -103,6 +108,20 @@
   (:method (obj) obj)
   (:method ((obj memory-object-ref))
     (describe-ref-value obj obj)))
+
+;; Primitives
+
+(defmethod special-code-helpers append ((type primitive-field))
+  (awhen (ref-target-of type)
+    (let ((tag (effective-tag-of (lookup-type-in-context *type-context* it)))
+          (aux-code (awhen (aux-value-of type)
+                      `(let (($ $$) ($$ $$._parent))
+                         (declare (ignorable $ $$))
+                         ,@(parse-helper it)))))
+      (flet ((find-target (value aux ref)
+               (call-helper-if-found (car tag) $find-instance value aux :context-ref ref)))
+        (list (cons $ref-target
+                    (compile-helper `((funcall ,#'find-target $ ,aux-code $$)))))))))
 
 ;; Integers
 
@@ -319,6 +338,11 @@
 (defmethod describe-ref-value-by-type append ((type array-item) ref value)
   (awhen (comment-string-of type)
     (list it)))
+
+(defmethod special-code-helpers append ((type array-item))
+  (awhen (index-enum-of type)
+    (let ((tag (effective-tag-of (lookup-type-in-context *type-context* it))))
+      (list (cons $index-enum-key (lambda ($ $$) (declare (ignore $$)) ($ (car tag) $)))))))
 
 (defun find-by-id (array id-field key)
   (when array
