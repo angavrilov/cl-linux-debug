@@ -47,31 +47,25 @@
 
 ;; Proxy
 
-(def (class* eas) global-type-proxy (data-field concrete-item)
-  ((type-name nil :accessor t :type $-keyword-namespace))
+(def (class* eas) global-type-proxy-base (data-field concrete-item)
+  ((type-name nil :accessor t :type $-keyword-namespace)
+   (effective-main-type-tag nil :accessor t))
   (:documentation "A proxy type object; used to stand in for global types as fields."))
 
-(defmethod xml:xml-tag-name-symbol ((str global-type-proxy)) 'compound)
-
-(def (class* eas) global-type-proxy/enum (global-type-proxy)
-  ()
-  (:documentation "A proxy type object; used for enums."))
-
-(defmethod xml:xml-tag-name-symbol ((str global-type-proxy/enum)) 'enum)
-
-(defgeneric effective-main-type-of (obj)
-  (:method ((obj abstract-item)) obj)
-  (:method ((obj global-type-proxy))
-    (car (effective-tag-of obj))))
-
-(defmethod initialize-instance :after ((type global-type-proxy) &key effective-main-type)
+(defmethod initialize-instance :after ((type global-type-proxy-base) &key effective-main-type)
   (when effective-main-type
-    (setf (effective-tag-of type) (effective-tag-of effective-main-type))
+    (setf (effective-main-type-tag-of type) (effective-tag-of effective-main-type))
     (setf (type-name-of type) (type-name-of effective-main-type))))
 
-(defmethod copy-data-definition ((type global-type-proxy))
+(defmethod update-instance-for-different-class :after
+    (old (type global-type-proxy-base) &key effective-main-type)
+  (when effective-main-type
+    (setf (effective-main-type-tag-of type) (effective-tag-of effective-main-type))
+    (setf (type-name-of type) (type-name-of effective-main-type))))
+
+(defmethod copy-data-definition ((type global-type-proxy-base))
   (aprog1 (call-next-method)
-    (setf (effective-tag-of it) (effective-tag-of type))))
+    (setf (effective-main-type-tag-of it) (effective-main-type-tag-of type))))
 
 (defparameter *strong-ref-table* nil)
 
@@ -82,6 +76,37 @@
     (pushnew ref (gethash type *strong-ref-table*))))
 
 (macrolet ((delegate (name)
+             `(defmethod ,name ((proxy global-type-proxy-base))
+                (let ((base (effective-main-type-of proxy)))
+                  (verify-finalized base proxy)
+                  (,name base)))))
+  (delegate public-type-name-of))
+
+(def (class* eas) global-type-proxy (global-type-proxy-base)
+  ()
+  (:documentation "A proxy type object; used to stand in for global types as fields."))
+
+(defmethod xml:xml-tag-name-symbol ((str global-type-proxy)) 'compound)
+
+(defmethod initialize-instance :after ((type global-type-proxy) &key effective-main-type)
+  (when effective-main-type
+    (setf (effective-tag-of type) (effective-tag-of effective-main-type))))
+
+(defmethod update-instance-for-different-class :after
+    (old (type global-type-proxy) &key effective-main-type)
+  (when effective-main-type
+    (setf (effective-tag-of type) (effective-tag-of effective-main-type))))
+
+(defgeneric effective-main-type-of (obj)
+  (:method ((obj abstract-item)) obj)
+  (:method ((obj global-type-proxy-base))
+    (car (effective-main-type-tag-of obj))))
+
+(defmethod copy-data-definition ((type global-type-proxy))
+  (aprog1 (call-next-method)
+    (setf (effective-tag-of it) (effective-tag-of type))))
+
+(macrolet ((delegate (name)
              `(defmethod ,name ((proxy global-type-proxy))
                 (let ((base (effective-main-type-of proxy)))
                   (verify-finalized base proxy)
@@ -90,8 +115,12 @@
   (delegate effective-alignment-of)
   (delegate effective-has-pointers?)
   (delegate effective-min-offset-of)
-  (delegate effective-max-offset-of)
-  (delegate public-type-name-of))
+  (delegate effective-max-offset-of))
+
+(def (class* eas) enum/global (global-type-proxy-base enum-field integer-field)
+  ())
+
+(defmethod xml:xml-tag-name-symbol ((str enum/global)) 'enum)
 
 ;; Misc
 
@@ -106,7 +135,7 @@
   (:method ((obj global-type-definition))
     (aif (type-name-of obj) (list it)
          (call-next-method)))
-  (:method :around ((obj global-type-proxy))
+  (:method :around ((obj global-type-proxy-base))
     (type-field-sequence (effective-main-type-of obj))))
 
 (defgeneric os-type-of (context))
@@ -164,7 +193,7 @@
   (:method ((type global-type-definition))
     'global-type-proxy)
   (:method ((type enum-type))
-    'global-type-proxy/enum))
+    'enum/global))
 
 (defgeneric make-proxy-field (obj type)
   (:method (obj (type global-type-definition))
@@ -264,9 +293,9 @@
          (let ((defn (lookup-type-reference *type-context* obj (type-name-of obj))))
            (unless (can-proxify-for-type? obj defn)
              (error "Cannot refer with ~A to ~A" obj defn))
-           (change-class obj (proxy-class-for defn)
-                         :effective-tag (effective-tag-of defn)
-                         :effective-finalized? t))
+           (layout-type-rec
+            (change-class obj (proxy-class-for defn)
+                          :effective-main-type defn)))
          (call-next-method))))
 
 (defmethod slot-unbound (class (obj container-item) (slot (eql 'effective-element-size)))

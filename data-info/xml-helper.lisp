@@ -17,9 +17,9 @@
 (defun enum-to-int (enum value)
   (check-type value (or symbol integer))
   (if (integerp value) value
-      ($ $global.enum[enum] value value)))
+      ($ $global.enum[enum].values value value)))
 
 (defun enum-to-key (enum value)
   (check-type value (or symbol integer))
   (if (symbolp value) value
-      ($ $global.enum[enum] value value)))
+      ($ $global.enum[enum].keys value value)))

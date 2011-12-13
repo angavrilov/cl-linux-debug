@@ -2,13 +2,9 @@
 
 (in-package :cl-linux-debug.data-info)
 
-(defstruct enum-proxy
-  context)
-
 (def (class* e) type-context ()
   ((last-types-version 0 :accessor t)
    (processed-types (make-hash-table :test #'equal) :accessor t)
-   (enum-proxy :reader t)
    (last-globals-version 0 :accessor t)
    (processed-globals (make-hash-table :test #'equal) :accessor t)
    (strong-dep-table (make-hash-table) :accessor t)
@@ -17,21 +13,16 @@
    (data-definition-files nil :accessor t)
    (os-type $linux :accessor t)))
 
-(defmethod initialize-instance :after ((context type-context) &key)
-  (setf (slot-value context 'enum-proxy) (make-enum-proxy :context context)))
-
 (defmethod $ ((context type-context) (key (eql $enum)) &optional def)
   (declare (ignore def))
-  (enum-proxy-of context))
-
-(defmethod $ ((proxy enum-proxy) key &optional def)
-  (let ((type (lookup-type-in-context (enum-proxy-context proxy) key)))
-    (if type
-        (progn
-          (unless (typep type 'enum-type)
-            (error "Not an enum type: ~A" key))
-          type)
-        def)))
+  (lambda (key &optional def)
+    (let ((type (lookup-type-in-context context key)))
+      (if type
+          (progn
+            (unless (typep type 'enum-type)
+              (error "Not an enum type: ~A" key))
+            type)
+          def))))
 
 (defmethod get-context-of-memory ((context type-context)) context)
 

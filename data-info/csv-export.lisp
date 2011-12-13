@@ -42,7 +42,7 @@
             (call-next-method))
           (dolist (sub (effective-fields-of type))
             (export-csv-rec sub root (1+ level) subname offset)))))
-  (:method ((type global-type-proxy) root level pname inc-offset)
+  (:method ((type global-type-proxy-base) root level pname inc-offset)
     (write-csv-entry root level pname inc-offset type
                      :type-name (get-$-field-name (type-name-of type))))
   (:method ((type container-item) root level pname inc-offset)
@@ -50,14 +50,14 @@
            (elt (if (typep real-elt 'pointer)
                     (effective-contained-item-of real-elt)
                     real-elt))
-           (anon? (not (or (typep elt 'global-type-proxy)
+           (anon? (not (or (typep elt 'global-type-proxy-base)
                            (typep elt 'primitive-field))))
            (elt-name (cond (anon?
                             (format nil "~A::anon~A" *anon-stem* (incf *anon-id*)))
-                           ((typep elt 'primitive-field)
-                            (xml:xml-tag-name-string elt))
+                           ((typep elt 'global-type-proxy-base)
+                            (get-$-field-name (type-name-of elt)))
                            (t
-                            (get-$-field-name (type-name-of elt))))))
+                            (xml:xml-tag-name-string elt)))))
       (write-csv-entry root level pname inc-offset type
                        :item (format nil "~A~A" elt-name (if (eq elt real-elt) "" "*")))
       (when anon?
@@ -66,8 +66,7 @@
     (call-next-method)
     (dolist (field (effective-fields-of type))
       (format *csv-stream* "\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\"~%"
-              root (1+ level) "" ""
-              (xml:xml-tag-name-string (effective-base-type-of type))
+              root (1+ level) "" "" "enum-item"
               (aif (name-of field) (get-$-field-name it) "?") (effective-value-of field)
               (remove-if (lambda (c) (case c ((#\Newline) t)))
                          (or (comment-string-of field) ""))))))

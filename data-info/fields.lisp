@@ -14,7 +14,9 @@
   (:method ((obj list) key &optional default)
     (mapcan (lambda (x) (ensure-list ($ x key default))) obj))
   (:method (obj (key list) &optional default)
-    (mapcan (lambda (x) (ensure-list ($ obj x default))) key)))
+    (mapcan (lambda (x) (ensure-list ($ obj x default))) key))
+  (:method ((obj function) key &optional default)
+    (funcall obj key default)))
 
 ;; Save readtable
 

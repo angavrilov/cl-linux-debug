@@ -144,43 +144,67 @@
 
 ;; Enum
 
-(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key (eql t)))
-  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
-    ($ type iv iv)))
-
-(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key (eql $int-value)))
-  (%memory-ref-$ (effective-base-type-of type) ref t))
-
 (defmethod describe-ref-value-by-type append ((type abstract-enum-item) ref (value symbol))
-  (awhen ($ type value)
+  (awhen $type.values[value]
     (list it)))
 
-(defmethod $ ((type abstract-enum-item) (key null) &optional default) default)
-
 (defmethod $ ((type abstract-enum-item) (key symbol) &optional default)
-  (or (awhen (find key (effective-fields-of type) :key #'name-of) (effective-value-of it)) default))
+  (let* ((tables (lookup-tables-of type))
+         (vtable (gethash $values tables))
+         (ktable (gethash key tables)))
+    (assert vtable)
+    (if ktable
+        (if (eq vtable ktable)
+            (lambda (key &optional default)
+              (if (integerp key) key
+                  (gethash key vtable default)))
+            (lambda (key &optional default)
+              (gethash (gethash key vtable key) ktable default)))
+        default)))
 
-(defmethod $ ((type abstract-enum-item) (key integer) &optional default)
-  (or (awhen (find key (effective-fields-of type) :key #'effective-value-of) (name-of it)) default))
+(defmethod layout-fields ((type abstract-enum-item) fields)
+  (let ((val -1)
+        (ftable (make-hash-table))
+        (ktable (make-hash-table))
+        (vtable (make-hash-table)))
+    (dolist (field fields)
+      (setf (effective-value-of field)
+            (setf val (or (value-of field) (1+ val))))
+      (awhen (name-of field)
+        (setf (gethash it vtable) val
+              (gethash val ktable) it)))
+    (setf (gethash $keys ftable) ktable)
+    (setf (gethash $values ftable) vtable)
+    (setf (lookup-tables-of type) ftable)))
 
-(defmethod layout-type-rec :before ((type abstract-enum-item))
+(defmethod compute-effective-size (context (type enum-type)) 4)
+(defmethod compute-effective-alignment (context (type enum-type)) 4)
+
+(defmethod lookup-tables-of ((type enum/global))
+  (lookup-tables-of (effective-main-type-of type)))
+
+(defmethod %memory-ref-$ ((type enum-field) ref (key (eql t)))
+  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
+    (gethash iv (gethash $keys (lookup-tables-of type)) iv)))
+
+(defmethod %memory-ref-$ ((type enum-field) ref (key (eql $int-value)))
+  (%memory-ref-$ (effective-base-type-of type) ref t))
+
+(defmethod %memory-ref-$ ((type enum-field) ref (key symbol))
+  (or ($ type key) (call-next-method)))
+
+(defmethod layout-type-rec :before ((type enum-field))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
     (unless (typep btype 'integer-field)
       (error "Enum base type must be an integer: (base-type-of type)"))
     (layout-type-rec btype)
     (setf (effective-base-type-of type) btype)))
 
-(defmethod compute-effective-size (context (type abstract-enum-item))
+(defmethod compute-effective-size (context (type enum-field))
   (effective-size-of (effective-base-type-of type)))
 
-(defmethod compute-effective-alignment (context (type abstract-enum-item))
+(defmethod compute-effective-alignment (context (type enum-field))
   (effective-alignment-of (effective-base-type-of type)))
-
-(defmethod layout-fields ((type abstract-enum-item) fields)
-  (let ((val -1))
-    (dolist (field fields)
-      (setf (effective-value-of field)
-            (setf val (or (value-of field) (1+ val)))))))
 
 ;; Bit
 

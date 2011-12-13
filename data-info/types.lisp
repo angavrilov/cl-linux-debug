@@ -170,7 +170,8 @@
 
 (def (class* eas) array-item (container-item code-helper-mixin)
   ((index-refers-to nil :accessor t :type string)
-   (index-enum nil :accessor t :type $-keyword-namespace))
+   (index-enum nil :accessor t :type $-keyword-namespace)
+   (effective-index-enum-tag nil :accessor t))
   (:documentation "An abstract container that contains an integer-indexed sequence of items."))
 
 (defmethod auto-code-helpers append ((item array-item))
@@ -294,8 +295,7 @@
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)
-  ((base-type nil :accessor t :type $-keyword)
-   (effective-base-type :accessor t))
+  ((lookup-tables :accessor t))
   (:documentation "Abstract type for enums."))
 
 (def (class* eas) enum-item (abstract-field concrete-item)
@@ -304,15 +304,16 @@
 
 (defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
 
-(def (class* eas) enum (proxifiable-item-mixin abstract-enum-item integer-field)
+(def (class* eas) enum-field (abstract-enum-item integer-item)
+  ((base-type $int32_t :accessor t :type $-keyword)
+   (effective-base-type :accessor t))
+  (:documentation "Ad-hoc enum field"))
+
+(def (class* eas) enum (proxifiable-item-mixin enum-field integer-field)
   ((type-name nil :accessor t :type $-keyword-namespace))
   (:documentation "Ad-hoc enum field"))
 
 (defmethod can-proxify-for-type? ((type enum) (global abstract-enum-item)) t)
-
-(defmethod can-proxify-for-type? :after ((type enum) global)
-  (unless (null (base-type-of type))
-    (error "Cannot have both TYPE-NAME and BASE-TYPE in: ~A" type)))
 
 ;; Global entity definition
 
