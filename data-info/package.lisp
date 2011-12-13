@@ -57,6 +57,7 @@
            #:memory-object-ref-type
            #:memory-object-ref-parent
            #:memory-object-ref-parent-key
+           #:memory-object-ref-parent-ref
            #:effective-main-type-of
            #:address= #:address- #:value=
            #:format-field-seq

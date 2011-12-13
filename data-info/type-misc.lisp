@@ -29,6 +29,10 @@
 (defun format-ref-value (ref value)
   (format-ref-value-by-type (memory-object-ref-type ref) ref value))
 
+(defun get-array-enum-value (type key)
+  (awhen (car (effective-index-enum-tag-of type))
+    (gethash key (gethash $values (lookup-tables-of it)))))
+
 (defgeneric get-ref-child-links-by-type (type ref child key)
   (:method-combination append :most-specific-first)
   (:method append (type ref value key) nil)
@@ -60,8 +64,7 @@
   (:method append (type ref value key) nil)
   (:method append ((type array-item) ref value (key integer))
     (append
-     (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref))
-     (ensure-list (call-helper-if-found type $index-enum-key key ref :context-ref ref)))))
+     (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref)))))
 
 (defun describe-ref-child (ref child)
   (when (typep ref 'memory-object-ref)
@@ -317,11 +320,14 @@
 
 ;; Abstract array
 
+(defparameter *array-item-internal* nil)
+
 (defgeneric array-base-dimensions (type ref))
 
 (defun array-item-ref (type ref index &key (check-bounds? t))
   (multiple-value-bind (base size)
-      (array-base-dimensions type ref)
+      (let ((*array-item-internal* t))
+        (array-base-dimensions type ref))
     (when (and base
                (typep size 'fixnum) (>= size 0)
                (or (< -1 index size)
@@ -335,6 +341,12 @@
 
 (defmethod %memory-ref-$ ((type array-item) ref (key integer))
   ($ (array-item-ref type ref key) t))
+
+(defmethod %memory-ref-$ ((type array-item) ref (key symbol))
+  (aif (and (null *array-item-internal*)
+            (get-array-enum-value type key))
+       (%memory-ref-$ type ref it)
+       (call-next-method)))
 
 (defun all-array-item-refs (type ref)
   (multiple-value-bind (first size step)
@@ -363,10 +375,10 @@
   (awhen (comment-string-of type)
     (list it)))
 
-(defmethod special-code-helpers append ((type array-item))
-  (awhen (index-enum-of type)
-    (let ((tag (effective-tag-of (lookup-type-in-context *type-context* it))))
-      (list (cons $index-enum-key (lambda ($ $$) (declare (ignore $$)) ($ (car tag) $)))))))
+(defmethod layout-type-rec :before ((type array-item))
+  (setf (effective-index-enum-tag-of type)
+        (awhen (index-enum-of type)
+          (effective-tag-of (lookup-type-in-context *type-context* it)))))
 
 (defun find-by-id (array id-field key)
   (when array
