@@ -196,17 +196,17 @@
 (defmethod %memory-ref-$ ((type enum-field) ref (key symbol))
   (or ($ type key) (call-next-method)))
 
-(defmethod layout-type-rec :before ((type enum-field))
+(defmethod layout-type-rec :before ((type base-type-item))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
     (unless (typep btype 'integer-field)
-      (error "Enum base type must be an integer: (base-type-of type)"))
+      (error "Base type must be an integer: ~A" (base-type-of type)))
     (layout-type-rec btype)
     (setf (effective-base-type-of type) btype)))
 
-(defmethod compute-effective-size (context (type enum-field))
+(defmethod compute-effective-size (context (type base-type-item))
   (effective-size-of (effective-base-type-of type)))
 
-(defmethod compute-effective-alignment (context (type enum-field))
+(defmethod compute-effective-alignment (context (type base-type-item))
   (effective-alignment-of (effective-base-type-of type)))
 
 ;; Bit

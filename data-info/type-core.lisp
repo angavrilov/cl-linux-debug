@@ -216,7 +216,15 @@
          for offset = (effective-offset-of item)
          minimizing (+ offset (effective-min-offset-of item)) into minv
          maximizing (+ offset (effective-max-offset-of item)) into maxv
-         finally (return (values (min min minv) (max max maxv)))))))
+         finally (return (values (min min minv) (max max maxv))))))
+  (:method (context (obj bitfield-item))
+    (values 0 (effective-size-of obj)))
+  (:method :around (context (obj bitfield-item))
+    (multiple-value-bind (min max)
+        (call-next-method)
+      (unless (<= 0 min max (effective-size-of obj))
+        (error "Bitfield contents not in bounds: ~A" obj))
+      (values min max))))
 
 (defgeneric inherited-base-size (obj field)
   (:method (obj (field data-item))

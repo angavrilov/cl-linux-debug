@@ -251,6 +251,20 @@
   (:default-initargs :default-size 1/8 :effective-alignment 1/8)
   (:documentation "A bitfield chunk."))
 
+(def (class* eas) base-type-item (data-item)
+  ((base-type $int32_t :accessor t :type $-keyword)
+   (effective-base-type :accessor t)))
+
+(def (class* eas) bitfield-item (base-type-item struct-compound-item)
+  ())
+
+(def (class* eas) bitfield (data-field bitfield-item concrete-item)
+  ())
+
+(defmethod can-add-subfield? ((obj compound-item) (subobj flag-bit)) nil)
+(defmethod can-add-subfield? ((obj bitfield-item) (subobj data-field)) nil)
+(defmethod can-add-subfield? ((obj bitfield-item) (subobj flag-bit)) t)
+
 ;; Pointer
 
 (def (class* eas) pointer (unit-item container-item data-field concrete-item)
@@ -308,9 +322,8 @@
 
 (defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
 
-(def (class* eas) enum-field (abstract-enum-item integer-item)
-  ((base-type $int32_t :accessor t :type $-keyword)
-   (effective-base-type :accessor t))
+(def (class* eas) enum-field (base-type-item abstract-enum-item integer-item)
+  ()
   (:documentation "Ad-hoc enum field"))
 
 (def (class* eas) enum (proxifiable-item-mixin enum-field integer-field)
@@ -355,6 +368,10 @@
   (:documentation "A global class type definition."))
 
 (defmethod has-methods? ((type class-type)) t)
+
+(def (class* eas) bitfield-type (global-type-definition bitfield-item concrete-item)
+  ()
+  (:documentation "A global bitfield type definition."))
 
 (def (class* eas) enum-type (global-type-definition abstract-enum-item concrete-item)
   ()
