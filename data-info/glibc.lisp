@@ -59,6 +59,11 @@
   <class-type type-name='type_info'>
     <ptr-string name='class_name'/>
     <pointer name='base_class' type-name='type_info'/>
+    <int32_t name='num_bases'/>
+    <static-array name='bases' count='10'>
+      <pointer name='base_class' type-name='type_info'/>
+      <int32_t name='offset'/>
+    </static-array>
   </class-type>
 
   <global-object name='main_arena' type-name='malloc_state'/>

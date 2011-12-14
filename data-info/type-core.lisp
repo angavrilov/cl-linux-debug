@@ -115,7 +115,8 @@
   (delegate effective-alignment-of)
   (delegate effective-has-pointers?)
   (delegate effective-min-offset-of)
-  (delegate effective-max-offset-of))
+  (delegate effective-max-offset-of)
+  (delegate has-methods?))
 
 (def (class* eas) enum/global (global-type-proxy-base enum-field integer-field)
   ())
@@ -206,7 +207,9 @@
 (defgeneric compute-offset-range (context obj)
   (:method (context (obj data-item))
     (values 0 (effective-size-of obj)))
-  (:method (context (obj virtual-compound-item))
+  (:method (context (obj struct-compound-item))
+    (values 0 0))
+  (:method :around (context (obj virtual-compound-item))
     (multiple-value-bind (min max)
         (call-next-method)
       (loop for item in (effective-fields-of obj)
@@ -214,6 +217,13 @@
          minimizing (+ offset (effective-min-offset-of item)) into minv
          maximizing (+ offset (effective-max-offset-of item)) into maxv
          finally (return (values (min min minv) (max max maxv)))))))
+
+(defgeneric inherited-base-size (obj field)
+  (:method (obj (field data-item))
+    (if (and (has-methods? field)
+             (eq (os-type-of *type-context*) $linux))
+        (effective-max-offset-of field)
+        (effective-size-of field))))
 
 (defgeneric layout-fields (obj fields)
   (:method :before ((obj abstract-compound-item) fields)
@@ -226,13 +236,17 @@
       (setf (effective-parent-of item) obj)
       (layout-type-rec item)))
   (:method ((obj virtual-compound-item) fields)
-    (let ((offset 0))
+    (let ((offset 0)
+          (inherited (effective-inherited-child-of obj)))
       (dolist (field fields)
         (setf offset (or (offset-of field)
                          (when (is-union-p obj) 0)
                          (align-up offset (effective-alignment-of field))))
         (setf (effective-offset-of field) offset)
-        (incf offset (effective-size-of field))))))
+        (incf offset
+              (if (eq field inherited)
+                  (inherited-base-size obj field)
+                  (effective-size-of field)))))))
 
 (defgeneric compute-effective-fields (obj)
   (:method ((obj abstract-compound-item)) nil)

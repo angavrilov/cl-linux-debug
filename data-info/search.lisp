@@ -44,7 +44,7 @@
       (get-bytes-for-addr memory start-address (length text-bytes))
     (let ((refs nil)
           (pos offset)
-          (limit (min (length bytes) (- end-address start-address))))
+          (limit (min (length bytes) (+ offset (- end-address start-address)))))
       (loop for idx = (search text-bytes bytes :start2 pos :end2 limit)
          while idx
          do (push (make-ad-hoc-memory-ref memory (+ base-in idx)

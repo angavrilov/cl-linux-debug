@@ -242,8 +242,7 @@
                 (lookup-global-in-context context name)))
         (setf (last-globals-version-of context) *known-globals-version*))
       ;; Finalize
-      (when changed?
-        (clrhash (vtable-class-cache-of context))))))
+      (clrhash (vtable-class-cache-of context)))))
 
 (defun load-data-definition (path)
   (let ((*package* (find-package :cl-linux-debug.data-xml)))

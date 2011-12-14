@@ -43,6 +43,10 @@
    (effective-max-offset :accessor t))
   (:documentation "An abstract base class for all type items."))
 
+(def (generic e) has-methods? (type)
+  (:method ((type data-item)) nil)
+  (:method ((type null)) nil))
+
 (def (class* eas) code-helper (xml-serializer)
   ((name nil :accessor t :type $-keyword))
   (:documentation "A bit of code to help in type presentation."))
@@ -142,7 +146,7 @@
   (:documentation "An abstract type for a type that is complete without any arguments."))
 
 (def (class* eas) virtual-compound-item (data-item abstract-compound-item)
-  ()
+  ((effective-inherited-child nil :accessor t))
   (:documentation "An abstract type that may contain fake fields."))
 
 (def (class* eas) compound-item (virtual-compound-item abstract-real-compound-item)
@@ -331,19 +335,26 @@
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 
-(def (class* eas) struct-type (global-type-definition struct-compound-item concrete-item)
-  ()
-  (:documentation "A global structure type definition."))
-
 (def (class* eas) inheriting-type (data-item)
   ((inherits-from nil :accessor t :type $-keyword-namespace))
   (:documentation "A type that can inherit."))
 
-(def (class* eas) class-type (global-type-definition struct-compound-item inheriting-type concrete-item)
+(def (class* eas) struct-type (global-type-definition inheriting-type
+                                                      struct-compound-item concrete-item)
+  ((has-methods nil :accessor t :type boolean))
+  (:documentation "A global structure type definition."))
+
+(defmethod has-methods? ((type struct-type))
+  (or (has-methods-p type) (has-methods? (effective-inherited-child-of type))))
+
+(def (class* eas) class-type (global-type-definition inheriting-type
+                                                     struct-compound-item concrete-item)
   ((original-name nil :accessor t :type string)
    (linux-mangling nil :accessor t :type string)
    (windows-mangling nil :accessor t :type string))
   (:documentation "A global class type definition."))
+
+(defmethod has-methods? ((type class-type)) t)
 
 (def (class* eas) enum-type (global-type-definition abstract-enum-item concrete-item)
   ()

@@ -536,10 +536,16 @@
 (defun vtable-type-by-os (mirror)
   (if (eq (os-type-of mirror) $windows) $wine:vtable $glibc:vtable))
 
+(defmethod compute-effective-fields ((type inheriting-type))
+  (nconc (awhen (inherits-from-of type)
+           (list (setf (effective-inherited-child-of type)
+                       (make-instance 'compound :type-name it))))
+         (call-next-method)))
+
 (defmethod compute-effective-fields ((type class-type))
-  (list* (aif (inherits-from-of type)
-              (make-instance 'compound :type-name it)
-              (make-instance 'pointer :name $_vtable :type-name (vtable-type-by-os *type-context*)))
+  (nconc (when (null (inherits-from-of type))
+           (list (make-instance 'pointer :name $_vtable
+                                :type-name (vtable-type-by-os *type-context*))))
          (call-next-method)))
 
 (defmethod adjust-mem-ref-type ((type class-type) ref)

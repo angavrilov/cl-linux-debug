@@ -26,20 +26,23 @@
                  'pe-executable-image)
       (setf (os-type-of mirror) $windows))))
 
-(defmethod check-refresh-context :after ((mirror object-memory-mirror))
+(defun invalidate-object-mirror-caches (mirror)
   (setf (malloc-chunk-types-of mirror)
-        (collect-known-objects mirror (malloc-chunks-of mirror))))
+        (collect-known-objects mirror (malloc-chunks-of mirror)))
+  (clrhash (vtable-names-of mirror))
+  (clrhash (find-by-id-cache-of mirror)))
+
+(defmethod check-refresh-context :after ((mirror object-memory-mirror))
+  (invalidate-object-mirror-caches mirror))
 
 (defmethod refresh-memory-mirror :after ((mirror object-memory-mirror) &key)
-  (clrhash (find-by-id-cache-of mirror))
   (with-simple-restart (continue "Ignore malloc chunks")
     (collect-malloc-objects mirror (malloc-chunks-of mirror))
     (with-simple-restart (continue "Skip cross-referencing chunks")
       (setf (malloc-chunk-reftbl-of mirror)
             (collect-chunk-references mirror (malloc-chunks-of mirror)))))
   (unless (check-refresh-context mirror)
-    (setf (malloc-chunk-types-of mirror)
-          (collect-known-objects mirror (malloc-chunks-of mirror)))))
+    (invalidate-object-mirror-caches mirror)))
 
 (defmethod get-id-search-cache ((context object-memory-mirror) address type field)
   (let ((key (list address type field)))
