@@ -63,7 +63,7 @@
                                         (and (memory-mapping-executable? mapping)
                                              (<= 0
                                                  (- (file-offset-of exec-section) base)
-                                                 (- len (length-of exec-section))))))
+                                                 (- len (min (length-of exec-section) 4096))))))
                                     own-mappings)
                            (error "Could not find a mapping for the executable section: ~S ~S"
                                   exec-section mappings)))
