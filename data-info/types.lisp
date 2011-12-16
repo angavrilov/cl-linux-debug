@@ -244,6 +244,13 @@
   (def-simple-int int64_t 8 t)
   (def-simple-int bool 1 nil))
 
+;; Float
+
+(def (class* eas) s-float (primitive-field concrete-item)
+  ()
+  (:default-initargs :default-size 4)
+  (:documentation "A float field."))
+
 ;; Bit
 
 (def (class* eas) flag-bit (primitive-field concrete-item)

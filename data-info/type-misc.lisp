@@ -145,6 +145,15 @@
 (defmethod format-ref-value-by-type ((type bool) ref value)
   (if value "Y" "N"))
 
+;; Float
+
+(defmethod %memory-ref-$ ((type s-float) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (cffi:with-foreign-object (tmp :uint32)
+        (setf (cffi:mem-ref tmp :uint32) (parse-int vector offset 4))
+        (cffi:mem-ref tmp :float)))))
+
 ;; Enum
 
 (defmethod describe-ref-value-by-type append ((type abstract-enum-item) ref (value symbol))
