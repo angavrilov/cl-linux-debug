@@ -28,6 +28,9 @@
 
 (defmethod mirror-of ((mirror memory-mirror)) mirror)
 
+(defmethod valid-ref? ((extent memory-extent))
+  (/= (length-of extent) 0))
+
 (defmethod get-context-of-memory ((extent memory-extent))
   (get-context-of-memory (mirror-of extent)))
 

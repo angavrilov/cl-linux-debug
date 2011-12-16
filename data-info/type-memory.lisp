@@ -24,6 +24,17 @@
 (defmethod length-of ((ref memory-object-ref))
   (effective-size-of (memory-object-ref-type ref)))
 
+(defgeneric valid-ref? (ref)
+  (:method ((ref t)) nil)
+  (:method ((ref memory-object-ref))
+    (and (/= (memory-object-ref-address ref) 0)
+         (valid-ref? (memory-object-ref-memory ref)))))
+
+(defun ensure-ref-address (ref)
+  (etypecase ref
+    (null 0)
+    (memory-object-ref (memory-object-ref-address ref))))
+
 (defun address= (ref1 ref2)
   (= (start-address-of ref1) (start-address-of ref2)))
 

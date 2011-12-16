@@ -310,6 +310,12 @@
 (defmethod public-type-name-of ((name stl-vector))
   (concatenate 'string "<" (public-type-name-of (effective-contained-item-of name)) ">"))
 
+(def (class* eas) stl-bit-vector (array-item unit-item data-field concrete-item)
+  ()
+  (:default-initargs :type-name $flag-bit))
+
+(defmethod xml:xml-tag-name-symbol ((bv stl-bit-vector)) 'stl-bit-vector)
+
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)
