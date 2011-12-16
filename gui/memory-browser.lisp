@@ -7,16 +7,17 @@
 (def (class* e) memory-object-browser (memory-object-tree)
   ((widget :reader t)
    (info-label :reader t)
+   (cur-ref nil :accessor t)
    (state-cache (make-hash-table :test #'eq) :reader t)))
 
 ;; Tree initialization
 
 (defun describe-object-info (ref node info)
-  (let ((start (format nil "~A at ~A:"
-                       (if node (col-name-of node) "data")
-                       (format-hex-offset (start-address-of ref)))))
-    (apply #'concatenate 'string start " "
-           (or (describe-address-in-context info (start-address-of ref)) (list "unknown")))))
+  (format nil "~A at ~A: ~{~A~^; ~}"
+          (if node (col-name-of node) "data")
+          (format-hex-offset (start-address-of ref))
+          (or (describe-address-in-context info (start-address-of ref))
+              (list "unknown"))))
 
 (defun apply-expand-from-tree (tree old)
   (if (expanded? old)
@@ -48,18 +49,21 @@
         (call-next-method))))
 
 (defun populate-memory-object-tree (view ref &key expand-to-addr)
-  (bind (((:values master info nodes) (layout-memory-object-tree view ref))
-         (type (cl-linux-debug.data-info::memory-object-ref-tag ref))
+  (declare (ignore expand-to-addr))
+  (bind (((:values master info base-ref nodes) (layout-memory-object-tree view ref))
+         (type (cl-linux-debug.data-info::memory-object-ref-tag base-ref))
          (cache (state-cache-of view))
          (select-set nil))
     (setf (label-label (info-label-of view))
           (describe-object-info ref (first nodes) info))
-    (if expand-to-addr
-        (apply-expand-to-addr master (+ (start-address-of ref) expand-to-addr)
+    (if (not (eq base-ref ref))
+        (apply-expand-to-addr master (start-address-of ref)
                               (lambda (node) (push node select-set)))
-        (awhen (gethash type cache)
-          (apply-expand-from-tree master it)))
-    (setf (gethash type cache) master)
+        (progn
+          (awhen (gethash type cache)
+            (apply-expand-from-tree master it))
+          (setf (gethash type cache) master)))
+    (setf (cur-ref-of view) base-ref)
     (set-tree-view-root view master)
     (when select-set
       (let ((lpath nil)
@@ -256,12 +260,8 @@
         (widget-show window)))))
 
 (defun browse-references-for (memory node info)
-  (loop for (ref offsets)
-     in (get-chunk-range-refs memory (malloc-chunk-range-of info))
-     append (loop for offset in offsets collect (list ref offset)) into items
-     finally (browse-object-in-new-window
-              memory (mapcar #'first items)
-              :expand-to-addr (mapcar #'second items)
-              :title (format nil "references to ~A at ~X"
-                             (col-name-of node)
-                             (start-address-of node)))))
+  (browse-object-in-new-window
+   memory (get-chunk-range-refs memory (malloc-chunk-range-of info))
+   :title (format nil "references to ~A at ~X"
+                  (col-name-of node)
+                  (start-address-of node))))

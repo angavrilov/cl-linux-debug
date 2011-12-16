@@ -203,12 +203,3 @@
           (make-memory-ref memory it type
                            :parent :globals :key name))))))
 
-(defmethod $ ((obj memory-mirror) key &optional default)
-  (if (eq key $enum)
-      (call-next-method)
-      (or (get-memory-global obj key) default)))
-
-(defmethod $ ((obj memory-mirror) (key (eql '*)) &optional default)
-  (or (sort (remove-if #'null (mapcar (lambda (k) (get-memory-global obj (car k))) *known-globals*))
-            #'< :key #'start-address-of)
-      default))

@@ -7,7 +7,9 @@
    (malloc-chunk-reftbl nil :accessor t)
    (malloc-chunk-types nil :accessor t)
    (find-by-id-cache (make-hash-table :test #'equal) :reader t)
-   (vtable-names (make-hash-table :test #'eql) :reader t)))
+   (vtable-names (make-hash-table :test #'eql) :reader t)
+   (globals nil :accessor t)
+   (global-map (make-chunk-table) :accessor t)))
 
 (def (class* e) malloc-chunk-range (address-chunk)
   ((chunk-id :reader t)
@@ -18,7 +20,8 @@
   ((malloc-chunk-range nil :accessor t)
    (section nil :accessor t)
    (region nil :accessor t)
-   (is-code? nil :accessor t)))
+   (is-code? nil :accessor t)
+   (global nil :accessor t)))
 
 (defmethod initialize-instance :after ((mirror object-memory-mirror) &key)
   (awhen (process-of mirror)
@@ -26,7 +29,19 @@
                  'pe-executable-image)
       (setf (os-type-of mirror) $windows))))
 
+(defun precompute-globals (mirror)
+  (loop
+     with gmap = (make-chunk-table)
+     for global in *known-globals*
+     for ref = (get-memory-global mirror (car global))
+     when ref
+     collect ref into gs
+     do (trees:insert ref gmap)
+     finally (setf (globals-of mirror) (sort gs #'< :key #'start-address-of)
+                   (global-map-of mirror) gmap)))
+
 (defun invalidate-object-mirror-caches (mirror)
+  (precompute-globals mirror)
   (setf (malloc-chunk-types-of mirror)
         (collect-known-objects mirror (malloc-chunks-of mirror)))
   (clrhash (vtable-names-of mirror))
@@ -43,6 +58,16 @@
             (collect-chunk-references mirror (malloc-chunks-of mirror)))))
   (unless (check-refresh-context mirror)
     (invalidate-object-mirror-caches mirror)))
+
+(defmethod $ ((obj object-memory-mirror) key &optional default)
+  (if (eq key $enum)
+      (call-next-method)
+      (or (find key (globals-of obj) :key #'memory-object-ref-parent-key
+                :test #'equal) default)))
+
+(defmethod $ ((obj object-memory-mirror) (key (eql '*)) &optional default)
+  (declare (ignore default))
+  (globals-of obj))
 
 (defmethod get-id-search-cache ((context object-memory-mirror) address type field)
   (let ((key (list address type field)))
@@ -70,52 +95,28 @@
     (get-address-object-info mirror (start-address-of address)))
   (:method ((mirror object-memory-mirror) (address number))
     (bind ((section (find-section-by-address (executable-of mirror) address))
-           (region (find-region-by-address (executable-of mirror) address)))
+           (region (find-region-by-address (executable-of mirror) address))
+           (global (lookup-chunk (global-map-of mirror) address)))
       (make-instance 'memory-object-info
                      :malloc-chunk-range
                      (lookup-malloc-chunk-range mirror address)
                      :section section
                      :is-code? (and section (executable? (origin-of section)))
+                     :global global
                      :region region))))
 
 (defmethod decode-chunk-reference (memory (context object-memory-mirror) ref target)
   (decode-chunk-reference memory (malloc-chunks-of context) ref target))
 
-(defmethod decode-chunk-reference (memory (context object-memory-mirror) (ref fixnum) target)
-  (multiple-value-bind (start type refs)
-      (call-next-method)
-    (aif (awhen (malloc-chunk-types-of context)
-           (car (aref it ref)))
-         (values start it refs)
-         (values start type refs))))
-
-(defmethod decode-chunk-reference (memory (context object-memory-mirror) (ref static-chunk-ref) target)
-  (multiple-value-bind (start type refs)
-      (call-next-method)
-    (dolist (global *known-globals*)
-      (let ((gref ($ context (car global))))
-        (when (< -1 (- start (start-address-of gref)) (length-of gref))
-          (psetf start (start-address-of gref)
-                 type gref
-                 refs (mapcar (lambda (x) (- (+ x start) (start-address-of gref))) refs)))))
-    (values start type refs)))
-
 (defun get-chunk-range-refs (context info)
   (when info
-    (loop for ref in (references-of info)
+    (loop for addr in
+         (remove-duplicates
+          (mapcan (lambda (ref) (decode-chunk-reference context context ref (chunk-id-of info)))
+                  (references-of info)))
        collect
-         (multiple-value-bind (start type refs)
-             (decode-chunk-reference context context ref (chunk-id-of info))
-           (list (cond ((typep type 'memory-object-ref)
-                        type)
-                       ((effective-finalized? type)
-                        (make-memory-ref context start type
-                                         :parent :back-refs :key (chunk-id-of info)))
-                       (t
-                        (make-ad-hoc-memory-ref context start type
-                                                :parent :back-refs
-                                                :key (chunk-id-of info))))
-                 refs)))))
+         (make-ad-hoc-memory-ref context addr (make-instance 'padding)
+                                 :parent :back-refs :key (chunk-id-of info)))))
 
 (defmethod describe-address-in-context append ((it loaded-section) addr)
   (list (format nil "~A~A in ~A"
@@ -140,9 +141,16 @@
                 (when (/= addr (start-address-of it))
                   (format-hex-offset (- addr (start-address-of it)) :force-sign? t)))))
 
+(defmethod describe-address-in-context append ((it memory-object-ref) addr)
+  (list (format nil "~A~@[~A~]"
+                (get-$-field-name (memory-object-ref-parent-key it))
+                (when (/= addr (start-address-of it))
+                  (format-hex-offset (- addr (start-address-of it)) :force-sign? t)))))
+
 (defmethod describe-address-in-context append ((info memory-object-info) addr)
   (mapcan (lambda (x) (describe-address-in-context x addr))
-          (list (region-of info)
+          (list (global-of info)
+                (region-of info)
                 (malloc-chunk-range-of info)
                 (section-of info))))
 
@@ -154,9 +162,21 @@
          ((:values r-start r-len)
           (awhen (and info
                       (or (malloc-chunk-range-of info)
-                          (region-of info)))
+                          (region-of info)
+                          (global-of info)))
             (values (start-address-of it) (length-of it)))))
     (values info r-start r-len)))
+
+(defgeneric get-address-info-ref (mirror info)
+  (:method ((mirror object-memory-mirror) (info null)) nil)
+  (:method ((mirror object-memory-mirror) (info malloc-chunk-range))
+    (aif (obj-type-of info)
+         (make-memory-ref mirror (start-address-of info) it)
+         (make-ad-hoc-memory-ref mirror (start-address-of info)
+                                 (make-instance 'padding :size (length-of info)))))
+  (:method ((mirror object-memory-mirror) (info memory-object-info))
+    (or (get-address-info-ref mirror (malloc-chunk-range-of info))
+        (global-of info))))
 
 (defmethod get-vtable-class-name ((context object-memory-mirror) address)
   (let* ((vtbl (make-memory-ref context address

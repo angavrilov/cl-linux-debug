@@ -35,7 +35,8 @@
                          (if (not any-prefix?) (= pos sstart) t)
                          (if (not any-suffix?) (= (+ pos text-size) send)))
                 (push (make-ad-hoc-memory-ref memory (+ min-addr #xC)
-                                              (make-instance 'static-string :size length))
+                                              (make-instance 'static-string :size length)
+                                              :parent :search)
                       refs)))))))
     refs))
 
@@ -48,7 +49,8 @@
       (loop for idx = (search text-bytes bytes :start2 pos :end2 limit)
          while idx
          do (push (make-ad-hoc-memory-ref memory (+ base-in idx)
-                                          (make-instance type :size (length text-bytes)))
+                                          (make-instance type :size (length text-bytes))
+                                          :parent :search)
                   refs)
          do (setf pos (+ idx (length text-bytes))))
       (nreverse refs))))
@@ -197,4 +199,5 @@
      for i fixnum from 0 below (length mask)
      when (/= (aref mask i) 0)
      collect (make-ad-hoc-memory-ref memory (aref addrs i)
-                                     (make-instance 'padding :size 4))))
+                                     (make-instance 'padding :size 4)
+                                     :parent :search)))

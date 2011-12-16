@@ -32,16 +32,21 @@
 
 (defun populate-store (list store subset)
   (let ((obj-set (obj-set-of list))
-        (val-set (obj-value-set-of list)))
+        (val-set (obj-value-set-of list))
+        (memory (memory-of list)))
     (list-store-clear store)
     (loop for i from 0 below (if subset (length subset) (length obj-set))
        for idx = (if subset (aref subset i) i)
        for obj = (aref obj-set idx)
        for val = (aref val-set idx)
+       for obj-info = (if (keywordp (memory-object-ref-parent-ref obj))
+                          (describe-address-in-context
+                           (get-address-object-info memory (start-address-of obj))
+                           (start-address-of obj)))
        for vfmt = (if (typep val 'memory-object-ref)
                       (format-hex-offset (start-address-of val))
                       (format-ref-value obj val))
-       and vinfo = (format nil "~{~A~^; ~}" (describe-ref-value obj val))
+       and vinfo = (format nil "~{~A~^; ~}" (append (describe-ref-value obj val) obj-info))
        do (list-store-insert-with-values
            store i idx (ensure-string vfmt) (ensure-string vinfo)))))
 

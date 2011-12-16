@@ -396,21 +396,24 @@
 (defun layout-ref-tree-node (parent ref master)
   (layout-ref-tree-node/type (memory-object-ref-type ref) parent ref master))
 
-(defun layout-memory-object-tree (view ref)
+(defun layout-memory-object-tree (view ref &key no-auto-base?)
   (bind (((:values info r-start r-len)
           (get-address-info-range (memory-of view) (start-address-of ref)))
+         (known? (or (malloc-chunk-range-of info) (region-of info)))
+         (base-ref (or (if (and (null no-auto-base?)
+                                (keywordp (memory-object-ref-parent-ref ref)))
+                           (get-address-info-ref (memory-of view) info))
+                       ref))
+         (r-start (- (or r-start (start-address-of base-ref)) (if known? 0 4096)))
+         (r-len (+ (or r-len (length-of base-ref)) (if known? 0 8192)))
          (master (make-instance 'memory-object-placeholder-node :view view
                                 :col-name "ROOT"
-                                :start-address (start-address-of ref)
-                                :length (max (length-of ref)
+                                :start-address (start-address-of base-ref)
+                                :length (max (length-of base-ref)
                                              (if (and r-start r-len)
-                                                 (- (+ r-start r-len) (start-address-of ref))
+                                                 (- (+ r-start r-len) (start-address-of base-ref))
                                                  4)))))
-    (unless r-start
-      (setf r-start (- (start-address-of ref) 4096)))
-    (unless r-len
-      (setf r-len (- (+ (start-address-of ref) (length-of ref) 4096) r-start)))
-    (values master info
-            (layout-children-in-range master (list ref) master r-start r-len :root? t))))
+    (values master info base-ref
+            (layout-children-in-range master (list base-ref) master r-start r-len :root? t))))
 
 

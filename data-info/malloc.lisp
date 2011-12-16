@@ -232,10 +232,9 @@
   (:method (memory (context malloc-chunk-map) (ref cons) target)
     (let ((min (car ref))
           (size (cdr ref)))
-      (values min
-              (make-instance 'padding :size size)
-              (or (list-chunk-refs-for-area memory context min size target)
-                  (list 0)))))
+      (or (mapcar (lambda (x) (+ min x))
+                  (list-chunk-refs-for-area memory context min size target))
+          (list min))))
   (:method (memory (context malloc-chunk-map) (ref fixnum) target)
     (multiple-value-bind (min max)
         (malloc-chunk-range memory context ref)
@@ -245,9 +244,7 @@
       (if (and rgn
                (< -1 (- (static-chunk-ref-addr ref) (start-address-of rgn)) (length-of rgn)))
           (decode-chunk-reference memory context (cons (start-address-of rgn) (length-of rgn)) target)
-          (values (static-chunk-ref-addr ref)
-                  (make-instance 'padding :size 16)
-                  (list 0))))))
+          (list (static-chunk-ref-addr ref))))))
 
 (defun collect-known-objects (memory chunk-map)
   (with-recursive-lock-held ((lock-of memory))
@@ -274,10 +271,9 @@
                      nil))
                  (walk-ref (item)
                    (call-pointer-walker memory memory-cb (car item) (cdr item) #'queue-ref)))
-          (dolist (global *known-globals*)
-            (let ((ref ($ memory (car global))))
-              (queue-ref (memory-object-ref-address ref)
-                         (memory-object-ref-tag ref))))
+          (dolist (ref ($ memory '*))
+            (queue-ref (memory-object-ref-address ref)
+                       (memory-object-ref-tag ref)))
           (loop while queue-head
              do (walk-ref (pop queue-head)))
           (values reftbl hash))))))

@@ -80,7 +80,8 @@
            #:get-memory-bytes
            #:get-memory-integer
            #:get-memory-global
-           #:get-address-object-info
+           #:get-address-object-info #:obj-type-of
+           #:get-address-info-ref
            #:get-chunk-range-refs
            #:compile-helper
            #:call-helper
