@@ -361,20 +361,18 @@
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 
-(def (class* eas) inheriting-type (data-item)
+(def (class* eas) inheriting-type (struct-compound-item)
   ((inherits-from nil :accessor t :type $-keyword-namespace))
   (:documentation "A type that can inherit."))
 
-(def (class* eas) struct-type (global-type-definition inheriting-type
-                                                      struct-compound-item concrete-item)
+(def (class* eas) struct-type (global-type-definition inheriting-type concrete-item)
   ((has-methods nil :accessor t :type boolean))
   (:documentation "A global structure type definition."))
 
 (defmethod has-methods? ((type struct-type))
   (or (has-methods-p type) (has-methods? (effective-inherited-child-of type))))
 
-(def (class* eas) class-type (global-type-definition inheriting-type
-                                                     struct-compound-item concrete-item)
+(def (class* eas) class-type (global-type-definition inheriting-type concrete-item)
   ((original-name nil :accessor t :type string)
    (linux-mangling nil :accessor t :type string)
    (windows-mangling nil :accessor t :type string))

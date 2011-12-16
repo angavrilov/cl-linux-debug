@@ -96,13 +96,12 @@
                      (describe-ref-value kfval kfval))
            it)))))
   (:method append ((type inheriting-type) ref value)
-    (flatten (list
-              (let* ((ff (first (effective-fields-of type))))
-                (unless (name-of ff)
-                  (let ((rr ($ value (or (name-of ff) (effective-tag-of ff)))))
-                    (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))))
-              (when (eq ref value)
-                (list (get-$-field-name (type-name-of type))))))))
+    (awhen (effective-inherited-child-of type)
+      (flatten (list
+                (let ((rr ($ value (or (name-of it) (effective-tag-of it)))))
+                  (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))
+                (when (eq ref value)
+                  (list (get-$-field-name (type-name-of type)))))))))
 
 (defun describe-ref-value (ref value)
   (describe-ref-value-by-type (memory-object-ref-type ref) ref value))
