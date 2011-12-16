@@ -243,6 +243,7 @@
       (if (or (/= iv 0) (/= bit-size 1))
           iv nil))))
 
+(defmethod compute-effective-size (context (obj flag-bit)) (* 1/8 (count-of obj)))
 (defmethod compute-effective-alignment (context (obj flag-bit)) 1/8)
 
 (defmethod format-ref-value-by-type ((type flag-bit) ref value)

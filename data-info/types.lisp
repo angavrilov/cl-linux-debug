@@ -254,7 +254,7 @@
 ;; Bit
 
 (def (class* eas) flag-bit (primitive-field concrete-item)
-  ((size nil :accessor t :type address))
+  ((count 1 :accessor t :type integer))
   (:default-initargs :default-size 1/8 :effective-alignment 1/8)
   (:documentation "A bitfield chunk."))
 
