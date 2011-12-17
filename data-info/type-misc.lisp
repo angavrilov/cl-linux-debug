@@ -155,9 +155,16 @@
 
 ;; Enum
 
+(defmethod format-ref-value-by-type ((type abstract-enum-item) ref (value symbol))
+  (if (is-$-keyword? value)
+      (get-$-field-name value)
+      (call-next-method)))
+
 (defmethod describe-ref-value-by-type append ((type abstract-enum-item) ref (value symbol))
-  (awhen $type.values[value]
-    (list it)))
+  (append (awhen $type.values[value]
+            (list it))
+          (loop for attr in (enum-attrs-of type)
+             collect (format nil "~A=~A" (name-of attr) $type[(name-of attr)][value]))))
 
 (defmethod $ ((type abstract-enum-item) (key symbol) &optional default)
   (let* ((tables (lookup-tables-of type))
@@ -170,22 +177,56 @@
               (if (integerp key) key
                   (gethash key vtable default)))
             (lambda (key &optional default)
-              (gethash (gethash key vtable key) ktable default)))
+              (gethash (gethash key vtable key) ktable
+                       (gethash :default vtable default))))
         default)))
+
+(defgeneric parse-type-value (type value)
+  (:method (type value) value)
+  (:method ((type abstract-enum-item) value)
+    (get-$-field value))
+  (:method ((type integer-item) value)
+    (read value))
+  (:method ((type bool) value)
+    (cond ((numberp value) (/= value 0))
+          ((member value '("true") :test #'equalp) t)
+          ((member value '("false") :test #'equalp) nil)
+          (t (error "Invalid boolean value: ")))))
+
+(defmethod layout-type-rec ((type enum-attr))
+  (setf (effective-table-of type)
+        (make-hash-table)
+        (effective-base-type-of type)
+        (awhen (type-name-of type)
+          (lookup-type-in-context *type-context* it)))
+  (awhen (default-value-of type)
+    (setf (gethash :default (effective-table-of type))
+          (parse-type-value (effective-base-type-of type) it))))
 
 (defmethod layout-fields ((type abstract-enum-item) fields)
   (let ((val -1)
         (ftable (make-hash-table))
         (ktable (make-hash-table))
         (vtable (make-hash-table)))
+    (dolist (attr (enum-attrs-of type))
+      (layout-type-rec attr)
+      (setf (gethash (name-of attr) ftable) (effective-table-of attr)))
+    (setf (gethash $keys ftable) ktable)
+    (setf (gethash $values ftable) vtable)
     (dolist (field fields)
       (setf (effective-value-of field)
             (setf val (or (value-of field) (1+ val))))
       (awhen (name-of field)
+        (when (gethash it vtable)
+          (error "Duplicate key ~A in enum ~A" it (public-type-name-of type)))
         (setf (gethash it vtable) val
-              (gethash val ktable) it)))
-    (setf (gethash $keys ftable) ktable)
-    (setf (gethash $values ftable) vtable)
+              (gethash val ktable) it))
+      (dolist (attr (item-attrs-of field))
+        (let ((table (find (name-of attr) (enum-attrs-of type) :key #'name-of)))
+          (unless table
+            (error "Unknown enum attribute: ~A" (name-of attr)))
+          (setf (gethash val (effective-table-of table))
+                (parse-type-value (effective-base-type-of table) (value-of attr))))))
     (setf (lookup-tables-of type) ftable)))
 
 (defmethod compute-effective-size (context (type enum-type)) 4)
@@ -193,6 +234,9 @@
 
 (defmethod lookup-tables-of ((type enum/global))
   (lookup-tables-of (effective-main-type-of type)))
+
+(defmethod enum-attrs-of ((type enum/global))
+  (enum-attrs-of (effective-main-type-of type)))
 
 (defmethod %memory-ref-$ ((type enum-field) ref (key (eql t)))
   (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
@@ -301,31 +345,6 @@
 
 (defmethod format-ref-value-by-type ((type string-field) ref (value string))
   (format nil "~S" value))
-
-(defmethod xml:xml-tag-name-symbol ((str stl-string)) 'stl-string)
-
-(def (class* eas) stl-string/linux (stl-string ptr-string)
-  ())
-
-(def (class* eas) stl-string/windows (stl-string)
-  ())
-
-(defmethod layout-type-rec :before ((str stl-string))
-  (case (os-type-of *type-context*)
-    ($windows (change-class str 'stl-string/windows))
-    (otherwise (change-class str 'stl-string/linux))))
-
-(defmethod compute-effective-fields ((type stl-string/windows))
-  (list (make-instance 'compound :is-union t
-                       :fields (list
-                                (make-instance 'static-string :name $buffer :size 16)
-                                (make-instance 'pointer :name $ptr :type-name $static-string)))
-        (make-instance 'int32_t :name $length)
-        (make-instance 'int32_t :name $capacity)
-        (make-instance 'padding :name $pad :size 4)))
-
-(defmethod %memory-ref-$ ((type stl-string/windows) ref (key (eql t)))
-  (if (< $ref.capacity 16) $ref.buffer $ref.ptr[t]))
 
 ;; Abstract array
 
@@ -482,83 +501,8 @@
             do ,(build-effective-pointer-walker context elt-type 0 a-ctx)
             do (incf ,a-base ,e-size))))))
 
-;; STL vector
-
 (defun copy-item-def (type)
   (copy-data-definition (effective-contained-item-of type)))
-
-(defmethod compute-effective-fields ((type stl-vector))
-  (flatten (list
-            (make-instance 'pointer :name $start)
-            (make-instance 'pointer :name $end)
-            (make-instance 'pointer :name $block-end)
-            (when (eq (os-type-of *type-context*) $windows)
-              (make-instance 'padding :name $pad :size 4 :alignment 4)))))
-
-(defun stl-vector-dimensions (ref elt-size &key (size-bias 0) size-override)
-  (let* ((s $ref.start)
-         (e $ref.end)
-         (a $ref.block-end)
-         (saddr (ensure-ref-address s)))
-    (awhen (or (and s e a
-                    (not (logtest saddr 3))
-                    (<= 0 saddr
-                        (memory-object-ref-address e)
-                        (memory-object-ref-address a)))
-               (not (or s e a)))
-      (if s
-          (let ((size (/ (address- e s) elt-size)))
-            (when (or (null size-override) (<= size-override size))
-              (values saddr (+ (or size-override size) size-bias))))
-          (values nil 0)))))
-
-(defmethod array-base-dimensions ((type stl-vector) ref)
-  (stl-vector-dimensions ref (effective-element-size-of type)))
-
-(defmethod build-set-array-base-dimensions (context (node stl-vector) offset ctx ptr-var cnt-var)
-  `(let* ((start ,(access-walker-int ctx offset 4))
-          (end ,(access-walker-int ctx (+ offset 4) 4))
-          (diff (logand (- end start) #xFFFFFFFF)))
-     (declare (type uint32 start end diff))
-     (when (and (<= start end)
-                (not (logtest diff 3))
-                (< diff most-positive-fixnum))
-       (setf ,ptr-var start ,cnt-var (ash diff -2)))))
-
-;; STL bit vector
-
-(def (class* eas) stl-bit-vector/linux (stl-bit-vector)
-  ())
-
-(def (class* eas) stl-bit-vector/windows (stl-bit-vector)
-  ())
-
-(defmethod layout-type-rec :before ((str stl-bit-vector))
-  (case (os-type-of *type-context*)
-    ($windows (change-class str 'stl-bit-vector/windows))
-    (otherwise (change-class str 'stl-bit-vector/linux))))
-
-(defmethod compute-effective-fields ((type stl-bit-vector/linux))
-  (flatten (list
-            (make-instance 'pointer :name $start)
-            (make-instance 'int32_t :name $start-bit)
-            (make-instance 'pointer :name $end)
-            (make-instance 'int32_t :name $end-bit)
-            (make-instance 'pointer :name $block-end))))
-
-(defmethod array-base-dimensions ((type stl-bit-vector/linux) ref)
-  (stl-vector-dimensions ref 1/8 :size-bias $ref.end-bit))
-
-(defmethod compute-effective-fields ((type stl-bit-vector/windows))
-  (flatten (list
-            (make-instance 'pointer :name $start)
-            (make-instance 'pointer :name $end)
-            (make-instance 'pointer :name $block-end)
-            (make-instance 'padding :name $pad :size 4)
-            (make-instance 'int32_t :name $size))))
-
-(defmethod array-base-dimensions ((type stl-bit-vector/windows) ref)
-  (stl-vector-dimensions ref 1/8 :size-override $ref.size))
 
 ;; Generic structure
 

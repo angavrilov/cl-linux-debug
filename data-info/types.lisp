@@ -326,12 +326,31 @@
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)
-  ((lookup-tables :accessor t))
+  ((lookup-tables :accessor t)
+   (enum-attrs nil :accessor t))
   (:documentation "Abstract type for enums."))
+
+(def (class* eas) enum-attr (abstract-item concrete-item)
+  ((name nil :accessor t :type $-keyword)
+   (type-name nil :accessor t :type $-keyword-namespace)
+   (default-value nil :accessor t :type string)
+   (effective-base-type :accessor t)
+   (effective-table :accessor t)))
+
+(defmethod read-return-value :after ((type enum-attr))
+  (assert (name-of type)))
 
 (def (class* eas) enum-item (abstract-field concrete-item)
   ((value nil :accessor t :type integer-or-null)
+   (item-attrs nil :accessor t)
    (effective-value :accessor t)))
+
+(def (class* eas) item-attr (abstract-item concrete-item)
+  ((name nil :accessor t :type $-keyword)
+   (value nil :accessor t :type string)))
+
+(defmethod read-return-value :after ((type item-attr))
+  (assert (and (name-of type) (value-of type))))
 
 (defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
 
