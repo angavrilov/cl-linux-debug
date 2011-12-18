@@ -104,7 +104,7 @@
       (return-from get-heap-start (start-address-of ext)))))
 
 (defun find-main-glibc-heap (memory)
-  (let* ((base (max (get-bss-end memory)
+  (let* ((base (max (align-up (get-bss-end memory) +page-size+)
                     (get-heap-start memory))))
     (loop for i from 0 below 4096
        and p from base by +chunk-header-size+
