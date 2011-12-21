@@ -5,6 +5,7 @@
 (defparameter *csv-stream* nil)
 (defparameter *anon-stem* nil)
 (defparameter *anon-id* nil)
+(defparameter *csv-merge-nested* nil)
 
 (defun subname (pname name)
   (if name
@@ -28,24 +29,30 @@
             (or type-name (xml:xml-tag-name-string type))
             (or subname "") (or item "") cstring)))
 
-(defgeneric export-csv-rec (type root level pname inc-offset)
-  (:method ((type data-item) root level pname inc-offset)
-    (write-csv-entry root level pname inc-offset type))
-  (:method ((type virtual-compound-item) root level pname inc-offset)
+(defgeneric export-csv-rec (type root level pname inc-offset &key)
+  (:method ((type data-item) root level pname inc-offset &key name)
+    (write-csv-entry root level pname inc-offset type :name name))
+  (:method ((type virtual-compound-item) root level pname inc-offset &key name)
     (if (typep type 'primitive-field)
         (call-next-method)
         (let* ((is-field? (typep type 'data-field))
                (offset (+ inc-offset (if (and is-field? (> level 0))
                                          (effective-offset-of type) 0)))
-               (subname (subname pname (if is-field? (name-of type) nil))))
+               (subname (subname pname (or name (if is-field? (name-of type) nil)))))
           (when (or (= level 0) (not is-field?) (name-of type))
             (call-next-method))
           (dolist (sub (effective-fields-of type))
             (export-csv-rec sub root (1+ level) subname offset)))))
-  (:method ((type global-type-proxy-base) root level pname inc-offset)
+  (:method ((type global-type-proxy-base) root level pname inc-offset &key)
     (write-csv-entry root level pname inc-offset type
                      :type-name (get-$-field-name (type-name-of type))))
-  (:method ((type container-item) root level pname inc-offset)
+  (:method ((type global-type-proxy) root level pname inc-offset &key name)
+    (if *csv-merge-nested*
+        (export-csv-rec (effective-main-type-of type) root level pname
+                        (+ inc-offset (or (ignore-errors (effective-offset-of type)) 0))
+                        :name (or name (name-of type)))
+        (call-next-method)))
+  (:method ((type container-item) root level pname inc-offset &key)
     (let* ((real-elt (effective-contained-item-of type))
            (elt (if (typep real-elt 'pointer)
                     (effective-contained-item-of real-elt)
@@ -60,9 +67,9 @@
                             (xml:xml-tag-name-string elt)))))
       (write-csv-entry root level pname inc-offset type
                        :item (format nil "~A~A" elt-name (if (eq elt real-elt) "" "*")))
-      (when anon?
+      (when (and anon? (not *csv-merge-nested*))
         (export-csv-rec elt elt-name 0 nil 0))))
-  (:method ((type abstract-enum-item) root level pname inc-offset)
+  (:method ((type abstract-enum-item) root level pname inc-offset &key)
     (call-next-method)
     (dolist (field (effective-fields-of type))
       (format *csv-stream* "\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\"~%"
@@ -71,7 +78,7 @@
               (remove-if (lambda (c) (case c ((#\Newline) t)))
                          (or (comment-string-of field) ""))))))
 
-(defun export-csv (stream context)
+(defun export-csv/types (stream context)
   (format stream "\"Type\",\"Level\",\"Offset\",\"Size\",\"Field Type\",\"Field Name\",\"Elt Type\",\"Comment\"~%")
   (let ((*csv-stream* stream))
     (dolist (tn (sort (remove-if #'consp (mapcar #'car *known-types*))
@@ -80,3 +87,20 @@
         (let ((*anon-id* 1)
               (*anon-stem* (get-$-field-name tn)))
           (export-csv-rec type *anon-stem* 0 nil 0))))))
+
+(defun export-csv/globals (stream context)
+  (format stream "\"Global\",\"Level\",\"Address\",\"Size\",\"Field Type\",\"Field Name\",\"Elt Type\",\"Comment\"~%")
+  (let ((*csv-stream* stream))
+    (dolist (type (sort (remove-if (lambda (x) (null (offset-of x)))
+                                   (mapcar (lambda (x) (lookup-global-in-context context (car x)))
+                                           *known-globals*))
+                        (lambda (a b) (< (offset-of a) (offset-of b)))))
+      (let ((*anon-id* 1)
+            (*anon-stem* (get-$-field-name (name-of type)))
+            (*csv-merge-nested* t))
+        (export-csv-rec type *anon-stem* 0 nil (offset-of type))))))
+
+(defun export-csv (stream context &key globals?)
+  (if globals?
+      (export-csv/globals stream context)
+      (export-csv/types stream context)))
