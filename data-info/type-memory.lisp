@@ -200,7 +200,8 @@
   (:method (type ref key)
     (if (identity-key? key)
         (%memory-ref-@ type ref t)
-        (cerror "ignore" "Invalid field access: ~S in ~S" key ref)))
+        (unless *safe-dereference*
+          (cerror "ignore" "Invalid field access: ~S in ~S" key ref))))
   (:method (type ref (key integer))
     (offset-memory-reference ref key (effective-size-of type)))
   (:method (type ref (key (eql '*)))
