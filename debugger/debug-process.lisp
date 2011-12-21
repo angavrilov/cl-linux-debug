@@ -7,7 +7,11 @@
 (defvar *debug-process-lock* (make-recursive-lock "DEBUG-PROCESS LOCK"))
 (defvar *debug-worker-thread* nil)
 
-(defvar *debug-event-channel* (make-instance 'unbounded-channel))
+;; This stupid wait for receive only causes problems for some reason
+(defclass async-channel (unbounded-channel) ())
+(defmethod chanl::recv-grabbed-value-p ((c async-channel)) t)
+
+(defvar *debug-event-channel* (make-instance 'async-channel))
 (defvar *debug-task-scheduler* (make-instance 'debug-task-scheduler :name "DEBUG"))
 
 (defvar *debugged-processes* nil)

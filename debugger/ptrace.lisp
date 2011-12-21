@@ -59,27 +59,30 @@
 (defvar *sigchld-callbacks* (make-hash-table :test #'eql))
 (defvar *sigchld-notify* (bt:make-condition-variable :name "SIGCHLD"))
 (defvar *sigchld-check-thread* nil)
+(defvar *sigchld-changed* t)
 
 (defun sigchld-check-thread ()
-  (let ((changed? nil))
+  (let ()
     (loop
        (loop for (cb pid status code) in
             (bt:with-recursive-lock-held (*sigchld-lock*)
-              (if changed?
-                  (setf changed? nil)
+              (if *sigchld-changed*
+                  (setf *sigchld-changed* nil)
                   (bt:condition-wait *sigchld-notify* *sigchld-lock*))
               (loop for try-pid being the hash-keys of *sigchld-callbacks*
-                 when (multiple-value-bind (pid status code)
-                          (wait-for-process try-pid)
-                        (when pid
-                          (list (gethash pid *sigchld-callbacks*)
-                                pid status code)))
+                 when (with-simple-restart (continue "Skip process ~A" try-pid)
+                        (multiple-value-bind (pid status code)
+                            (wait-for-process try-pid)
+                          (when pid
+                            (list (gethash pid *sigchld-callbacks*)
+                                  pid status code))))
                  collect it))
           do (when cb
-               (setf changed? t)
+               (setf *sigchld-changed* t)
                (funcall cb pid status code))))))
 
 (defun sigchld-handler (signal info context)
+  (setf *sigchld-changed* t)
   (bt:condition-notify *sigchld-notify*)
   (sb-unix::sigchld-handler signal info context))
 
@@ -96,7 +99,9 @@
                      (gethash process-id *sigchld-callbacks*))
             (cerror "Overwrite the old hook."
                     "SIGCHLD hook for process ~A already exists." process-id))
-          (setf (gethash process-id *sigchld-callbacks*) callback))
+          (setf (gethash process-id *sigchld-callbacks*) callback
+                *sigchld-changed* t)
+          (bt:condition-notify *sigchld-notify*))
         (remhash process-id *sigchld-callbacks*))))
 
 ;; Ptrace

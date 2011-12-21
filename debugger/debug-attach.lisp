@@ -140,12 +140,9 @@
 (def-debug-task initialize-debug (process)
   (with-global-control (process :exclusive? t)
     (flet ((start-attach-to-thread (id)
-             (let* ((thread (%add-debug-thread process id
-                                               :initial-state 'debug-thread-state-running)))
-               (if (ptrace-attach id)
-                   (%set-thread-state thread 'debug-thread-state-stopping)
-                   (%set-thread-state thread 'debug-thread-state-detached))
-               thread)))
+             (when (ptrace-attach id)
+               (%add-debug-thread process id
+                                  :initial-state 'debug-thread-state-stopping))))
       (let* ((pid (process-id-of process))
              (main-thread (start-attach-to-thread pid)))
         (unless main-thread
