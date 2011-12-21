@@ -178,8 +178,11 @@
   (:method ((mirror memory-mirror) ranges)
     (call-debug-task #'do-sync-mirror-ranges mirror ranges nil)))
 
-(defmethod request-memory-write (memory addr size)
+(defmethod request-memory-write ((memory memory-mirror) addr size)
   (call-debug-task #'do-sync-mirror-ranges memory (list (cons addr size)) t))
+
+(defmethod request-memory-write ((memory memory-extent) addr size)
+  (request-memory-write (mirror-of memory) addr size))
 
 ;;
 

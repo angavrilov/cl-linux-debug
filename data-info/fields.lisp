@@ -18,6 +18,14 @@
   (:method ((obj function) key &optional default)
     (funcall obj key default)))
 
+(defgeneric (setf $) (value obj key)
+  (:method (value (obj list) key)
+    (map nil (lambda (x) (setf ($ x key) value)) obj)
+    value)
+  (:method (value obj (key list))
+    (map nil (lambda (x) (setf ($ obj x) value)) obj)
+    value))
+
 ;; Save readtable
 
 (defvar *old-readtable*

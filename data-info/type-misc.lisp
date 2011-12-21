@@ -132,6 +132,12 @@
     (with-bytes-for-ref (vector offset ref size)
       (parse-int vector offset size :signed? (effective-int-signed? type)))))
 
+(defmethod (setf %memory-ref-$) ((value integer) (type integer-item) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (setf (parse-int vector offset size) value)
+      (request-memory-write ref 0 size))))
+
 (defmethod describe-ref-value-by-type append ((type integer-item) ref (value integer))
   (list (format-hex-offset (unsigned value (* 8 (effective-size-of type))))))
 

@@ -132,7 +132,11 @@
   (with-bytes-for-ref (bytes offset memory size addr)
     (parse-int bytes offset size :signed? signed?)))
 
-(defgeneric request-memory-write (memory addr size))
+(defgeneric request-memory-write (memory addr size)
+  (:method ((ref memory-object-ref) address size)
+    (request-memory-write (memory-object-ref-memory ref)
+                          (+ (memory-object-ref-address ref) address)
+                          size)))
 
 (defun (setf get-memory-integer) (value memory addr size)
   (with-bytes-for-ref (bytes offset memory size addr)
@@ -233,11 +237,20 @@
   (:method ((type global-type-definition) ref (key (eql $_type)))
     (type-name-of type)))
 
+(defgeneric (setf %memory-ref-$) (value type ref key)
+  (:method :around (value (type global-type-proxy) ref key)
+    (setf (%memory-ref-$ (effective-main-type-of type) ref key) value))
+  (:method (value type ref key)
+    (setf ($ (%memory-ref-@ type ref key) t) value)))
+
 (defmethod @ ((ref memory-object-ref) key &optional default)
   (or (%memory-ref-@ (memory-object-ref-type ref) ref key) default))
 
 (defmethod $ ((ref memory-object-ref) key &optional default)
   (or (%memory-ref-$ (memory-object-ref-type ref) ref key) default))
+
+(defmethod (setf $) (value (ref memory-object-ref) key)
+  (setf (%memory-ref-$ (memory-object-ref-type ref) ref key) value))
 
 ;; Ptr walker
 
