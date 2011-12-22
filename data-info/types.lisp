@@ -275,7 +275,7 @@
 ;; Pointer
 
 (def (class* eas) pointer (unit-item container-item data-field concrete-item)
-  ()
+  ((is-array nil :type boolean))
   (:default-initargs :default-size 4)
   (:documentation "A simple pointer to another object."))
 
@@ -380,9 +380,17 @@
 (defmethod read-return-value :after ((type global-type-definition))
   (assert (type-name-of type)))
 
-(def (class* eas) inheriting-type (struct-compound-item)
-  ((inherits-from nil :accessor t :type $-keyword-namespace))
+(def (class* eas) inheriting-type (struct-compound-item code-helper-mixin)
+  ((inherits-from nil :accessor t :type $-keyword-namespace)
+   (instance-vector nil :accessor t :type string))
   (:documentation "A type that can inherit."))
+
+(defmethod auto-code-helpers append ((item inheriting-type))
+  (awhen (instance-vector-of item)
+    (list (make-instance 'code-helper :name $find-instance
+                         :content (if (key-field-of item)
+                                      (format nil "(find-by-id ~A ~S $)" it (key-field-of item))
+                                      (format nil "~A[$]" it))))))
 
 (def (class* eas) struct-type (global-type-definition inheriting-type concrete-item)
   ((has-methods nil :accessor t :type boolean))
