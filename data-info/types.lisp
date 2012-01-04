@@ -208,7 +208,8 @@
 (def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
   ((refers-to nil :accessor t :type string)
    (ref-target nil :accessor t :type $-keyword-namespace)
-   (aux-value nil :accessor t :type string))
+   (aux-value nil :accessor t :type string)
+   (init-value nil :accessor t :type string))
   (:documentation "An abstract type for a primitive field."))
 
 (defmethod auto-code-helpers append ((item primitive-field))
@@ -402,7 +403,8 @@
 (def (class* eas) class-type (global-type-definition inheriting-type concrete-item)
   ((original-name nil :accessor t :type string)
    (linux-mangling nil :accessor t :type string)
-   (windows-mangling nil :accessor t :type string))
+   (windows-mangling nil :accessor t :type string)
+   (virtual-methods nil))
   (:documentation "A global class type definition."))
 
 (defmethod has-methods? ((type class-type)) t)
@@ -433,3 +435,23 @@
 
 (defmethod add-subobject ((obj data-definition) (subobj global-object))
   (nconcf (global-objects-of obj) (list subobj)))
+
+;; Methods
+
+(def (class* eas) virtual-methods (xml-serializer)
+  ((methods nil))
+  (:documentation "A container for virtual method definitions."))
+
+(def (class* eas) vmethod (abstract-field abstract-real-compound-item concrete-item)
+  ((is-destructor nil :type boolean)
+   (ret-type nil :type $-keyword-namespace-or-obj))
+  (:documentation "A virtual method definition."))
+
+(defmethod add-subobject ((obj virtual-methods) (subobj vmethod))
+  (nconcf (methods-of obj) (list subobj)))
+
+(defmethod can-add-subfield? ((obj vmethod) (subobj data-field)) t)
+
+(def (class* eas) ret-type (ref-compound-item concrete-item)
+  ()
+  (:documentation "A wrapper for ."))

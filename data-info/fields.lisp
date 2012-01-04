@@ -109,6 +109,7 @@
 
 (deftype |$-keyword| () 'symbol)
 (deftype |$-keyword-namespace| () '(or symbol cons))
+(deftype |$-keyword-namespace-or-obj| () '(or symbol cons standard-object))
 
 (defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '|$-keyword|)) stream)
   (format stream "\"~A\"" (get-$-field-name value)))
@@ -121,6 +122,12 @@
   (format stream "\"~A\"" (get-$-field-name value)))
 
 (defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '|$-keyword-namespace|)))
+  (get-$-field value))
+
+(defmethod PRINT-TYPED-ATTRIBUTE-VALUE (value (type (eql '|$-keyword-namespace-or-obj|)) stream)
+  (format stream "\"~A\"" (get-$-field-name value)))
+
+(defmethod READ-TYPED-ATTRIBUTE-VALUE ((value string) (Type (eql '|$-keyword-namespace-or-obj|)))
   (get-$-field value))
 
 ;; Reader

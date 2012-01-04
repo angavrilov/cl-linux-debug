@@ -6,7 +6,10 @@
   (let* ((wlen (+ (length text) (if null-terminate? 1 0)))
          (arr (make-array wlen :element-type 'uint8 :initial-element 0)))
     (loop for c across text and i from 0
-       do (setf (aref arr i) (char-code c)))
+       do (setf (aref arr i)
+                (etypecase c
+                  (character (char-code c))
+                  (integer c))))
     arr))
 
 (defun find-stl-strings (memory text &key any-prefix? any-suffix?)

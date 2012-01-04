@@ -1171,6 +1171,10 @@
    ">")
 
 
+(defmethod READ-XMLISP-ATTRIBUTES ((Self sgml-tag) Stream)
+  ;; No attributes
+  Self)
+
 (defmethod READ-XMLISP-ELEMENT ((Self sgml-tag) Stream)
    (setf (content Self) (read-until-token Stream (end-tag-name-string Self)))  ;; no decoding
    Self)

@@ -23,3 +23,8 @@
   (check-type value (or symbol integer))
   (if (symbolp value) value
       ($ $global.enum[enum].keys value value)))
+
+(defun find-instance (type value &optional aux-value)
+  (awhen (lookup-type-in-context global type)
+    (cl-linux-debug.data-info::call-helper-if-found
+     it $find-instance value aux-value :context-ref global)))

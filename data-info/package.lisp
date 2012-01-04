@@ -5,7 +5,7 @@
 (defpackage :cl-linux-debug.field-names
   (:use)
   (:export #:@ #:$ #:$$
-           #:|$-keyword| #:|$-keyword-namespace|
+           #:|$-keyword| #:|$-keyword-namespace| #:|$-keyword-namespace-or-obj|
            #:is-$-keyword?  #:is-$-keyword-namespace?))
 
 (defpackage :cl-linux-debug.data-defs
@@ -84,7 +84,7 @@
            #:get-address-info-ref
            #:get-chunk-range-refs
            #:compile-helper
-           #:call-helper
+           #:call-helper #:call-helper-if-found
            #:describe-address-in-context
            #:get-address-info-range
            #:guess-types-by-data

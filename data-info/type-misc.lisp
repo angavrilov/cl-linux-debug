@@ -88,8 +88,8 @@
     (flatten (ensure-list (call-helper-if-found type $describe
                                                 value ref :context-ref ref))))
   (:method append ((type struct-compound-item) ref value)
-    (awhen (aand (key-field-of type) (@ ref it))
-      (let ((fname (get-$-field-name (key-field-of type)))
+    (awhen (aand (slot-value type 'key-field) (@ ref it))
+      (let ((fname (get-$-field-name (slot-value type 'key-field)))
             (kfval ($ it t)))
         (list*
          (format nil "~A=~A" fname (format-ref-value it kfval))
