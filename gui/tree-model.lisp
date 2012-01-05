@@ -105,10 +105,6 @@
          do (push (child-index-of parent cur) path))
       path)))
 
-(defun tree-path-of-list (list)
-  (aprog1 (make-instance 'tree-path)
-    (setf (tree-path-indices it) list)))
-
 (defgeneric destroy-node-tree (parent node)
   (:method ((parent object-node) (node object-node))
     (loop for child across (children-of node)
@@ -281,9 +277,6 @@
 (defmethod (setf expanded?) :before (value (node lazy-expanding-node))
   (when (and value (not (lazy-expanded? node)))
     (on-lazy-expand-node node)))
-
-(defun ensure-string (data)
-  (if (stringp data) data (format nil "~S" data)))
 
 (defparameter *safe-return-table* nil)
 

@@ -86,7 +86,8 @@
 (defun refresh-memory-object-tree (view)
   (let ((ranges (memory-object-tree-ranges (tree-root-of view) nil nil)))
     (print ranges)
-    (refresh-memory-mirror-ranges (memory-of view) ranges)
+    (in-another-thread ((widget-of view))
+      (refresh-memory-mirror-ranges (memory-of view) ranges))
     (refresh-node-values (tree-root-of view))))
 
 (defun rebuild-subtree (node)

@@ -13,6 +13,7 @@
         :cl-linux-debug.data-defs
         :cl-linux-debug.data-info
         :gtk :gdk :gobject)
+  (:shadow #:within-main-loop)
   (:shadowing-import-from :cl-linux-debug.data-defs
                           #:alignment #:pointer #:value #:enum-item)
   (:shadowing-import-from :cl-linux-debug.code-info
@@ -21,6 +22,7 @@
                 #:is-$-keyword? #:get-$-field-name
                 #:layout-ad-hoc-in-context
                 #:memory-object-ref-memory)
-  (:export #:browse-object-in-new-window))
+  (:export #:browse-object-in-new-window
+           #:enable-gui-debugger-hook))
 
 (in-package :cl-linux-debug.gui)
