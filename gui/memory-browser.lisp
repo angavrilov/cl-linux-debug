@@ -42,7 +42,9 @@
           ccnt)))
   (:method ((node real-memory-object-node) addr leaf-enum-cb)
     (if (and (typep (ref-type-of node) 'unit-item)
-             (not (typep node 'padding-object-node)))
+             (or
+              (not (typep node 'padding-object-node))
+              (typep (parent-of node) 'padding-object-node)))
         (progn
           (funcall leaf-enum-cb node)
           1)
@@ -179,7 +181,7 @@
   (list (list "Browse target" (lambda () (on-tree-node-activated (view-of node) node nil)))))
 
 (defmethod on-tree-node-activated ((view memory-object-browser) (node array-object-node) column)
-  (awhen ($ (ref-of node) '@)
+  (awhen ($ (ref-of node) '*)
     (browse-object-in-new-window (memory-of view) it
                                  :title (col-name-of node))))
 
