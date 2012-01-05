@@ -56,7 +56,10 @@
          (select-set nil))
     (setf (label-label (info-label-of view))
           (describe-object-info ref (first nodes) info))
-    (if (not (eq base-ref ref))
+    (if (not (and (eq (memory-object-ref-type base-ref)
+                      (memory-object-ref-type ref))
+                  (eql (start-address-of base-ref) (start-address-of ref))
+                  (not (typep (memory-object-ref-type ref) 'padding))))
         (apply-expand-to-addr master (start-address-of ref)
                               (lambda (node) (push node select-set)))
         (progn
@@ -100,6 +103,13 @@
     (remove-child dummy child)
     (remove-child parent node)
     (add-child parent child idx)))
+
+(defun rebuild-memory-object-tree (view &key refresh)
+  (in-another-thread ((widget-of view))
+    (if refresh
+        (refresh-memory-mirror (memory-of view))
+        (check-refresh-context (memory-of view))))
+  (populate-memory-object-tree view (cur-ref-of view)))
 
 ;; Callbacks
 
@@ -211,8 +221,15 @@
                     (lambda (v ev)
                       (declare (ignore v))
                       (when (eq (event-key-type ev) :key-press)
+                        (format t "~S~%" (event-key-state ev))
                         (case (event-key-keyval ev)
-                          (65474 (refresh-memory-object-tree tree))
+                          (65474
+                           (cond ((member :control-mask (event-key-state ev))
+                                  (rebuild-memory-object-tree tree :refresh t))
+                                 ((member :shift-mask (event-key-state ev))
+                                  (rebuild-memory-object-tree tree :refresh nil))
+                                 (t
+                                  (refresh-memory-object-tree tree))))
                           (otherwise
                            (format t "~A~%" (event-key-keyval ev)))))
                       nil))
