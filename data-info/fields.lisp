@@ -212,11 +212,16 @@
              (setf last-name (register-$-var dollars)
                    dollars nil))
             ((char= char #\()
-             (unless (= (length dollars) 1) (fail))
-             (setf last-name (read-delimited-list #\) stream t)
-                   dollars nil)
-             (push #\) chars)
-             (next)))
+             (if (and at? (> (length dollars) 1))
+                 (let ((body (read-delimited-list #\) stream t)))
+                   (return-from main-$-reader
+                     `(lambda (,(register-$-var (subseq dollars 1))) ,body)))
+                 (progn
+                   (unless (= (length dollars) 1) (fail))
+                   (setf last-name (read-delimited-list #\) stream t)
+                         dollars nil)
+                   (push #\) chars)
+                   (next)))))
       (loop
          (cond
            ((or (xml::white-space-p char)
