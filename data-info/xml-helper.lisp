@@ -17,12 +17,12 @@
 (defun enum-to-int (enum value)
   (check-type value (or symbol integer))
   (if (integerp value) value
-      ($ $global.enum[enum].values value value)))
+      (or ($ $global.enum[enum].values value) value)))
 
 (defun enum-to-key (enum value)
   (check-type value (or symbol integer))
   (if (symbolp value) value
-      ($ $global.enum[enum].keys value value)))
+      (or ($ $global.enum[enum].keys value) value)))
 
 (defun find-instance (type value &optional aux-value)
   (awhen (lookup-type-in-context global type)

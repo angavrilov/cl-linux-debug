@@ -13,16 +13,12 @@
    (data-definition-files nil :accessor t)
    (os-type $linux :accessor t)))
 
-(defmethod $ ((context type-context) (key (eql $enum)) &optional def)
-  (declare (ignore def))
-  (lambda (key &optional def)
+(defmethod @ ((context type-context) (key (eql $enum)))
+  (lambda (key)
     (let ((type (lookup-type-in-context context key)))
-      (if type
-          (progn
-            (unless (typep type 'enum-type)
-              (error "Not an enum type: ~A" key))
-            type)
-          def))))
+      (unless (typep type '(or null enum-type))
+        (error "Not an enum type: ~A" key))
+      type)))
 
 (defmethod get-context-of-memory ((context type-context)) context)
 

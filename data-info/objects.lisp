@@ -59,14 +59,13 @@
   (unless (check-refresh-context mirror)
     (invalidate-object-mirror-caches mirror)))
 
-(defmethod $ ((obj object-memory-mirror) key &optional default)
+(defmethod @ ((obj object-memory-mirror) key)
   (if (eq key $enum)
       (call-next-method)
-      (or (find key (globals-of obj) :key #'memory-object-ref-parent-key
-                :test #'equal) default)))
+      (find key (globals-of obj) :key #'memory-object-ref-parent-key
+            :test #'equal)))
 
-(defmethod $ ((obj object-memory-mirror) (key (eql '*)) &optional default)
-  (declare (ignore default))
+(defmethod @ ((obj object-memory-mirror) (key (eql '*)))
   (globals-of obj))
 
 (defmethod get-id-search-cache ((context object-memory-mirror) address type field)

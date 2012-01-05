@@ -241,7 +241,7 @@
              do (make-array-subgroup parent master (subseq rest 0 cnt) base))))))
 
 (defmethod on-lazy-expand-node ((node array-object-node))
-  (let* ((items ($ (ref-of node) '@))
+  (let* ((items (@ (ref-of node) '*))
          (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
                      (master-node-of node)
                      nil)))
@@ -300,7 +300,7 @@
   ((fields nil :accessor t)))
 
 (defmethod evaluate-node-ref :after ((node struct-object-node))
-  (setf (fields-of node) (@ (ref-of node) '*)))
+  (setf (fields-of node) (@ (ref-of node) '@)))
 
 (defmethod col-name-weight-of ((node struct-object-node)) 700)
 
@@ -371,7 +371,7 @@
         (nreverse out-children)))))
 
 (defun layout-fields (node ref master)
-  (layout-children-in-range node (@ ref '*) (or master node)
+  (layout-children-in-range node (@ ref '@) (or master node)
                             (start-address-of ref) (length-of ref)))
 
 (defgeneric layout-ref-tree-node/type (type parent ref master)

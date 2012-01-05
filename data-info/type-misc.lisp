@@ -99,7 +99,7 @@
   (:method append ((type inheriting-type) ref value)
     (awhen (effective-inherited-child-of type)
       (flatten (list
-                (let ((rr ($ value (or (name-of it) (effective-tag-of it)))))
+                (let ((rr (@ value (or (name-of it) it))))
                   (describe-ref-value-by-type (memory-object-ref-type rr) ref rr))
                 (when (eq ref value)
                   (list (get-$-field-name (type-name-of type)))))))))
@@ -173,20 +173,19 @@
           (loop for attr in (enum-attrs-of type)
              collect (format nil "~A=~A" (name-of attr) $type[(name-of attr)][value]))))
 
-(defmethod $ ((type abstract-enum-item) (key symbol) &optional default)
+(defmethod @ ((type abstract-enum-item) (key symbol))
   (let* ((tables (lookup-tables-of type))
          (vtable (gethash $values tables))
          (ktable (gethash key tables)))
     (assert vtable)
-    (if ktable
-        (if (eq vtable ktable)
-            (lambda (key &optional default)
-              (if (integerp key) key
-                  (gethash key vtable default)))
-            (lambda (key &optional default)
-              (gethash (gethash key vtable key) ktable
-                       (gethash :default vtable default))))
-        default)))
+    (when ktable
+      (if (eq vtable ktable)
+          (lambda (key)
+            (if (integerp key) key
+                (gethash key vtable)))
+          (lambda (key)
+            (gethash (gethash key vtable key) ktable
+                     (gethash :default ktable)))))))
 
 (defgeneric parse-type-value (type value)
   (:method (type value) value)
@@ -253,7 +252,8 @@
   (%memory-ref-$ (effective-base-type-of type) ref t))
 
 (defmethod %memory-ref-$ ((type enum-field) ref (key symbol))
-  (or ($ type key) (call-next-method)))
+  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
+    (or $type[key][iv] (call-next-method))))
 
 (defmethod layout-type-rec :before ((type base-type-item))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
@@ -307,7 +307,7 @@
   (aprog1 (make-memory-ref memory ptr type :parent parent :key key)
     (adjust-mem-ref-type (memory-object-ref-type it) it)))
 
-(defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
+(defmethod %memory-ref-@ ((type pointer) ref (key (eql t)))
   (let ((size (effective-size-of type)))
     (let ((ptr (with-bytes-for-ref (vector offset ref size)
                  (parse-int vector offset size))))
@@ -315,8 +315,14 @@
         (make-pointer-ref (memory-object-ref-memory ref)
                           (or ptr 0) (effective-contained-item-of type) ref t)))))
 
+(defmethod %memory-ref-@ ((type pointer) ref (key (eql $value)))
+  (%memory-ref-@ type ref t))
+
+(defmethod %memory-ref-@ ((type pointer) ref key)
+  (@ (%memory-ref-@ type ref t) key))
+
 (defmethod %memory-ref-$ ((type pointer) ref key)
-  ($ (%memory-ref-$ type ref t) key))
+  ($ (%memory-ref-@ type ref t) key))
 
 (defmethod format-ref-value-by-type ((type pointer) ref (value null))
   "NULL")
@@ -374,13 +380,13 @@
                 size
                 elt-size)))))
 
-(defmethod %memory-ref-$ ((type array-item) ref (key integer))
-  ($ (array-item-ref type ref key) t))
+(defmethod %memory-ref-@ ((type array-item) ref (key integer))
+  (array-item-ref type ref key))
 
-(defmethod %memory-ref-$ ((type array-item) ref (key symbol))
+(defmethod %memory-ref-@ ((type array-item) ref (key symbol))
   (aif (and (null *array-item-internal*)
             (get-array-enum-value type key))
-       (%memory-ref-$ type ref it)
+       (%memory-ref-@ type ref it)
        (call-next-method)))
 
 (defun all-array-item-refs (type ref)
@@ -391,14 +397,8 @@
          for i from 0 below (min 50000 size)
          collect (offset-memory-reference first i step)))))
 
-(defmethod %memory-ref-$ ((type array-item) ref (key (eql '@)))
+(defmethod %memory-ref-@ ((type array-item) ref (key (eql '*)))
   (all-array-item-refs type ref))
-
-(defmethod %memory-ref-$ ((type array-item) ref (key (eql '*)))
-  ($ (all-array-item-refs type ref) t))
-
-(defmethod %memory-ref-$ ((type array-item) ref (key (eql $item)))
-  (array-item-ref type ref 0 :check-bounds? nil))
 
 (defmethod %memory-ref-$ ((type array-item) ref (key (eql $count)))
   (or (nth-value 1 (array-base-dimensions type ref)) 0))
@@ -516,7 +516,7 @@
 (defun find-field-by-name (compound name &optional (offset 0))
   (dolist (field (if (typep compound 'virtual-compound-item)
                      (effective-fields-of compound)))
-    (when (eq (effective-tag-of field) name)
+    (when (eq field name)
       (return (cons offset field)))
     (if (name-of field)
         (when (eq (name-of field) name)
@@ -530,7 +530,7 @@
                              (effective-offset-of field)
                              bias)
                       field (if keyp key
-                                (or (name-of field) (effective-tag-of field)))
+                                (or (name-of field) field))
                       :local? t))
 
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref key)
@@ -538,7 +538,15 @@
        (make-field-ref ref (cdr it) key (car it))
        (call-next-method)))
 
+(defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql $_fields)))
+  (lambda (key)
+    (awhen (find-field-by-name type key)
+      (make-field-ref ref (cdr it) key (car it)))))
+
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '*)))
+  (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
+
+(defmethod %memory-ref-@ :around ((type virtual-compound-item) ref (key (eql '@)))
   (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
 
 ;; Class
