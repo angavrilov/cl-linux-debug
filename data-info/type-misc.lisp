@@ -228,11 +228,13 @@
         (setf (gethash it vtable) val
               (gethash val ktable) it))
       (dolist (attr (item-attrs-of field))
-        (let ((table (find (name-of attr) (enum-attrs-of type) :key #'name-of)))
+        (let* ((table (find (name-of attr) (enum-attrs-of type) :key #'name-of))
+               (evalue (parse-type-value (effective-base-type-of table) (value-of attr) )))
           (unless table
             (error "Unknown enum attribute: ~A" (name-of attr)))
-          (setf (gethash val (effective-table-of table))
-                (parse-type-value (effective-base-type-of table) (value-of attr))))))
+          (if (is-list-p table)
+              (push evalue (gethash val (effective-table-of table)))
+              (setf (gethash val (effective-table-of table)) evalue)))))
     (setf (lookup-tables-of type) ftable)))
 
 (defmethod compute-effective-size (context (type enum-type)) 4)

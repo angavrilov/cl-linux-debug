@@ -335,6 +335,8 @@
   ((name nil :accessor t :type $-keyword)
    (type-name nil :accessor t :type $-keyword-namespace)
    (default-value nil :accessor t :type string)
+   (use-key-name nil :accessor t :type boolean)
+   (is-list nil :accessor t :type boolean)
    (effective-base-type :accessor t)
    (effective-table :accessor t)))
 

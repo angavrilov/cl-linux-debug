@@ -20,7 +20,7 @@
                              :buttons :none))
          (carea (dialog-content-area dlg))
          (cond-txt (with-output-to-string (stream)
-                     (ignore-errors (format stream "~S" condition))))
+                     (ignore-errors (format stream "~A" condition))))
          (cond-scroll (make-instance 'scrolled-window
                                 :hscrollbar-policy :never
                                 :vscrollbar-policy :automatic))
