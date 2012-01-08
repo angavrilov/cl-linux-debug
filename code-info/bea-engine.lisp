@@ -5,10 +5,12 @@
 (define-foreign-library libBeaEngine
   (t (:default "libBeaEngine")))
 
-(pushnew #.(make-pathname :name nil :type nil
-                          :defaults
-                          (merge-pathnames #P"lib/"
-                                           (asdf:system-definition-pathname :cl-linux-debug)))
+(pushnew #.(aprog1
+               (make-pathname :name nil :type nil
+                              :defaults
+                              (merge-pathnames #P"lib/"
+                                               (asdf:system-definition-pathname :cl-linux-debug)))
+             (format t "Library load dir: ~S~%" it))
          *foreign-library-directories*
          :test #'equal)
 

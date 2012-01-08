@@ -2,9 +2,11 @@
 
 (in-package :cl-linux-debug.code-info)
 
-(cc-flags "-I" #.(directory-namestring
-                  (merge-pathnames #P"lib/"
-                                   (asdf:system-definition-pathname :cl-linux-debug))))
+(cc-flags "-I" #.(aprog1
+                     (directory-namestring
+                      (merge-pathnames #P"lib/"
+                                       (asdf:system-definition-pathname :cl-linux-debug)))
+                   (format t "Include path: ~S~%" it)))
 
 (include "beaengine/BeaEngine.h")
 

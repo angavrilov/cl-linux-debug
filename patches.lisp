@@ -1,3 +1,13 @@
+(in-package :asdf)
+
+(let ((cg (find-system :cffi-grovel)))
+  (unless (system-source-file cg)
+    (%set-system-source-file
+     (pathname (directory-namestring
+                (merge-pathnames #P"mk-runtime/"
+                                 (system-definition-pathname :cl-linux-debug))))
+     cg)))
+
 (in-package :elf)
 
 #| Patch the ELF library. The original implementation of the
