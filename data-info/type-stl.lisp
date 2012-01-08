@@ -27,7 +27,7 @@
         (make-instance 'padding :name $pad :size 4)))
 
 (defmethod %memory-ref-$ ((type stl-string/windows) ref (key (eql t)))
-  (if (< $ref.capacity 16) $ref.buffer $ref.ptr[t]))
+  (if (< $ref.capacity 16) $ref.buffer $ref.ptr.value))
 
 ;; STL vector
 

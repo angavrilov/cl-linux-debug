@@ -33,6 +33,11 @@
    (effective-tag :accessor t))
   (:documentation "An abstract base class for all type items."))
 
+
+(defmethod add-subobject ((obj abstract-item) (subobj !--))
+  ;; Ignore comments
+  (values))
+
 (def (class* eas) data-item (abstract-item)
   ((size nil :accessor t :type integer-or-null)
    (alignment nil :accessor t :type integer-or-null)

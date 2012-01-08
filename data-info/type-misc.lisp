@@ -323,6 +323,9 @@
 (defmethod %memory-ref-@ ((type pointer) ref key)
   (@ (%memory-ref-@ type ref t) key))
 
+(defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
+  (%memory-ref-@ type ref t))
+
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-@ type ref t) key))
 
@@ -356,7 +359,7 @@
   (list (make-instance 'pointer :name $ptr :type-name $static-string)))
 
 (defmethod %memory-ref-$ ((type ptr-string) ref (key (eql t)))
-  $ref.ptr[t])
+  $ref.ptr.value)
 
 (defmethod format-ref-value-by-type ((type string-field) ref (value string))
   (format nil "~S" value))

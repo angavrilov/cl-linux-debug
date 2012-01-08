@@ -219,7 +219,7 @@
     (memory-object-ref-address ref))
   (:method (type ref (key (eql $_size)))
     (length-of ref))
-  (:method (type ref (key (eql $_key)))
+  (:method :around (type ref (key (eql $_key)))
     (memory-object-ref-parent-key ref))
   (:method (type ref (key (eql $_type)))
     nil)
