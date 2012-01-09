@@ -1,3 +1,9 @@
+;; For SLIME
+(require :sb-bsd-sockets)
+(require :sb-introspect)
+(require :sb-cltl2)
+
+;; ASDF libs
 (let* ((dist-dir (merge-pathnames #P"quicklisp/dists/quicklisp/software/"
                                   (user-homedir-pathname)))
        (asdf:*central-registry*
@@ -52,7 +58,7 @@
                   :trees
                   :cl-gtk2-gtk)))
 
-(inspect #'asdf::do-traverse)
+;(inspect #'asdf::do-traverse)
 
 (asdf:clear-configuration)
 (save-lisp-and-die "sbcl-runtime" :executable t)
