@@ -82,13 +82,14 @@
                       (unless *csv-merge-nested*
                         (return t))))
         (loop
+           with base-offset = (+ inc-offset (or (ignore-errors (effective-offset-of type)) 0))
            for i from 0 below (min 256 (count-of type))
            for key = (or $etype.keys[i] i)
            and offset = (* (effective-element-size-of type) i)
            do (export-csv-rec elt root (1+ level)
                               (format nil "~A[~A]" (or subname "")
                                       (if (is-$-keyword? key) (get-$-field-name key) key))
-                              (+ inc-offset offset))))))
+                              (+ base-offset offset))))))
   (:method ((type abstract-enum-item) root level pname inc-offset &key)
     (call-next-method)
     (dolist (field (effective-fields-of type))
