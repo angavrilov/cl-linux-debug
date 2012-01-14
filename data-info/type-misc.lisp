@@ -41,6 +41,10 @@
     (awhen (call-helper-if-found type $index-refers-to key ref :context-ref ref)
       (list (list $index-refers-to it)))))
 
+(defmethod %memory-ref-@ ((type array-item) ref (key (eql $index-refers-to)))
+  (lambda (index)
+    (call-helper-if-found type $index-refers-to index ref :context-ref ref)))
+
 (defun get-ref-child-links (ref child)
   (when (typep ref 'memory-object-ref)
     (get-ref-child-links-by-type (memory-object-ref-type ref) ref child
@@ -56,6 +60,12 @@
        (list (list $refers-to it)))
      (awhen (call-helper-if-found type $ref-target value ref :context-ref ref)
        (list (list $ref-target it))))))
+
+(defmethod %memory-ref-@ ((type primitive-field) ref (key (eql $refers-to)))
+  (call-helper-if-found type $refers-to (%memory-ref-$ type ref t) ref :context-ref ref))
+
+(defmethod %memory-ref-@ ((type primitive-field) ref (key (eql $ref-target)))
+  (call-helper-if-found type $ref-target (%memory-ref-$ type ref t) ref :context-ref ref))
 
 (defun get-ref-links (ref value)
   (get-ref-links-by-type (memory-object-ref-type ref) ref value))
