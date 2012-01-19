@@ -390,7 +390,8 @@
 
 (def (class* eas) inheriting-type (struct-compound-item code-helper-mixin)
   ((inherits-from nil :accessor t :type $-keyword-namespace)
-   (instance-vector nil :accessor t :type string))
+   (instance-vector nil :accessor t :type string)
+   (custom-methods nil :accessor t :type boolean))
   (:documentation "A type that can inherit."))
 
 (defmethod auto-code-helpers append ((item inheriting-type))

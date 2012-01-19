@@ -163,7 +163,9 @@
             :key #'effective-alignment-of
             :initial-value 1))
   (:method (context (obj unit-item))
-    (max 1 (default-size-of obj))))
+    (max 1 (case (os-type-of context)
+             ($linux (min 4 (default-size-of obj)))
+             (otherwise (default-size-of obj))))))
 
 (defgeneric compute-effective-has-pointers? (context obj)
   (:method (context (obj data-item))
