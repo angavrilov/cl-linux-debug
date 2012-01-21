@@ -250,29 +250,26 @@
 (defmethod compute-effective-size (context (type enum-type)) 4)
 (defmethod compute-effective-alignment (context (type enum-type)) 4)
 
-(defmethod lookup-tables-of ((type enum/global))
+(defmethod lookup-tables-of ((type global-type-proxy-base))
   (lookup-tables-of (effective-main-type-of type)))
 
-(defmethod enum-attrs-of ((type enum/global))
+(defmethod enum-attrs-of ((type global-type-proxy-base))
   (enum-attrs-of (effective-main-type-of type)))
 
-(defmethod %memory-ref-$ ((type enum-field) ref (key (eql t)))
-  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
-    (gethash iv (gethash $keys (lookup-tables-of type)) iv)))
-
-(defmethod %memory-ref-$ ((type enum-field) ref (key (eql $int-value)))
-  (%memory-ref-$ (effective-base-type-of type) ref t))
-
-(defmethod %memory-ref-$ ((type enum-field) ref (key symbol))
-  (let ((iv (%memory-ref-$ (effective-base-type-of type) ref t)))
-    (or $type[key][iv] (call-next-method))))
+(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key symbol))
+  (case key
+    (t (let ((iv (call-next-method)))
+         (gethash iv (gethash $keys (lookup-tables-of type)) iv)))
+    (otherwise
+     (or $type[key][(%memory-ref-$ type ref t)] (call-next-method)))))
 
 (defmethod layout-type-rec :before ((type base-type-item))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
     (unless (typep btype 'integer-field)
       (error "Base type must be an integer: ~A" (base-type-of type)))
     (layout-type-rec btype)
-    (setf (effective-base-type-of type) btype)))
+    (setf (effective-base-type-of type) btype
+          (effective-int-signed? type) (effective-int-signed? btype))))
 
 (defmethod compute-effective-size (context (type base-type-item))
   (effective-size-of (effective-base-type-of type)))
@@ -297,16 +294,19 @@
          (when ,vector
            ,@code)))))
 
-(defmethod %memory-ref-$ ((type flag-bit) ref (key (eql t)))
+(defmethod %memory-ref-$ ((type bit-item) ref (key (eql t)))
   (with-bits-for-ref (vector offset byte-size bit-shift bit-size)
       (ref (effective-size-of type))
-    (let ((iv (ldb (byte bit-size bit-shift)
-                   (parse-int vector offset byte-size))))
-      (if (or (/= iv 0) (/= bit-size 1))
-          iv nil))))
+    (ldb (byte bit-size bit-shift)
+         (parse-int vector offset byte-size))))
 
-(defmethod compute-effective-size (context (obj flag-bit)) (* 1/8 (count-of obj)))
-(defmethod compute-effective-alignment (context (obj flag-bit)) 1/8)
+(defmethod %memory-ref-$ ((type flag-bit) ref (key (eql t)))
+  (let ((iv (call-next-method)))
+    (if (or (/= iv 0) (/= (effective-size-of type) 1/8))
+        iv nil)))
+
+(defmethod compute-effective-size (context (obj bit-item)) (* 1/8 (count-of obj)))
+(defmethod compute-effective-alignment (context (obj bit-item)) 1/8)
 
 (defmethod format-ref-value-by-type ((type flag-bit) ref value)
   (if (= (effective-size-of type) 1/8)

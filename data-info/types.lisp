@@ -259,12 +259,16 @@
 
 ;; Bit
 
-(def (class* eas) flag-bit (primitive-field concrete-item)
+(def (class* eas) bit-item (primitive-field)
   ((count 1 :accessor t :type integer))
   (:default-initargs :default-size 1/8 :effective-alignment 1/8)
   (:documentation "A bitfield chunk."))
 
-(def (class* eas) base-type-item (data-item)
+(def (class* eas) flag-bit (proxifiable-item-mixin bit-item concrete-item)
+  ((type-name nil :accessor t :type $-keyword-namespace))
+  (:documentation "A bitfield element."))
+
+(def (class* eas) base-type-item (integer-item)
   ((base-type $int32_t :accessor t :type $-keyword)
    (effective-base-type :accessor t)))
 
@@ -362,7 +366,7 @@
 
 (defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
 
-(def (class* eas) enum-field (base-type-item abstract-enum-item integer-item)
+(def (class* eas) enum-field (abstract-enum-item base-type-item integer-item)
   ()
   (:documentation "Ad-hoc enum field"))
 
@@ -371,6 +375,7 @@
   (:documentation "Ad-hoc enum field"))
 
 (defmethod can-proxify-for-type? ((type enum) (global abstract-enum-item)) t)
+(defmethod can-proxify-for-type? ((type flag-bit) (global abstract-enum-item)) t)
 
 ;; Global entity definition
 

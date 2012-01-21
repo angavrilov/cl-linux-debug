@@ -123,6 +123,11 @@
 
 (defmethod xml:xml-tag-name-symbol ((str enum/global)) 'enum)
 
+(def (class* eas) flag-bit/enum-global (global-type-proxy-base abstract-enum-item bit-item)
+  ())
+
+(defmethod xml:xml-tag-name-symbol ((str flag-bit/enum-global)) 'flag-bit)
+
 ;; Misc
 
 (defmacro tag-attr (tag attr &optional (default nil d-p))
@@ -195,15 +200,17 @@
   (:method (context (referrer unit-item) (name null))
     (make-instance 'padding :syntax-parent referrer :default-size 4)))
 
-(defgeneric proxy-class-for (type)
-  (:method ((type global-type-definition))
+(defgeneric proxy-class-for (obj type)
+  (:method (obj (type global-type-definition))
     'global-type-proxy)
-  (:method ((type enum-type))
-    'enum/global))
+  (:method ((obj enum) (type enum-type))
+    'enum/global)
+  (:method ((obj flag-bit) (type enum-type))
+    'flag-bit/enum-global))
 
 (defgeneric make-proxy-field (obj type)
   (:method (obj (type global-type-definition))
-    (make-instance (proxy-class-for type) :syntax-parent obj
+    (make-instance (proxy-class-for obj type) :syntax-parent obj
                    :effective-main-type type))
   (:method (obj (type unit-item))
     (assert (not (effective-finalized? type)))
@@ -321,7 +328,7 @@
            (unless (can-proxify-for-type? obj defn)
              (error "Cannot refer with ~A to ~A" obj defn))
            (layout-type-rec
-            (change-class obj (proxy-class-for defn)
+            (change-class obj (proxy-class-for obj defn)
                           :effective-main-type defn)))
          (call-next-method))))
 
