@@ -97,20 +97,26 @@
   (let* ((*cur-ctx-namespace* (namespace-by-name full-name))
          (*strong-ref-table* (make-hash-table))
          (old-def (if old-table (gethash full-name old-table)))
-         (old-tag (if old-def (effective-tag-of old-def))))
+         (old-tag (if old-def (effective-tag-of old-def)))
+         (def-save (car old-tag)))
     ;; Assign the root tag
     (if (and old-tag (not (typep old-def 'global-type-proxy)))
         (setf (effective-tag-of ddef) old-tag
               (car old-tag) ddef)
         (setf (effective-tag-of ddef) (list ddef)
               old-tag nil))
-    ;; Layout
-    (layout-type-rec ddef)
-    ;(effective-size-of ddef) ; ensure strong ref on itself
-    ;; Assign all tags
-    (when old-tag
-      (setf (cdr old-tag) nil)) ; forget attributes
-    (tag-type-tree ddef old-def)
+    (unwind-protect
+         (progn
+           ;; Layout
+           (layout-type-rec ddef)
+           ;;(effective-size-of ddef) ; ensure strong ref on itself
+           ;; Assign all tags
+           (when old-tag
+             (setf (cdr old-tag) nil ; forget attributes
+                   def-save ddef))
+           (tag-type-tree ddef old-def))
+      (when old-tag
+        (setf (car old-tag) def-save)))
     ;; Update tables
     (when old-table
       (setf (gethash full-name old-table) ddef)

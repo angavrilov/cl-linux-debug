@@ -128,9 +128,10 @@
      (awhen (ref-links-of node)
        (loop for (name link) in it
           collect (list (format nil "Browse link ~A" name)
-                        (lambda () (browse-object-in-new-window
-                               memory link
-                               :title (format nil "~A of ~A" name (col-name-of node)))))))
+                        (let ((name name) (link link))
+                          (lambda () (browse-object-in-new-window
+                                 memory link
+                                 :title (format nil "~A of ~A" name (col-name-of node))))))))
      (let ((info (get-address-object-info (memory-of (view-of node)) (start-address-of node))))
        (when (and info (malloc-chunk-range-of info))
          (list (list "Browse referencing objects"
