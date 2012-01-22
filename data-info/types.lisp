@@ -269,11 +269,12 @@
   (:documentation "A bitfield element."))
 
 (def (class* eas) base-type-item (integer-item)
-  ((base-type $int32_t :accessor t :type $-keyword)
+  ((base-type nil :accessor t :type $-keyword)
    (effective-base-type :accessor t)))
 
 (def (class* eas) bitfield-item (base-type-item struct-compound-item)
-  ())
+  ()
+  (:default-initargs :base-type $uint32_t))
 
 (def (class* eas) bitfield (data-field bitfield-item concrete-item)
   ())
@@ -366,7 +367,7 @@
 
 (defmethod can-add-subfield? ((obj abstract-enum-item) (subobj enum-item)) t)
 
-(def (class* eas) enum-field (abstract-enum-item base-type-item integer-item)
+(def (class* eas) enum-field (abstract-enum-item base-type-item)
   ()
   (:documentation "Ad-hoc enum field"))
 
@@ -426,7 +427,7 @@
   ()
   (:documentation "A global bitfield type definition."))
 
-(def (class* eas) enum-type (global-type-definition abstract-enum-item concrete-item)
+(def (class* eas) enum-type (global-type-definition enum-field concrete-item)
   ()
   (:documentation "A global enum type definition."))
 

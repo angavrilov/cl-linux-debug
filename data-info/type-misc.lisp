@@ -263,6 +263,9 @@
     (otherwise
      (or $type[key][(%memory-ref-$ type ref t)] (call-next-method)))))
 
+(defmethod base-type-of ((type global-type-proxy-base))
+  (or (call-next-method) (base-type-of (effective-main-type-of type))))
+
 (defmethod layout-type-rec :before ((type base-type-item))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
     (unless (typep btype 'integer-field)
