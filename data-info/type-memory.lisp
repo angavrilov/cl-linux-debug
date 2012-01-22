@@ -251,7 +251,8 @@
   (%memory-ref-$ (memory-object-ref-type ref) ref key))
 
 (defmethod (setf $) (value (ref memory-object-ref) key)
-  (setf (%memory-ref-$ (memory-object-ref-type ref) ref key) value))
+  (setf (%memory-ref-$ (memory-object-ref-type ref) ref key) value)
+  value)
 
 ;; Ptr walker
 

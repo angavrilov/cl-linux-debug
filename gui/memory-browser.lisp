@@ -103,8 +103,8 @@
          (idx (child-index-of parent node)))
     (apply-expand-from-tree child node)
     (remove-child dummy child)
-    (remove-child parent node)
-    (add-child parent child idx)))
+    (add-child parent child idx)
+    (remove-child parent node)))
 
 (defun rebuild-memory-object-tree (view &key refresh)
   (in-another-thread ((widget-of view))
@@ -146,7 +146,15 @@
                  (lambda () (copy-to-clipboard (tree-view-of (view-of node))
                                           (format-hex-offset (start-address-of node) :prefix ""))))
            (list "Rebuild subtree"
-                 (lambda () (rebuild-subtree node)))))))
+                 (lambda () (rebuild-subtree node))))
+     (when (typep (memory-object-ref-type (ref-of node)) 'unit-item)
+       (list (list "Set value"
+                   (lambda () (awhen (run-query-dialog "Enter the new value:")
+                           (in-another-thread ((widget-of (view-of node)))
+                             (with-simple-restart (continue "Cancel setting the value")
+                               (let ((value (read-from-string it)))
+                                 (setf ($ (ref-of node) t) value))))
+                           (rebuild-subtree node)))))))))
 
 (defun print-guessed-item (stream item base-addr)
   (bind ((addr (start-address-of item))

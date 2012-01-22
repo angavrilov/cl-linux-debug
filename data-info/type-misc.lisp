@@ -158,6 +158,9 @@
   (awhen (call-next-method)
     (if (/= it 0) it nil)))
 
+(defmethod (setf %memory-ref-$) ((value symbol) (type bool) ref (key (eql t)))
+  (setf (%memory-ref-$ type ref key) (if value 1 0)))
+
 (defmethod format-ref-value-by-type ((type bool) ref value)
   (if value "Y" "N"))
 
@@ -169,6 +172,14 @@
       (cffi:with-foreign-object (tmp :uint32)
         (setf (cffi:mem-ref tmp :uint32) (parse-int vector offset 4))
         (cffi:mem-ref tmp :float)))))
+
+(defmethod (setf %memory-ref-$) ((value real) (type s-float) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (cffi:with-foreign-object (tmp :uint32)
+        (setf (cffi:mem-ref tmp :float) (float value))
+        (setf (parse-int vector offset 4) (cffi:mem-ref tmp :uint32)))
+      (request-memory-write ref 0 size))))
 
 ;; Enum
 
@@ -263,6 +274,11 @@
     (otherwise
      (or $type[key][(%memory-ref-$ type ref t)] (call-next-method)))))
 
+(defmethod (setf %memory-ref-$) ((value symbol) (type abstract-enum-item) ref (key (eql t)))
+  (aif $type.values[value]
+       (setf (%memory-ref-$ type ref t) it)
+       (call-next-method)))
+
 (defmethod base-type-of ((type global-type-proxy-base))
   (or (call-next-method) (base-type-of (effective-main-type-of type))))
 
@@ -303,10 +319,21 @@
     (ldb (byte bit-size bit-shift)
          (parse-int vector offset byte-size))))
 
+(defmethod (setf %memory-ref-$) ((value integer) (type bit-item) ref (key (eql t)))
+  (with-bits-for-ref (vector offset byte-size bit-shift bit-size)
+      (ref (effective-size-of type))
+    (let ((tmp (parse-int vector offset byte-size)))
+      (setf (ldb (byte bit-size bit-shift) tmp) value)
+      (setf (parse-int vector offset byte-size) tmp))
+    (request-memory-write ref 0 (effective-size-of type))))
+
 (defmethod %memory-ref-$ ((type flag-bit) ref (key (eql t)))
   (let ((iv (call-next-method)))
     (if (or (/= iv 0) (/= (effective-size-of type) 1/8))
         iv nil)))
+
+(defmethod (setf %memory-ref-$) ((value symbol) (type flag-bit) ref (key (eql t)))
+  (setf (%memory-ref-$ type ref t) (if value 1 0)))
 
 (defmethod compute-effective-size (context (obj bit-item)) (* 1/8 (count-of obj)))
 (defmethod compute-effective-alignment (context (obj bit-item)) 1/8)
@@ -329,6 +356,18 @@
       (unless (eql ptr 0)
         (make-pointer-ref (memory-object-ref-memory ref)
                           (or ptr 0) (effective-contained-item-of type) ref t)))))
+
+(defmethod (setf %memory-ref-$) ((value integer) (type pointer) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (setf (parse-int vector offset size) value)
+      (request-memory-write ref 0 size))))
+
+(defmethod (setf %memory-ref-$) ((value memory-object-ref) (type pointer) ref (key (eql t)))
+  (setf (%memory-ref-$ type ref t) (memory-object-ref-address value)))
+
+(defmethod (setf %memory-ref-$) ((value null) (type pointer) ref (key (eql t)))
+  (setf (%memory-ref-$ type ref t) 0))
 
 (defmethod %memory-ref-@ ((type pointer) ref (key (eql $value)))
   (%memory-ref-@ type ref t))
