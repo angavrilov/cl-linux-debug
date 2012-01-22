@@ -12,6 +12,7 @@
         :cl-linux-debug.field-names
         :cl-linux-debug.data-defs
         :cl-linux-debug.data-info
+        :sb-gray
         :gtk :gdk :gobject)
   (:shadow #:within-main-loop)
   (:shadowing-import-from :cl-linux-debug.data-defs

@@ -12,6 +12,98 @@
 (defun ensure-string (data)
   (if (stringp data) data (format nil "~S" data)))
 
+;;; Query dialog and streams
+
+(defun run-query-dialog (request &key no-text?)
+  (let* ((dlg (make-instance 'message-dialog
+                             :message-type (if no-text? :info :question)
+                             :title "Query"
+                             :text request
+                             :buttons :ok))
+         (carea (dialog-content-area dlg))
+         (entry (make-instance 'entry :widght-request 600)))
+    (unless no-text?
+      (box-pack-start carea entry)
+      (connect-signal entry "activate"
+                      (lambda (v)
+                      (declare (ignore v))
+                      (dialog-response dlg :ok))))
+    (setf (dialog-default-response dlg) :ok)
+    (setf (gtk-window-keep-above dlg) t)
+    (widget-show dlg)
+    (gtk-window-present dlg)
+    (prog1
+        (if (eq (dialog-run dlg) :ok)
+            (entry-text entry)
+            nil)
+      (object-destroy dlg))))
+
+(defun call-dialog (cb)
+  (if (eq (bt:current-thread) gtk::*main-thread*)
+      (funcall cb)
+      (let ((rchan (make-instance 'cl-linux-debug::async-channel)))
+        (within-main-loop
+          (let ((rvc (constantly nil)))
+            (unwind-protect
+                 (setf rvc (funcall cb))
+              (chanl:send rchan rvc))))
+        (chanl:recv rchan))))
+
+(defun call-query-dialog (request &key no-text?)
+  (call-dialog (lambda () (run-query-dialog request :no-text? no-text?))))
+
+(defclass debug-dialog-stream (fundamental-character-input-stream
+                               fundamental-character-output-stream)
+  ((in-stream :initform (make-string-input-stream "") :accessor in-stream-of)
+   (out-string :initarg :query :initform "" :accessor out-string-of)
+   (out-stream :initform (make-string-output-stream) :accessor out-stream-of)))
+
+(defmethod stream-element-type ((stream debug-dialog-stream))
+  (stream-element-type (out-stream-of stream)))
+
+(defmethod close ((stream debug-dialog-stream) &key abort)
+  (unless abort
+    (let ((str (get-output-stream-string (out-stream-of stream))))
+      (unless (equal str "")
+        (call-query-dialog str :no-text? t)))))
+
+(defmethod interactive-stream-p ((stream debug-dialog-stream)) t)
+
+(defmethod stream-read-char-no-hang ((stream debug-dialog-stream))
+  (read-char (in-stream-of stream) nil nil))
+
+(defmethod stream-read-char ((stream debug-dialog-stream))
+  (loop
+     (aif (read-char (in-stream-of stream) nil nil)
+          (return it)
+          (progn
+            (let ((str (get-output-stream-string (out-stream-of stream))))
+              (unless (equal str "")
+                (setf (out-string-of stream) str)))
+            (setf (in-stream-of stream)
+                  (make-string-input-stream
+                   (aif (call-query-dialog (out-string-of stream))
+                        (concatenate 'string it '(#\Newline))
+                        "")))))))
+
+(defmethod stream-clear-input ((stream debug-dialog-stream))
+  (clear-input (in-stream-of stream)))
+
+(defmethod stream-clear-output ((stream debug-dialog-stream))
+  (setf (out-string-of stream) "")
+  (clear-output (out-stream-of stream)))
+
+(defmethod stream-unread-char ((stream debug-dialog-stream) char)
+  (unread-char char (in-stream-of stream)))
+
+(defmethod stream-fresh-line ((stream debug-dialog-stream))
+  (fresh-line (out-stream-of stream)))
+
+(defmethod stream-write-char ((stream debug-dialog-stream) char)
+  (write-char char (out-stream-of stream)))
+
+;;; Restart selection dialog
+
 (defun run-restart-dialog (condition restarts)
   (let* ((dlg (make-instance 'message-dialog
                              :message-type :error
@@ -95,20 +187,19 @@
                    (tree-selection-selected-rows selection))
              (let* ((idx (first (tree-path-indices (first it))))
                     (restart (car (nth idx restarts))))
-               (lambda () (invoke-restart-interactively restart)))
+               (lambda ()
+                 (with-open-stream (dds (make-instance 'debug-dialog-stream
+                                                       :query "Enter the restart parameter:"))
+                   (let ((*debug-io* dds) (*query-io* dds)
+                         (*standard-input* dds) (*standard-output* dds))
+                     (invoke-restart-interactively restart)))))
              (lambda () nil))
       (object-destroy dlg))))
 
 (defun call-restart-dialog (condition restarts)
-  (if (eq (bt:current-thread) gtk::*main-thread*)
-      (run-restart-dialog condition restarts)
-      (let ((rchan (make-instance 'cl-linux-debug::async-channel)))
-        (within-main-loop
-          (let ((rvc (constantly nil)))
-            (unwind-protect
-                 (setf rvc (run-restart-dialog condition restarts))
-              (chanl:send rchan rvc))))
-        (chanl:recv rchan))))
+  (call-dialog (lambda () (run-restart-dialog condition restarts))))
+
+;;; Restart selection dialog hook
 
 (defun get-swank-hook ()
   (let ((swank-hook-sym (ignore-errors (read-from-string "swank:swank-debugger-hook"))))
@@ -126,6 +217,9 @@
 
 (defun enable-gui-debugger-hook ()
   (setf *debugger-hook* #'gui-restart-handler))
+
+;;; Support for offloading computation to another thread,
+;;; with a progress dialog to occupy the message loop.
 
 (defun run-in-other-thread (code &key parent title)
   (let* ((dlg (make-instance 'dialog :title (or title "Processing")
