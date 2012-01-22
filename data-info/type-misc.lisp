@@ -369,6 +369,12 @@
 (defmethod (setf %memory-ref-$) ((value null) (type pointer) ref (key (eql t)))
   (setf (%memory-ref-$ type ref t) 0))
 
+(defmethod %memory-ref-@ ((type pointer) ref (key integer))
+  (if (is-array-p type)
+      (offset-memory-reference (%memory-ref-@ type ref t) key
+                               (effective-element-size-of type))
+      (call-next-method)))
+
 (defmethod %memory-ref-@ ((type pointer) ref (key (eql $value)))
   (%memory-ref-@ type ref t))
 
@@ -380,6 +386,11 @@
 
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-@ type ref t) key))
+
+(defmethod %memory-ref-$ ((type pointer) ref (key integer))
+  (if (is-array-p type)
+      (%memory-ref-@ type ref key)
+      (call-next-method)))
 
 (defmethod format-ref-value-by-type ((type pointer) ref (value null))
   "NULL")
