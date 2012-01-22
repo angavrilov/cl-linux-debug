@@ -185,7 +185,7 @@
                      next-rgn-offset
                      (if next-rgn (- (start-address-of next-rgn) base) most-positive-fixnum)))
              (index (base s-off dst d-off)
-               (unless (or (not (or (= d-off 0) (= d-off #xC)))
+               (unless (or (not (or (= d-off 0) (= d-off 4) (= d-off #xC)))
                            (and (eql dst last-target)
                                 (<= s-off last-cutoff)))
                  (setf last-target dst
@@ -208,7 +208,7 @@
   (let ((reftbl (make-array (malloc-chunk-count chunk-map) :initial-element nil)))
     (flet ((push-if-ok (src dst d-off)
              (case d-off
-               ((#xC #x0) (push-reference reftbl dst src)))))
+               ((#xC #x4 #x0) (push-reference reftbl dst src)))))
       (declare (inline push-if-ok))
       (enum-malloc-chunk-pointers mirror chunk-map
                                   (lambda (src s-off dst d-off)
