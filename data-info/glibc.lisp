@@ -169,8 +169,8 @@
   (let ((main-arena (get-memory-global memory $glibc:main_arena)))
     (values main-arena
             (loop for arena = $main-arena.next then $arena.next
-               until (or (address= arena main-arena)
-                         (null arena)
+               until (or (null arena)
+                         (address= arena main-arena)
                          (= (start-address-of arena) 0))
                collect arena))))
 
