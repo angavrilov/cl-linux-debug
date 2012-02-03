@@ -36,7 +36,7 @@
      for ref = (get-memory-global mirror (car global))
      when (and ref (start-address-of ref))
      collect ref into gs
-     do (trees:insert ref gmap)
+     and do (trees:insert ref gmap)
      finally (setf (globals-of mirror) (sort gs #'< :key #'start-address-of)
                    (global-map-of mirror) gmap)))
 
