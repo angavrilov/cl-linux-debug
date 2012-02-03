@@ -198,9 +198,10 @@
 (defun find-glibc-heap-ranges (memory)
   (multiple-value-bind (main-arena aux-arenas)
       (enumerate-glibc-malloc-arenas memory)
-    (list* (list (find-main-glibc-heap memory)
-                 (+ $main-arena.top +chunk-header-size+)
-                 #'enumerate-glibc-malloc-chunks)
-           (loop for arena in aux-arenas
-              for heaps = (find-aux-glibc-heap-chain memory arena)
-              append (mapcar #'find-aux-glibc-heap-range heaps)))))
+    (when main-arena
+      (list* (list (find-main-glibc-heap memory)
+                   (+ $main-arena.top +chunk-header-size+)
+                   #'enumerate-glibc-malloc-chunks)
+             (loop for arena in aux-arenas
+                for heaps = (find-aux-glibc-heap-chain memory arena)
+                append (mapcar #'find-aux-glibc-heap-range heaps))))))

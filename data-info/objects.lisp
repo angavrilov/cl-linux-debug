@@ -34,7 +34,7 @@
      with gmap = (make-chunk-table)
      for global in *known-globals*
      for ref = (get-memory-global mirror (car global))
-     when ref
+     when (and ref (start-address-of ref))
      collect ref into gs
      do (trees:insert ref gmap)
      finally (setf (globals-of mirror) (sort gs #'< :key #'start-address-of)
