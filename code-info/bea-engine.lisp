@@ -3,7 +3,7 @@
 (in-package :cl-linux-debug.code-info)
 
 (define-foreign-library libBeaEngine
-  (t (:default "libBeaEngine")))
+  (t (:default #+x86-64 "libBeaEngine_64" #-x86-64 "libBeaEngine")))
 
 (pushnew #.(aprog1
                (make-pathname :name nil :type nil

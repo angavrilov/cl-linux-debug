@@ -83,6 +83,7 @@
               ((:EPERM "EPERM"))
               ((:ESRCH "ESRCH")))
 
+#-x86-64
 (cstruct user_regs_struct "struct user_regs_struct"
          (eax "eax" :type :long)
          (ebx "ebx" :type :long)
@@ -101,4 +102,34 @@
          (es "xes" :type :long)
          (fs "xfs" :type :long)
          (gs "xgs" :type :long))
+
+#+x86-64
+(cstruct user_regs_struct "struct user_regs_struct"
+         (r15 "r15" :type :long)
+         (r14 "r14" :type :long)
+         (r13 "r13" :type :long)
+         (r12 "r12" :type :long)
+         (rbp "rbp" :type :long)
+         (rbx "rbx" :type :long)
+         (r11 "r11" :type :long)
+         (r10 "r10" :type :long)
+         (r9 "r9" :type :long)
+         (r8 "r8" :type :long)
+         (rax "rax" :type :long)
+         (rcx "rcx" :type :long)
+         (rdx "rdx" :type :long)
+         (rsi "rsi" :type :long)
+         (rdi "rdi" :type :long)
+         (orig-rax "orig_rax" :type :long)
+         (rip "rip" :type :long)
+         (cs "cs" :type :long)
+         (eflags "eflags" :type :long)
+         (rsp "rsp" :type :long)
+         (ss "ss" :type :long)
+         (fs_base "fs_base" :type :long)
+         (gs_base "gs_base" :type :long)
+         (ds "ds" :type :long)
+         (es "es" :type :long)
+         (fs "fs" :type :long)
+         (gs "gs" :type :long))
 

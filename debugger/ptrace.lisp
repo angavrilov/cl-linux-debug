@@ -137,9 +137,11 @@
 (defun %ptrace-decode-registers (reginfo)
   (macrolet ((convert (&rest names)
                `(list ,@(loop for i in names
-                           collect (make-keyword i)
-                           collect `(foreign-slot-value reginfo 'user_regs_struct ',i)))))
-    (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax
+                           collect (make-keyword (ensure-car i))
+                           collect (destructuring-bind (v32 &optional (v64 v32)) (ensure-list i)
+                                     `(foreign-slot-value reginfo 'user_regs_struct #-x86-64 ',v32 #+x86-64 ',v64))))))
+    (convert (eax rax) (ebx rbx) (ecx rcx) (edx rdx) (esi rsi) (edi rdi) (esp rsp) (ebp rbp) (eip rip)
+             eflags (orig-eax orig-rax)
              cs ss ds es fs gs)))
 
 (defun ptrace-get-registers (process)
@@ -152,11 +154,13 @@
     (with-foreign-object (reginfo 'user_regs_struct)
       (with-errno (ptrace :PTRACE_GETREGS process (null-pointer) reginfo))
       (macrolet ((convert (&rest names)
-                   `(destructuring-bind (&key ,@names) registers
+                   `(destructuring-bind (&key ,@(mapcar #'ensure-car names)) registers
                       ,@(loop for i in names
-                           collect `(when ,i
-                                      (setf (foreign-slot-value reginfo 'user_regs_struct ',i) ,i))))))
-        (convert eax ebx ecx edx esi edi esp ebp eip eflags orig-eax
+                           collect (destructuring-bind (v32 &optional (v64 v32)) (ensure-list i)
+                                     `(when ,v32
+                                        (setf (foreign-slot-value reginfo 'user_regs_struct #-x86-64 ',v32 #+x86-64 ',v64) ,v32)))))))
+        (convert (eax rax) (ebx rbx) (ecx rcx) (edx rdx) (esi rsi) (edi rdi) (esp rsp) (ebp rbp) (eip rip)
+                 eflags (orig-eax orig-rax)
                  cs ss ds es fs gs)
         (with-errno (ptrace :PTRACE_SETREGS process (null-pointer) reginfo))
         (%ptrace-decode-registers reginfo)))))
