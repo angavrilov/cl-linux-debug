@@ -80,6 +80,7 @@
     sym))
 
 (defun add-$-prefix (name)
+  (assert (not (equal name "")))
   (concatenate 'string "$" name))
 
 (defun get-$-field (name)
