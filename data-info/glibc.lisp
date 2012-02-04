@@ -165,8 +165,36 @@
       (result-sv/push-extend (logior pos/addr 1))
       (values start-address pos/addr))))
 
+(defun get-glibc-main-arena-address (memory)
+  (let ((val (load-time-value (list nil))))
+    (or (car val)
+        (setf (car val)
+              (multiple-value-bind (insns got reloc)
+                  (disassemble-function (executable-of (process-of memory)) "mallinfo")
+                (when insns
+                  (bind ((offset nil))
+                    (dolist (insn insns)
+                      (let ((arg (x86-instruction-argument1 insn)))
+                        (when (and (eq (x86-instruction-mnemonic insn) :cmpxchg)
+                                   (assoc :lock (x86-instruction-prefixes insn))
+                                   (typep arg 'x86-argument-memory)
+                                   (eq (x86-argument-memory-base-reg arg) :ebx)
+                                   (eq (x86-argument-memory-index-reg arg) nil))
+                          (let ((xoffset (x86-argument-memory-displacement arg)))
+                            (if offset
+                                (assert (= offset xoffset))
+                                (setf offset xoffset))))))
+                    (assert (and offset got))
+                    (+ reloc got offset))))))))
+
+(defun get-glibc-main-arena (memory)
+  (or (get-memory-global memory $glibc:main_arena)
+      (awhen (get-glibc-main-arena-address memory)
+        (make-memory-ref memory it
+                         (lookup-type-in-context memory $glibc:malloc_state)))))
+
 (defun enumerate-glibc-malloc-arenas (memory)
-  (let ((main-arena (get-memory-global memory $glibc:main_arena)))
+  (let ((main-arena (get-glibc-main-arena memory)))
     (values main-arena
             (loop for arena = $main-arena.next then $arena.next
                until (or (null arena)
