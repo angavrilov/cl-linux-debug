@@ -111,8 +111,6 @@
                              :text "An unhandled condition has occured:"
                              :buttons :none))
          (carea (dialog-content-area dlg))
-         (cond-txt (with-output-to-string (stream)
-                     (ignore-errors (format stream "~A" condition))))
          (cond-scroll (make-instance 'scrolled-window
                                 :hscrollbar-policy :never
                                 :vscrollbar-policy :automatic))
@@ -121,7 +119,7 @@
                                         :editable nil
                                         :buffer cond-text-buffer
                                         :wrap-mode :word-char
-                                        :height-request 50))
+                                        :height-request 100))
          (restart-scroll (make-instance 'scrolled-window
                                         :hscrollbar-policy :never
                                         :vscrollbar-policy :automatic))
@@ -131,7 +129,7 @@
                                        '("gchararray" "gchararray" "gchararray")))
          (selection (tree-view-selection restart-list-view)))
     ;; Condition text
-    (text-buffer-insert cond-text-buffer cond-txt)
+    (text-buffer-insert cond-text-buffer condition)
     (container-add cond-scroll cond-text-view)
     (box-pack-start carea cond-scroll)
     ;; Restart list
@@ -207,11 +205,19 @@
         (symbol-function swank-hook-sym))))
 
 (defun gui-restart-handler (condition hook)
-  (let ((swank-hook (get-swank-hook)))
+  (let ((swank-hook (get-swank-hook))
+        (frame (or sb-debug:*stack-top-hint*
+                   (sb-di:frame-down (sb-di:top-frame)))))
     (let ((*debugger-hook* swank-hook))
-      (let ((restarts (loop for res in (compute-restarts)
+      (let ((cond-txt (with-output-to-string (stream)
+                        (ignore-errors (format stream "~S: ~A" (type-of condition) condition))
+                        (format stream "~%~%Backtrace:~%")
+                        (let ((sb-debug::*in-the-debugger* t)
+                              (sb-debug::*current-frame* frame))
+                          (sb-debug:backtrace 100 stream))))
+            (restarts (loop for res in (compute-restarts)
                          collect (cons res (ignore-errors (format nil "~A" res))))))
-        (funcall (call-restart-dialog condition restarts))))
+        (funcall (call-restart-dialog cond-txt restarts))))
     (when swank-hook
       (funcall swank-hook condition hook))))
 
