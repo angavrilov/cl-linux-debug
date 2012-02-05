@@ -142,13 +142,22 @@
                                                        (make-instance 'padding :size (length-of node)))
                         :title (format nil "Raw data at ~X - ~A"
                                        (start-address-of node) (col-name-of node)))))
+           (list "Browse relative expression..."
+                 (lambda () (awhen (run-query-dialog "Enter the dereference expression:")
+                         (with-simple-restart (continue "Cancel evaluating the expression")
+                           (let* ((helper (compile-helper it))
+                                  (result (call-helper helper (ref-value-of node) (ref-of node)
+                                                       :context-ref (ref-of node))))
+                             (browse-object-in-new-window
+                              memory result
+                              :title (format nil "Values of ~A at ~A" it (col-name-of node))))))))
            (list "Copy address to clipboard"
                  (lambda () (copy-to-clipboard (tree-view-of (view-of node))
                                           (format-hex-offset (start-address-of node) :prefix ""))))
            (list "Rebuild subtree"
                  (lambda () (rebuild-subtree node))))
      (when (typep (memory-object-ref-type (ref-of node)) 'unit-item)
-       (list (list "Set value"
+       (list (list "Set value..."
                    (lambda () (awhen (run-query-dialog "Enter the new value:")
                            (in-another-thread ((widget-of (view-of node)))
                              (with-simple-restart (continue "Cancel setting the value")

@@ -159,7 +159,7 @@
               (condition condition)
               (string (make-condition 'simple-error
                                       :format-control condition :format-arguments args))
-              (symbol (apply make-condition condition args))))))
+              (symbol (apply #'make-condition condition args))))))
 
 (def-debug-task yield-task ()
   (let/cc continuation
