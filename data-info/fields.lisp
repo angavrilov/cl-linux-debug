@@ -226,7 +226,7 @@
                (next)
                (setf namespace last-name
                      last-name (or (read-name) (fail)))))
-            ((char= char #\.)
+            ((or (char= char #\.) (char= char #\[))
              (setf last-name (register-$-var dollars)
                    dollars nil))
             ((char= char #\()

@@ -179,6 +179,9 @@
 
 (defparameter *safe-dereference* nil)
 
+(defmacro with-safe-deref (&body code)
+  `(let ((*safe-dereference* t)) ,@code))
+
 ;;
 ;; Basic dereferencing
 ;;
