@@ -33,6 +33,7 @@
            #:main-image-of #:all-images-of #:sections-of
            #:find-region-by-address #:find-regions-by-name
            #:symbol-name-of
+           #:md5-hash-of #:binary-timestamp-of
            #:make-chunk-table #:lookup-chunk
            #:index-chunks/uint32 #:lookup-indexed-chunk/uint32
            #:make-binsearch-uint32-vec

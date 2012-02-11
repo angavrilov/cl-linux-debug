@@ -10,6 +10,9 @@
    (strong-dep-table (make-hash-table) :accessor t)
    (vtable-class-cache (make-hash-table :test #'equal) :accessor t)
    (known-classes nil :accessor t)
+   (last-symtables-version 0 :accessor t)
+   (global-address-table (make-hash-table :test #'equal) :reader t)
+   (executable-hashes nil :accessor t)
    (data-definition-files nil :accessor t)
    (os-type $linux :accessor t)))
 
@@ -206,11 +209,27 @@
             (setf (gethash name hash) def)
             (format t "Would update ~A~%" (get-$-field-name name)))))
 
+(defun rebuild-addr-table (ctx table symtables hashes)
+  (clrhash table)
+  (dolist (entry symtables)
+    (let ((symtab (cdr entry)))
+      (awhen (aand (equal (os-type-of ctx) (os-type-of symtab))
+                   (loop for ct in (constraints-of symtab)
+                      when (assoc-value hashes (value-of ct) :test #'equal)
+                      return it))
+        (dolist (element (elements-of symtab))
+          (etypecase element
+            (global-address
+             (when (and (name-of element) (value-of element))
+               (setf (gethash (name-of element) table)
+                     (+ (value-of element) it))))))))))
+
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
     (reload-data-definitions context)
     (when (or (< (last-types-version-of context) *known-types-version*)
-              (< (last-globals-version-of context) *known-globals-version*))
+              (< (last-globals-version-of context) *known-globals-version*)
+              (< (last-symtables-version-of context) *known-symtables-version*))
       (call-next-method)
       t))
   (:method ((context type-context))
@@ -243,6 +262,11 @@
                 (setf changed? t)
                 (lookup-global-in-context context name)))
         (setf (last-globals-version-of context) *known-globals-version*))
+      ;; Update symbols
+      (when (< (last-symtables-version-of context) *known-symtables-version*)
+        (rebuild-addr-table context (global-address-table-of context)
+                            *known-symtables* (executable-hashes-of context))
+        (setf (last-symtables-version-of context) *known-symtables-version*))
       ;; Finalize
       (clrhash (vtable-class-cache-of context)))))
 

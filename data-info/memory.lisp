@@ -196,6 +196,7 @@
     (let* ((type (lookup-global-in-context memory name)))
       (when type
         (awhen (or (offset-of type)
+                   (gethash name (global-address-table-of memory))
                    (let* ((symbols (find-regions-by-name
                                     (executable-of memory)
                                     (get-$-field-name name :no-namespace? t)))
@@ -203,6 +204,6 @@
                                      (lambda (x) (typep (origin-of x) 'executable-region-object))
                                      symbols)))
                      (when addr-sym (start-address-of addr-sym))))
-          (make-memory-ref memory it type
+          (make-memory-ref memory it (effective-contained-item-of type)
                            :parent :globals :key name))))))
 

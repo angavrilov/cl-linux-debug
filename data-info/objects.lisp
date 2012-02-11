@@ -23,8 +23,18 @@
    (is-code? nil :accessor t)
    (global nil :accessor t)))
 
+(defun get-executable-hashes (executable)
+  (loop for image in (all-images-of executable)
+     for md5 = (md5-hash-of image)
+     and ts = (binary-timestamp-of image)
+     and reloc = (relocation-offset-of image)
+     collect (cons (string-downcase (format nil "~{~2,'0X~}" (coerce md5 'list))) reloc)
+     when ts collect (cons ts reloc)))
+
 (defmethod initialize-instance :after ((mirror object-memory-mirror) &key)
   (awhen (process-of mirror)
+    (setf (executable-hashes-of mirror)
+          (get-executable-hashes (executable-of mirror)))
     (when (typep (origin-of (main-image-of (executable-of it)))
                  'pe-executable-image)
       (setf (os-type-of mirror) $windows))))

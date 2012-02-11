@@ -25,7 +25,7 @@
                 #:format-hex-offset #:parse-hex-offset)
   (:export #:copy-data-definition #:name-with-namespace
            #:auto-code-helpers
-           #:name #:value ; to avoid conflict
+           #:name #:value #:os-type #:os-type-of ; to avoid conflict
            #:public-type-name-of
            ))
 
@@ -49,6 +49,7 @@
   (:export *known-builtin-types*
            *known-types*
            *known-globals*
+           *known-symtables*
            #:align-up
            #:get-$-field-name
            #:type-field-sequence

@@ -12,6 +12,9 @@
 (defvar *known-globals* nil)
 (defvar *known-globals-version* 0)
 
+(defvar *known-symtables* nil)
+(defvar *known-symtables-version* 0)
+
 (defparameter *type-context* nil)
 
 (defun align-up (offset alignment)
@@ -287,7 +290,9 @@
                 (t
                  (make-instance 'padding :syntax-parent obj :default-size 4)))))
   (:method ((obj container-item))
-    nil))
+    nil)
+  (:method :after ((obj global-object))
+    (setf (name-of (effective-contained-item-of obj)) (name-of obj))))
 
 (defgeneric special-code-helpers (obj)
   (:method-combination append)
@@ -356,5 +361,9 @@
     (awhen (global-objects-of defs)
       (dolist (type it)
         (add-if-changed '*known-globals* '*known-globals-version*
-                        (with-namespace (name-of type)) type))))
+                        (with-namespace (name-of type)) type)))
+    (awhen (symbol-tables-of defs)
+      (dolist (type it)
+        (add-if-changed '*known-symtables* '*known-symtables-version*
+                        (name-of type) type))))
   (values `(read-return-value ,defs) defs))

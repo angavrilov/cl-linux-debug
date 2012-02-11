@@ -37,6 +37,7 @@
   (let* ((elf (read-elf path))
          (exec (make-instance 'elf-executable-image
                               :path path
+                              :md5-hash (sb-md5:md5sum-file path)
                               :elf-data elf
                               :entry-address (elf::entry (header elf))
                               :shared-lib? (eq (elf:type (header elf))

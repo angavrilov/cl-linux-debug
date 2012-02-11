@@ -155,6 +155,8 @@
            (exec
             (make-instance 'pe-executable-image
                            :path path
+                           :md5-hash (sb-md5:md5sum-file path)
+                           :binary-timestamp (time-date-stamp win-hdr)
                            :dos-header dos-hdr :win-header win-hdr
                            :aux-header aux-hdr
                            :entry-address (+ base (entry-pt-addr aux-hdr))

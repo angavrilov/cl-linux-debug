@@ -86,6 +86,8 @@
 
 (def (class* e) executable-image (section-set)
   ((path :reader t)
+   (md5-hash :reader t)
+   (binary-timestamp :reader t :initform nil)
    (entry-address :reader t)
    (shared-lib? :reader t)
    (region-map (make-chunk-table) :reader t)
@@ -178,6 +180,12 @@
 
 (def (class* e) loaded-image (section-set loaded-object)
   ((executable :reader t)))
+
+(defmethod md5-hash-of ((image loaded-object))
+  (md5-hash-of (origin-of image)))
+
+(defmethod binary-timestamp-of ((image loaded-object))
+  (binary-timestamp-of (origin-of image)))
 
 (defmethod entry-address-of ((image loaded-image))
   (+ (entry-address-of (origin-of image))

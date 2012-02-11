@@ -431,24 +431,61 @@
   ()
   (:documentation "A global enum type definition."))
 
-(def (class* eas) global-object (compound)
+(def (class* eas) global-object (data-field container-item concrete-item)
   ((effective-xml-form nil :accessor t))
   (:documentation "A global variable definition."))
 
 (defmethod read-return-value :after ((type global-object))
   (assert (name-of type)))
 
+(def (class* eas) symbol-table (abstract-item concrete-item)
+  ((name nil :accessor t :type string)
+   (os-type nil :accessor t :type $-keyword)
+   (constraints nil :accessor t)
+   (elements nil :accessor t)
+   (effective-xml-form nil :accessor t))
+  (:documentation "A custom symbol table definition."))
+
+(defmethod read-return-value :after ((type symbol-table))
+  (assert (name-of type)))
+
+(def (class* eas) binary-timestamp (xml-serializer)
+  ((value nil :accessor t :type address)))
+
+(def (class* eas) md5-hash (xml-serializer)
+  ((value nil :accessor t :type string)))
+
+(defmethod add-subobject ((obj symbol-table) (subobj binary-timestamp))
+  (nconcf (constraints-of obj) (list subobj)))
+(defmethod add-subobject ((obj symbol-table) (subobj md5-hash))
+  (nconcf (constraints-of obj) (list subobj)))
+
+(def (class* eas) global-address (xml-serializer)
+  ((name nil :accessor t :type $-keyword-namespace)
+   (value nil :accessor t :type address)))
+
+(defmethod add-subobject ((obj symbol-table) (subobj global-address))
+  (nconcf (elements-of obj) (list subobj)))
+
 (def (class* eas) data-definition (xml-serializer)
   ((namespace nil :accessor t :type $-keyword)
    (global-type-definitions nil :accessor t)
-   (global-objects nil :accessor t))
+   (global-objects nil :accessor t)
+   (symbol-tables nil :accessor t))
   (:documentation "A wrapper for a group of related definitions."))
+
+(defmethod add-subobject ((obj data-definition) (subobj !--))
+  ;; Ignore comments
+  (values))
 
 (defmethod add-subobject ((obj data-definition) (subobj global-type-definition))
   (nconcf (global-type-definitions-of obj) (list subobj)))
 
 (defmethod add-subobject ((obj data-definition) (subobj global-object))
   (nconcf (global-objects-of obj) (list subobj)))
+
+(defmethod add-subobject ((obj data-definition) (subobj symbol-table))
+  (nconcf (symbol-tables-of obj) (list subobj)))
 
 ;; Methods
 

@@ -2,6 +2,7 @@
 (require :sb-bsd-sockets)
 (require :sb-introspect)
 (require :sb-cltl2)
+(require :sb-md5)
 
 ;; ASDF libs
 (let* ((dist-dir (merge-pathnames #P"quicklisp/dists/quicklisp/software/"

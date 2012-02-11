@@ -210,8 +210,6 @@
     (memory-object-ref-parent-ref ref))
   (:method :around ((type global-type-definition) ref (key (eql $_global)))
     ref)
-  (:method :around ((type global-object) ref (key (eql $_global)))
-    ref)
   (:method :around (type ref (key (eql $_global)))
     (let ((parent (memory-object-ref-parent-ref ref)))
       (if (typep parent 'memory-object-ref)

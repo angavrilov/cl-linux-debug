@@ -271,7 +271,7 @@
                      nil))
                  (walk-ref (item)
                    (call-pointer-walker memory memory-cb (car item) (cdr item) #'queue-ref)))
-          (dolist (ref ($ memory '*))
+          (dolist (ref (@ memory '*))
             (queue-ref (memory-object-ref-address ref)
                        (memory-object-ref-tag ref)))
           (loop while queue-head
