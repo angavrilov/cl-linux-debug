@@ -1,9 +1,3 @@
-;; For SLIME
-(require :sb-bsd-sockets)
-(require :sb-introspect)
-(require :sb-cltl2)
-(require :sb-md5)
-
 ;; ASDF libs
 (let* ((dist-dir (merge-pathnames #P"quicklisp/dists/quicklisp/software/"
                                   (user-homedir-pathname)))
@@ -32,7 +26,11 @@
                  (asdf::%set-system-source-file nil system)
                  (eval
                   `(defmethod asdf::do-traverse :around (op (system (eql ,system)) collect) nil))))))
-    (load-systems :trivial-features
+    (load-systems :sb-bsd-sockets
+                  :sb-introspect
+                  :sb-cltl2
+                  :sb-md5
+                  :trivial-features
                   :trivial-garbage
                   :alexandria
                   :anaphora

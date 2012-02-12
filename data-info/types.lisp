@@ -143,6 +143,7 @@
 
 (def (class* eas) data-field (data-item abstract-field)
   ((offset nil :accessor t :type offset)
+   (init-value nil :accessor t :type string)
    (effective-offset :accessor t))
   (:documentation "An abstract type that can be inside a compound structure."))
 
@@ -213,8 +214,7 @@
 (def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
   ((refers-to nil :accessor t :type string)
    (ref-target nil :accessor t :type $-keyword-namespace)
-   (aux-value nil :accessor t :type string)
-   (init-value nil :accessor t :type string))
+   (aux-value nil :accessor t :type string))
   (:documentation "An abstract type for a primitive field."))
 
 (defmethod auto-code-helpers append ((item primitive-field))

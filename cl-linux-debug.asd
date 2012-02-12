@@ -7,7 +7,8 @@
 
 (defsystem :cl-linux-debug
   :author ("Alexander Gavrilov <angavrilov@gmail.com>")
-  :depends-on (:anaphora
+  :depends-on (:sb-md5
+               :anaphora
                :metabang-bind
                :cffi
                :hu.dwim.def

@@ -1,9 +1,5 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
-(load-system :hu.dwim.asdf)
-
-(in-package :hu.dwim.asdf)
-
 (defsystem :cl-linux-debug.gui
   :author ("Alexander Gavrilov <angavrilov@gmail.com>")
   :depends-on (:cl-linux-debug

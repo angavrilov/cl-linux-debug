@@ -1,6 +1,9 @@
 ;;; -*- mode: Lisp; indent-tabs-mode: nil; -*-
 
+#-quicklisp
 (load-system :hu.dwim.asdf)
+#+quicklisp
+(ql:quickload :hu.dwim.asdf)
 
 (in-package :hu.dwim.asdf)
 
