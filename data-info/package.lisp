@@ -80,6 +80,7 @@
            #:check-refresh-context
            #:refresh-memory-mirror
            #:refresh-memory-mirror-ranges
+           #:enumerate-known-objects?
            #:get-memory-bytes
            #:get-memory-integer
            #:get-memory-global

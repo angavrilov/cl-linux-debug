@@ -6,6 +6,7 @@
   ((malloc-chunks (make-malloc-chunk-map) :reader t)
    (malloc-chunk-reftbl nil :accessor t)
    (malloc-chunk-types nil :accessor t)
+   (enumerate-known-objects? t :accessor t)
    (find-by-id-cache (make-hash-table :test #'equal) :reader t)
    (vtable-names (make-hash-table :test #'eql) :reader t)
    (globals nil :accessor t)
@@ -53,7 +54,9 @@
 (defun invalidate-object-mirror-caches (mirror)
   (precompute-globals mirror)
   (setf (malloc-chunk-types-of mirror)
-        (collect-known-objects mirror (malloc-chunks-of mirror)))
+        (if (enumerate-known-objects? mirror)
+            (collect-known-objects mirror (malloc-chunks-of mirror))
+            nil))
   (clrhash (vtable-names-of mirror))
   (clrhash (find-by-id-cache-of mirror)))
 
