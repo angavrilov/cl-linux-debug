@@ -22,6 +22,8 @@
   ()
   (:documentation "A separate-tag XML item comment."))
 
+(defmethod print-slots ((obj comment)) nil)
+
 (def (class* eas) concrete-item ()
   ()
   (:documentation "A mixin for concrete (instantiatable) types."))
@@ -83,7 +85,7 @@
                   (name (symbol-name sym)))
                 (or (starts-with-subseq "EFFECTIVE-" name)
                     (starts-with-subseq "SYNTAX-" name)
-                    (member sym '(is-created-by-xml-reader file copy-origin default-size))))
+                    (member sym '(xml::is-created-by-xml-reader file copy-origin default-size))))
               (class-slots (class-of obj)))
    #'< :key (lambda (x &aux (name (closer-mop:slot-definition-name x)))
               (or (position name '(name type-name is-union count offset size alignment))

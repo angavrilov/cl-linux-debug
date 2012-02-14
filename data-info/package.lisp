@@ -52,6 +52,7 @@
            *known-symtables*
            #:align-up
            #:get-$-field-name
+           #:get-$-field
            #:type-field-sequence
            #:lookup-type-in-context
            #:lookup-global-in-context

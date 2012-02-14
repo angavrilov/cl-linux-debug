@@ -285,19 +285,28 @@
                 nil)
               (values (bea-instruction-to-lisp disasm-obj offset (or real-eip offset) rv) rv)))))))
 
-(def (function e) disassemble-all (byte-vector &key (start 0) end (base-address 0) option-flags arch errorp)
+(def (function e) disassemble-enum (byte-vector callback &key (start 0) end (base-address 0) option-flags arch errorp)
   (let ((real-end (or end (length byte-vector)))
         (flags (if (integerp option-flags) option-flags
                    (apply #'disassemble-options option-flags)))
         (offset start)
         (bias (- base-address start)))
     (loop while (< offset real-end)
-       collect (multiple-value-bind (op delta)
-                   (x86-disassemble byte-vector offset
-                                    :real-eip (+ bias offset) :end real-end :arch arch
-                                    :errorp errorp
-                                    :option-flags flags)
-                 (if op
-                     (incf offset delta)
-                     (setf offset real-end))
-                 op))))
+       do (multiple-value-bind (op delta)
+              (x86-disassemble byte-vector offset
+                               :real-eip (+ bias offset) :end real-end :arch arch
+                               :errorp errorp
+                               :option-flags flags)
+            (if op
+                (incf offset delta)
+                (setf offset real-end))
+            (funcall callback op)))))
+
+(def (function e) disassemble-all (byte-vector &rest flags)
+  (let ((rv nil))
+    (apply #'disassemble-enum byte-vector (lambda (x) (push x rv)) flags)
+    (nreverse rv)))
+
+(def (macro e) disassemble-iter ((opcode-var byte-vector &rest flags) &body code)
+  `(block nil
+     (disassemble-enum ,byte-vector (lambda (,opcode-var) ,@code) ,@flags)))

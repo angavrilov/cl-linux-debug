@@ -292,7 +292,10 @@
   (:method ((obj container-item))
     nil)
   (:method :after ((obj global-object))
-    (setf (name-of (effective-contained-item-of obj)) (name-of obj))))
+    (setf (name-of (effective-contained-item-of obj)) (name-of obj))
+    (when (and (typep (effective-contained-item-of obj) 'padding)
+               (size-of obj))
+      (setf (size-of (effective-contained-item-of obj)) (size-of obj)))))
 
 (defgeneric special-code-helpers (obj)
   (:method-combination append)
