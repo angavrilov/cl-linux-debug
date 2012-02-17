@@ -82,7 +82,7 @@
      for prev-size = '#:none then size
      for size-word = (get-memory-integer memory (+ current 4) 4)
      for size = (logand (or size-word 0) (lognot 7))
-     do (if (or (null size-word) (= size 0))
+     do (if (or (null size-word) (= size 0) (>= size +max-glibc-heap-size+))
             (return nil)
             (case (logand size-word 7)
               (0 (when (not (eql (get-memory-integer memory current 4) prev-size))
@@ -227,9 +227,10 @@
   (multiple-value-bind (main-arena aux-arenas)
       (enumerate-glibc-malloc-arenas memory)
     (when main-arena
-      (list* (list (find-main-glibc-heap memory)
-                   (+ $main-arena.top +chunk-header-size+)
-                   #'enumerate-glibc-malloc-chunks)
-             (loop for arena in aux-arenas
-                for heaps = (find-aux-glibc-heap-chain memory arena)
-                append (mapcar #'find-aux-glibc-heap-range heaps))))))
+      (append (awhen (find-main-glibc-heap memory)
+                (list (list it
+                            (+ $main-arena.top +chunk-header-size+)
+                            #'enumerate-glibc-malloc-chunks)))
+              (loop for arena in aux-arenas
+                 for heaps = (find-aux-glibc-heap-chain memory arena)
+                 append (mapcar #'find-aux-glibc-heap-range heaps))))))
