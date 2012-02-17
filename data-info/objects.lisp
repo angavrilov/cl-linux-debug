@@ -47,7 +47,10 @@
      for ref = (get-memory-global mirror (car global))
      when (and ref (start-address-of ref))
      collect ref into gs
-     and do (trees:insert ref gmap)
+     and do (let ((old-obj (trees:find (start-address-of ref) gmap)))
+              (when (and old-obj (null (offset-of (cdr global))))
+                (trees:delete (start-address-of ref) gmap))
+              (trees:insert ref gmap))
      finally (setf (globals-of mirror) (sort gs #'< :key #'start-address-of)
                    (global-map-of mirror) gmap)))
 
