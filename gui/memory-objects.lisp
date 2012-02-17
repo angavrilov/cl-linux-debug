@@ -266,7 +266,7 @@
 (defmethod on-lazy-expand-node ((node padding-object-node))
   (let ((items (guess-types-by-data (memory-of (view-of node)) (ref-of node))))
     (setf (guessed-items-of node) items)
-    (add-array-contents node items (master-node-of node))))
+    (add-array-contents node items (or (master-node-of node) node))))
 
 (def (class* e) bit-padding-object-node (padding-object-node)
   ())
