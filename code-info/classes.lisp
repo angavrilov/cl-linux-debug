@@ -12,22 +12,6 @@
   ((start-offset 0 :reader t)
    (data-bytes :reader t)))
 
-(defun make-chunk-table ()
-  (make-binary-tree :red-black #'<
-                    :key #'start-address-of
-                    :test #'=))
-
-(defun lookup-chunk (table address)
-  (awhen (lower-bound address table)
-    (let ((offset (- address (start-address-of it))))
-      (values (if (or (null (length-of it))
-                      (< offset (length-of it)))
-                  it nil)
-              offset))))
-
-(defun lookup-next-chunk (table address)
-  (upper-bound (1+ address) table))
-
 (macrolet ((frob (elt-type)
              `(progn
                 (defun ,(symbolicate '#:index-chunks/ elt-type) (chunk)

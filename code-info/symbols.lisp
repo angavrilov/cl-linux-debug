@@ -71,6 +71,9 @@
       (when (typep frame 'dwarf-unwind-fde)
         (register-eh-frame image frame)))))
 
+(defun region-unwind-table (region)
+  (unpack-unwind-table (unwind-info-of region)))
+
 (defun get-image-relocations (image)
   (flet ((describe-rel (reloc syms)
            (multiple-value-bind (shift mask size)

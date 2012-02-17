@@ -43,4 +43,5 @@
            #:binsearch-generic #:binsearch-uint32-< #:binsearch-uint32-<=
            #:make-byte-vector
            #:disassemble-function
+           #:region-unwind-table #:unwind-state-cfa
            ))

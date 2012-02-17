@@ -64,6 +64,27 @@
       (dpb value (byte bits 0) -1)
       value))
 
+;; Abstract chunk table
+
+(defgeneric start-address-of (object))
+(defgeneric length-of (object))
+
+(defun make-chunk-table ()
+  (make-binary-tree :red-black #'<
+                    :key #'start-address-of
+                    :test #'=))
+
+(defun lookup-chunk (table address)
+  (awhen (lower-bound address table)
+    (let ((offset (- address (start-address-of it))))
+      (values (if (or (null (length-of it))
+                      (< offset (length-of it)))
+                  it nil)
+              offset))))
+
+(defun lookup-next-chunk (table address)
+  (upper-bound (1+ address) table))
+
 ;; Binary data parsing
 
 (defun make-byte-vector (size)

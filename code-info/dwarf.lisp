@@ -202,3 +202,39 @@
             (when record
               (push record records))))
     (nreverse records)))
+
+(defstruct unwind-state
+  (address 0)
+  (cfa 4))
+
+(defmethod start-address-of ((obj unwind-state)) (unwind-state-address obj))
+(defmethod length-of ((obj unwind-state)) nil)
+
+(defun unpack-unwind-table (records)
+  (let ((table (make-chunk-table)))
+    (loop for (base . entry)
+       in (sort records #'< :key #'car)
+       do (loop
+             with pos = (dwarf-unwind-fde-start-addr entry)
+             and cur-addr = -1
+             and cur-rec = (make-unwind-state)
+             and save-stack = nil
+             for op in (dwarf-unwind-fde-opcodes entry)
+             do (flet ((materialize ()
+                         (unless (= cur-addr pos)
+                           (setf cur-addr pos
+                                 cur-rec (copy-unwind-state cur-rec))
+                           (setf (unwind-state-address cur-rec) pos)
+                           (trees:insert cur-rec table))))
+                  (case (first op)
+                    (:advance-loc
+                     (incf pos (second op)))
+                    (:def-cfa-offset
+                     (materialize)
+                     (setf (unwind-state-cfa cur-rec) (second op)))
+                    (:remember-state
+                     (push (copy-unwind-state cur-rec) save-stack))
+                    (:restore-state
+                     (setf cur-rec (pop save-stack))
+                     (materialize))))))
+    table))
