@@ -141,8 +141,10 @@
   `(getf (cdr ,tag) ,attr ,@(if d-p (list default))))
 
 (defgeneric type-field-sequence (type)
+  (:method ((obj null)) nil)
   (:method ((obj abstract-field))
-    (let* ((parent (effective-parent-of obj))
+    (let* ((parent (if (slot-boundp obj 'effective-parent)
+                       (effective-parent-of obj)))
            (pseq (type-field-sequence parent)))
       (if (and (typep parent 'container-item)
                (not (typep parent 'global-object))

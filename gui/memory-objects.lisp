@@ -2,6 +2,28 @@
 
 (in-package :cl-linux-debug.gui)
 
+;; State colors
+
+(defparameter *state-color-table*
+  '((:unchecked . "magenta")
+    (:aligned . "blue")
+    (:verified . "#00A000")))
+
+(defgeneric state-color-of (obj)
+  (:method ((obj null))
+    nil)
+  (:method ((obj memory-object-ref))
+    (state-color-of (memory-object-ref-type obj)))
+  (:method ((obj abstract-item))
+    (awhen (type-annotation obj :status)
+      (or (assoc-value *state-color-table* it)
+          "red")))
+  (:method ((obj container-item))
+    (or (call-next-method)
+        (let ((citem (effective-contained-item-of obj)))
+          (unless (typep citem 'global-type-proxy-base)
+            (state-color-of citem))))))
+
 ;; Core widget and node classes
 
 (def (class* e) memory-object-tree (object-tree-view)
@@ -9,10 +31,10 @@
   (:default-initargs
       :column-types
       '("gchararray" "gchararray" "gchararray" "gchararray" "gchararray"
-        "gchararray" "gchararray" "gint")
+        "gchararray" "gchararray" "gint" "gchararray")
       :column-accessors
       '(col-offset-of col-name-of col-type-of col-value-of col-info-of
-        col-comment-of col-row-color-of col-name-weight-of)))
+        col-comment-of col-row-color-of col-name-weight-of col-type-color-of)))
 
 (def (class* e) memory-object-node (object-node address-chunk)
   ((master-node nil :reader t))
@@ -37,6 +59,13 @@
 
 (defgeneric col-row-color-of (node)
   (:method ((node memory-object-node)) "black"))
+
+(defgeneric col-type-color-of (node)
+  (:method ((node memory-object-node))
+    nil)
+  (:method :around ((node memory-object-node))
+    (or (call-next-method)
+        (col-row-color-of node))))
 
 (defgeneric col-name-weight-of (node)
   (:method ((node memory-object-node)) 400))
@@ -73,6 +102,9 @@
   (if (ref-prev-value-of node) "red"
       (call-next-method)))
 
+(defmethod col-type-color-of ((node real-memory-object-node))
+  (state-color-of (ref-of node)))
+
 (defgeneric evaluate-node-ref (node)
   (:method ((node real-memory-object-node))
     (let* ((ref (ref-of node))
@@ -94,7 +126,7 @@
       (setf (ref-prev-value-of node) nil)
       ;; A hack to make booleans work
       (when (null (ref-prev-value-of node))
-        (setf (ref-prev-value-of node) 'nil)))
+        (setf (ref-prev-value-of node) "NIL")))
   (refresh-column-values node))
 
 (defmethod initialize-instance :after ((node real-memory-object-node) &key)

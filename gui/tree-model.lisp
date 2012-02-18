@@ -179,6 +179,11 @@
     (declare (ignore tv))
     (funcall callback tree (child-at-index (tree-root-of tree) (tree-path-indices path)) column)))
 
+(defun tree-selected-nodes (tree)
+  (mapcar (lambda (x) (child-at-index (tree-root-of tree)
+                                 (tree-path-indices x)))
+          (tree-selection-selected-rows (tree-selection-of tree))))
+
 (defmethod initialize-instance :after ((tree object-tree-view) &key
                                        column-types column-accessors (root-class 'object-node))
   (let* ((types (or column-types (mapcar (constantly "gchararray") column-accessors)))
@@ -200,10 +205,10 @@
     (connect-signal view "row-expanded" (node-expand-callback tree #'on-node-expanded))
     (connect-signal view "row-collapsed" (node-expand-callback tree #'on-node-collapsed))
     (connect-signal selection "changed"
-                    (lambda (s) (let ((nodes (mapcar (lambda (x) (child-at-index (tree-root-of tree)
-                                                                       (tree-path-indices x)))
-                                                (tree-selection-selected-rows s))))
-                             (on-tree-selection-changed tree nodes))))
+                    (lambda (s)
+                      (declare (ignore s))
+                      (let ((nodes (tree-selected-nodes tree)))
+                        (on-tree-selection-changed tree nodes))))
     (connect-signal view "button-press-event"
                     (lambda (view event)
                       (let* ((x (round (event-button-x event)))

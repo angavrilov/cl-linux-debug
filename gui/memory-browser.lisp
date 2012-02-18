@@ -113,6 +113,25 @@
         (check-refresh-context (memory-of view))))
   (populate-memory-object-tree view (cur-ref-of view)))
 
+(defvar *last-annotation* nil)
+
+(defun set-state-annotation (node mode)
+  (setf *last-annotation* mode)
+  (setf (type-annotation (memory-object-ref-type (ref-of node)) :status) mode)
+  (refresh-column-values node))
+
+(defun push-state-annotation (node)
+  (let* ((type (memory-object-ref-type (ref-of node)))
+         (status (type-annotation type :status)))
+    (typecase type
+      (container-item
+       (setf (type-annotation (effective-contained-item-of type) :status) status))
+      (virtual-compound-item
+       (dolist (child (effective-fields-of type))
+         (when (name-of child)
+           (setf (type-annotation child :status) status)))))
+    (rebuild-subtree node)))
+
 ;; Callbacks
 
 (defgeneric get-node-menu-items (node)
@@ -121,6 +140,8 @@
 
 (defun copy-to-clipboard (widget text)
   (clipboard-set-text (widget-clipboard widget *selection-clipboard*) text))
+
+(defvar *last-relative-expression* nil)
 
 (defmethod get-node-menu-items append ((node real-memory-object-node))
   (let ((memory (memory-of (view-of node))))
@@ -143,8 +164,10 @@
                         :title (format nil "Raw data at ~X - ~A"
                                        (start-address-of node) (col-name-of node)))))
            (list "Browse relative expression..."
-                 (lambda () (awhen (run-query-dialog "Enter the dereference expression:")
+                 (lambda () (awhen (run-query-dialog "Enter the dereference expression:"
+                                                :init-text *last-relative-expression*)
                          (with-simple-restart (continue "Cancel evaluating the expression")
+                           (setf *last-relative-expression* it)
                            (let* ((helper (compile-helper it))
                                   (result (call-helper helper (ref-value-of node) (ref-of node)
                                                        :context-ref (ref-of node))))
@@ -155,7 +178,17 @@
                  (lambda () (copy-to-clipboard (tree-view-of (view-of node))
                                           (format-hex-offset (start-address-of node) :prefix ""))))
            (list "Rebuild subtree"
-                 (lambda () (rebuild-subtree node))))
+                 (lambda () (rebuild-subtree node)))
+           (list "Annotation"
+                 (append
+                  (list (list "Clear" (lambda () (set-state-annotation node nil))))
+                  (loop for mode in *state-color-table*
+                     collect (let ((mode mode))
+                               (list (format nil "Mark as ~A" (car mode))
+                                     (lambda () (set-state-annotation node (car mode))))))
+                  (list :separator
+                        (list "Push to children"
+                              (lambda () (push-state-annotation node)))))))
      (when (typep (memory-object-ref-type (ref-of node)) 'unit-item)
        (list (list "Set value..."
                    (lambda () (awhen (run-query-dialog "Enter the new value:")
@@ -210,16 +243,26 @@
   (awhen (and (eq (event-button-type event) :button-press)
               (eql (event-button-button event) 3)
               (get-node-menu-items node))
-    (let* ((menu (make-instance 'menu)))
-      (dolist (item-spec it)
-        (let ((item (make-instance 'menu-item :label (first item-spec)))
-              (callback (second item-spec)))
-          (connect-signal item "activate"
-                          (lambda (x) (declare (ignore x)) (funcall callback)))
-          (menu-shell-append menu item)))
-      (widget-show menu)
-      (menu-popup menu :button (event-button-button event)
-                  :activate-time (event-button-time event)))))
+    (labels ((make-menu (items)
+               (let* ((menu (make-instance 'menu)))
+                 (dolist (item-spec items)
+                   (cond ((eq item-spec :separator)
+                          (menu-shell-append menu (make-instance 'separator-menu-item)))
+                         (t
+                          (let ((item (make-instance 'menu-item :label (first item-spec)))
+                                (callback (second item-spec)))
+                            (etypecase callback
+                              (function
+                               (connect-signal item "activate"
+                                               (lambda (x) (declare (ignore x)) (funcall callback))))
+                              (list
+                               (setf (menu-item-submenu item) (make-menu callback))))
+                            (menu-shell-append menu item)))))
+                 menu)))
+      (let* ((menu (make-menu it)))
+        (widget-show menu)
+        (menu-popup menu :button (event-button-button event)
+                    :activate-time (event-button-time event))))))
 
 ;; Widget creation
 
@@ -241,20 +284,25 @@
                     (lambda (v ev)
                       (declare (ignore v))
                       (when (eq (event-key-type ev) :key-press)
-                        (format t "~S~%" (event-key-state ev))
+                        (format t "~S ~S~%" (event-key-state ev) (event-key-keyval ev))
                         (case (event-key-keyval ev)
-                          (65474
+                          (65474 ; F5
                            (cond ((member :control-mask (event-key-state ev))
                                   (rebuild-memory-object-tree tree :refresh t))
                                  ((member :shift-mask (event-key-state ev))
                                   (rebuild-memory-object-tree tree :refresh nil))
                                  (t
                                   (refresh-memory-object-tree tree))))
+                          (97 ; A
+                           (when (member :control-mask (event-key-state ev))
+                             (dolist (node (tree-selected-nodes tree))
+                               (when (typep node 'real-memory-object-node)
+                                 (set-state-annotation node *last-annotation*)))))
                           (otherwise
                            (format t "~A~%" (event-key-keyval ev)))))
                       nil))
     (print (widget-events v-box))
-    (flet ((add-column (id title min-width xalign expand? &key weight? expander?)
+    (flet ((add-column (id title min-width xalign expand? &key weight? expander? (color-col 6))
              (let ((column (make-instance 'tree-view-column :title title
                                           :min-width min-width
                                           :resizable t
@@ -263,7 +311,7 @@
                (setf (tree-view-column-sizing column) :fixed)
                (tree-view-column-pack-start column renderer)
                (tree-view-column-add-attribute column renderer "text" id)
-               (tree-view-column-add-attribute column renderer "foreground" 6)
+               (tree-view-column-add-attribute column renderer "foreground" color-col)
                (when weight?
                  (tree-view-column-add-attribute column renderer "weight" 7))
                (tree-view-append-column view column)
@@ -272,7 +320,7 @@
                column)))
       (add-column 0 "Address" 80 1.0 nil)
       (add-column 1 "Name" 150 0.0 t :weight? t :expander? t)
-      (add-column 2 "Type" 100 0.0 nil)
+      (add-column 2 "Type" 100 0.0 nil :color-col 8)
       (add-column 3 "Value" 100 0.0 nil)
       (add-column 4 "Info" 200 0.0 t))
     (with-slots (widget tree-view info-label) tree

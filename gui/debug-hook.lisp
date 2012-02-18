@@ -14,7 +14,7 @@
 
 ;;; Query dialog and streams
 
-(defun run-query-dialog (request &key no-text?)
+(defun run-query-dialog (request &key no-text? init-text)
   (let* ((dlg (make-instance 'message-dialog
                              :message-type (if no-text? :info :question)
                              :title "Query"
@@ -28,6 +28,8 @@
                       (lambda (v)
                       (declare (ignore v))
                       (dialog-response dlg :ok))))
+    (when init-text
+      (setf (entry-text entry) init-text))
     (setf (dialog-default-response dlg) :ok)
     (setf (gtk-window-keep-above dlg) t)
     (widget-show dlg)
