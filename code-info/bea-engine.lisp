@@ -310,3 +310,42 @@
 (def (macro e) disassemble-iter ((opcode-var byte-vector &rest flags) &body code)
   `(block nil
      (disassemble-enum ,byte-vector (lambda (,opcode-var) ,@code) ,@flags)))
+
+(def (function e) x86-argument-matches? (arg &key
+                                             (size nil size-p)
+                                             (access-write? nil write?-p)
+                                             (reg-id nil reg-id-p)
+                                             (high? nil high?-p)
+                                             (relative? nil relative?-p)
+                                             (base-reg nil base-reg-p)
+                                             (index-reg nil index-reg-p)
+                                             (scale nil scale-p)
+                                             (displacement nil displacement-p)
+                                             (segment-reg nil segment-reg-p))
+  (flet ((match (val pattern pred)
+           (or (not pred)
+               (typecase pattern
+                 (null (null val))
+                 (cons (member val pattern))
+                 (function (funcall pattern val))
+                 (t (eql val pattern))))))
+    (and (typep arg 'x86-argument)
+         (match (x86-argument-size arg) size size-p)
+         (match (x86-argument-access-write? arg) access-write? write?-p)
+         (cond ((or reg-id-p high?-p)
+                (and
+                 (typep arg 'x86-argument-register)
+                 (match (x86-argument-register-id arg) reg-id reg-id-p)
+                 (match (x86-argument-register-high? arg) high? high?-p)))
+               ((or relative?-p)
+                (and
+                 (typep arg 'x86-argument-constant)
+                 (match (x86-argument-constant-relative? arg) relative? relative?-p)))
+               ((or base-reg-p index-reg-p scale-p displacement-p segment-reg-p)
+                (and
+                 (typep arg 'x86-argument-memory)
+                 (match (x86-argument-memory-base-reg arg) base-reg base-reg-p)
+                 (match (x86-argument-memory-index-reg arg) index-reg index-reg-p)
+                 (match (x86-argument-memory-scale arg) scale scale-p)
+                 (match (x86-argument-memory-displacement arg) displacement displacement-p)
+                 (match (x86-argument-memory-segment-reg arg) segment-reg segment-reg-p)))))))
