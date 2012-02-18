@@ -138,14 +138,39 @@
 
 (defgeneric type-field-sequence (type)
   (:method ((obj abstract-field))
-    (aif (name-of obj) (list it)))
-  (:method ((obj data-field))
-    (nconc (call-next-method) (type-field-sequence (effective-parent-of obj))))
+    (let* ((parent (effective-parent-of obj))
+           (pseq (type-field-sequence parent)))
+      (if (and (typep parent 'container-item)
+               (not (typep parent 'global-object))
+               (eq obj (effective-contained-item-of parent)))
+          (list* '* pseq)
+          (nconc (cond ((name-of obj) (list (name-of obj)))
+                       ((and (typep obj 'data-field)
+                             (not (typep obj 'compound)))
+                        (list '@)))
+                 pseq))))
   (:method ((obj global-type-definition))
     (aif (type-name-of obj) (list it)
          (call-next-method)))
+  (:method ((obj global-object))
+    (list $global))
   (:method :around ((obj global-type-proxy-base))
     (type-field-sequence (effective-main-type-of obj))))
+
+(defun format-field-seq (type)
+  (format nil "~{~A~^.~}"
+          (mapcar (lambda (x)
+                    (case x
+                      ((* @) (symbol-name x))
+                      (otherwise (get-$-field-name x))))
+                  (nreverse (type-field-sequence type)))))
+
+(defgeneric effective-id-string-of (obj)
+  (:method ((obj abstract-item))
+    (if (slot-boundp obj 'effective-id-string)
+        (slot-value obj 'effective-id-string)
+        (setf (slot-value obj 'effective-id-string)
+              (format-field-seq obj)))))
 
 (defgeneric os-type-of (context))
 

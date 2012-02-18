@@ -32,7 +32,8 @@
   ((comment nil :accessor t)
    (copy-origin nil :accessor t)
    (effective-finalized? nil :accessor t)
-   (effective-tag :accessor t))
+   (effective-tag :accessor t)
+   (effective-id-string))
   (:documentation "An abstract base class for all type items."))
 
 

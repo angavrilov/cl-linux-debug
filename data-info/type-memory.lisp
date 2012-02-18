@@ -59,17 +59,13 @@
 (defgeneric adjust-mem-ref-type (type ref)
   (:method (type ref) ref))
 
-(defun format-field-seq (type)
-  (format nil "~{~A~^.~}"
-          (mapcar #'get-$-field-name (nreverse (type-field-sequence type)))))
-
 (defmethod print-object ((ref memory-object-ref) stream)
   (print-unreadable-object (ref stream :identity t)
     (let ((type (memory-object-ref-type ref)))
       (format stream "REF ~A @~X: ~A"
               (xml-tag-name-string (effective-main-type-of type))
               (memory-object-ref-address ref)
-              (ignore-errors (format-field-seq type))))))
+              (ignore-errors (effective-id-string-of type))))))
 
 (defgeneric lookup-type-in-context (context type-name)
   (:method :around (context type-name)

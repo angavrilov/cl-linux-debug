@@ -27,6 +27,7 @@
            #:auto-code-helpers
            #:name #:value #:os-type #:os-type-of ; to avoid conflict
            #:public-type-name-of
+           #:effective-id-string-of
            ))
 
 (pushnew (find-package :cl-linux-debug.data-defs)
