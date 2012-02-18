@@ -21,7 +21,7 @@
   (:method ((obj container-item))
     (or (call-next-method)
         (let ((citem (effective-contained-item-of obj)))
-          (unless (typep citem 'global-type-proxy-base)
+          (unless nil ; (typep citem 'global-type-proxy-base)
             (state-color-of citem))))))
 
 ;; Core widget and node classes
@@ -90,17 +90,20 @@
 
 ;; Real reference
 
+(defvar *no-value* '#:no-value)
+
 (def (class* e) real-memory-object-node (memory-object-node)
   ((ref :reader t)
    (ref-type nil :accessor t)
    (ref-value nil :accessor t)
-   (ref-prev-value nil :accessor t)
+   (ref-prev-value *no-value* :accessor t)
    (ref-info nil :accessor t)
    (ref-links nil :accessor t)))
 
 (defmethod col-row-color-of ((node real-memory-object-node))
-  (if (ref-prev-value-of node) "red"
-      (call-next-method)))
+  (if (eq (ref-prev-value-of node) *no-value*)
+      (call-next-method)
+      "red"))
 
 (defmethod col-type-color-of ((node real-memory-object-node))
   (state-color-of (ref-of node)))
@@ -119,14 +122,12 @@
 (defmethod refresh-node-values :before ((node real-memory-object-node))
   (setf (ref-prev-value-of node) (ref-value-of node))
   (evaluate-node-ref node)
-  (if (and (value= (ref-prev-value-of node) (ref-value-of node))
+  (when (and (or (value= (ref-prev-value-of node) (ref-value-of node))
+                 (and (null (ref-prev-value-of node)) (null (ref-value-of node))))
              (or (not (typep (ref-value-of node) 'memory-object-ref))
                  (equal (format-ref-value (ref-of node) (ref-prev-value-of node))
                         (format-ref-value (ref-of node) (ref-value-of node)))))
-      (setf (ref-prev-value-of node) nil)
-      ;; A hack to make booleans work
-      (when (null (ref-prev-value-of node))
-        (setf (ref-prev-value-of node) "NIL")))
+    (setf (ref-prev-value-of node) *no-value*))
   (refresh-column-values node))
 
 (defmethod initialize-instance :after ((node real-memory-object-node) &key)
@@ -180,8 +181,8 @@
             (comment (xml::content it))
             (null "No comment specified.")
             (t it))
-          (awhen (ref-prev-value-of node)
-            (format-ref-value (ref-of node) it))))
+          (unless (eq (ref-prev-value-of node) *no-value*)
+            (format-ref-value (ref-of node) (ref-prev-value-of node)))))
 
 (defmethod col-info-of ((node real-memory-object-node))
   (format nil "~{~A~^; ~}" (ref-info-of node)))
