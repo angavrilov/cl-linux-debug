@@ -226,6 +226,7 @@
 
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
+    (save-annotations)
     (reload-data-definitions context)
     (when (or (< (last-types-version-of context) *known-types-version*)
               (< (last-globals-version-of context) *known-globals-version*)

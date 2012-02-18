@@ -95,6 +95,10 @@
            #:guess-types-by-data
            #:load-data-definition
            #:register-data-definition
+           #:save-annotations
+           #:open-annotations
+           #:type-annotation
+           #:annotate-all
            #:find-stl-strings #:find-memory-strings
            #:begin-find-changes #:update-find-changes #:get-found-changes
            #:os-type-of #:garbage-word-of

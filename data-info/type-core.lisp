@@ -15,6 +15,10 @@
 (defvar *known-symtables* nil)
 (defvar *known-symtables-version* 0)
 
+(defvar *annotation-file* nil)
+(defvar *annotation-changed* nil)
+(defvar *annotation-table* (make-hash-table :test #'equal))
+
 (defparameter *type-context* nil)
 
 (defun align-up (offset alignment)
@@ -395,3 +399,61 @@
         (add-if-changed '*known-symtables* '*known-symtables-version*
                         (name-of type) type))))
   (values `(read-return-value ,defs) defs))
+
+;; Annotations
+
+(defun save-annotations ()
+  (when (and *annotation-changed* *annotation-file*)
+    (with-open-file (stream *annotation-file* :direction :output :if-exists :supersede)
+      (loop for name in (sort (hash-table-keys *annotation-table*) #'string<)
+         do (format stream "~S~{ ~S~}~%" name (gethash name *annotation-table*))))
+    (setf *annotation-changed* nil)))
+
+(defun open-annotations (filename &key create?)
+  (save-annotations)
+  (with-open-file (stream filename :direction :input
+                          :if-does-not-exist (if create? :create :error))
+    (setf *annotation-file* filename)
+    (clrhash *annotation-table*)
+    (loop for line = (read-line stream nil nil)
+       while line
+       do (awhen (read-from-string (concatenate 'string "(" line ")"))
+            (check-type (first it) string)
+            (setf (gethash (first it) *annotation-table*) (rest it))))))
+
+(defun type-annotation (obj key &optional default)
+  (getf (gethash (effective-id-string-of obj) *annotation-table*) key default))
+
+(defun (setf type-annotation) (value obj key)
+  (setf *annotation-changed* t)
+  (setf (getf (gethash (effective-id-string-of obj) *annotation-table*) key) value))
+
+;; Type enumeration
+
+(defgeneric walk-types (type callback &key)
+  (:method-combination progn)
+  (:method progn ((type abstract-item) callback &key recurse-proxy?)
+    (declare (ignore callback recurse-proxy?)))
+  (:method progn ((type virtual-compound-item) callback &key)
+    (dolist (sub (effective-fields-of type))
+      (funcall callback sub)))
+  (:method progn ((type global-type-proxy-base) callback &key recurse-proxy?)
+    (when recurse-proxy?
+      (funcall callback (effective-main-type-of type))))
+  (:method progn ((type container-item) callback &key)
+    (funcall callback (effective-contained-item-of type))))
+
+(defun annotate-all (context key value &key filter (namespace nil ns-p))
+  (labels ((recurse (type)
+             (when (and (not (typep type 'global-type-proxy-base))
+                        (or (null filter) (funcall filter type)))
+               (setf (type-annotation type key) value))
+             (walk-types type #'recurse)))
+    (dolist (global *known-globals*)
+      (when (or (not ns-p) (eq (namespace-by-name (car global)) namespace))
+        (let* ((obj (lookup-global-in-context context (car global))))
+          (recurse (effective-contained-item-of obj)))))
+    (dolist (type *known-types*)
+      (when (or (not ns-p) (eq (namespace-by-name (car type)) namespace))
+        (recurse (lookup-type-in-context context (car type)))))))
+
