@@ -7,10 +7,16 @@
 (deftype uint8 () '(unsigned-byte 8))
 (deftype uint16 () '(unsigned-byte 16))
 (deftype uint32 () '(unsigned-byte 32))
+(deftype uint64 () '(unsigned-byte 64))
+
+(deftype machine-uword () #+x86-64 'uint64 #-x86-64 'uint32)
 
 (deftype int8 () '(signed-byte 8))
 (deftype int16 () '(signed-byte 16))
 (deftype int32 () '(signed-byte 32))
+(deftype int64 () '(signed-byte 64))
+
+(deftype machine-word () #+x86-64 'int64 #-x86-64 'int32)
 
 (defconstant +uint32-mask+ (1- (ash 1 32)))
 
@@ -260,13 +266,18 @@
 (defmacro with-binsearch-in-array ((name vector elt-type comparator
                                          &key array-var right-edge?) &body code)
   (with-unique-names (arr-size)
-    (let ((arr (or array-var (gensym "ARR"))))
+    (let ((arr (or array-var (gensym "ARR")))
+          (key-tmp-type (unless (eq elt-type '*)
+                          (if (subtypep elt-type 'integer)
+                              (if (subtypep elt-type 'unsigned-byte)
+                                  'machine-uword 'machine-word)
+                              elt-type))))
       `(multiple-value-bind (,arr ,arr-size) (get-vector-simple-array ,vector)
          (declare (type (simple-array ,elt-type (*)) ,arr)
                   (type fixnum ,arr-size))
          (assert (<= ,arr-size #.(ash most-positive-fixnum -1))) ; ensure no overflow
          (flet ((,name (key &optional (min-bound 0) (max-bound (length ,vector)))
-                  (declare ,@(unless (eq elt-type '*) `((type ,elt-type key)))
+                  (declare ,@(when key-tmp-type `((type ,key-tmp-type key)))
                            (type fixnum min-bound max-bound)
                            (optimize (speed 3) (safety 0)))
                   (assert (and (<= 0 min-bound max-bound ,arr-size)))
@@ -292,7 +303,8 @@
                                         (t
                                          (setf work-max mid)))))))))
            (declare (inline ,name)
-                    (ftype (function (,elt-type &optional fixnum fixnum) (or fixnum null)) ,name))
+                    (ftype (function (,(or key-tmp-type elt-type)
+                                       &optional fixnum fixnum) (or fixnum null)) ,name))
            ,@code)))))
 
 (defmacro def-binsearch-fun (name &key (elt-type '*) (comparator 'cmp cmp-p))

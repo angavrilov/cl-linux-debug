@@ -18,6 +18,7 @@
   (:shadowing-import-from #:trees #:size #:emptyp)
   (:export #:uint8 #:uint16 #:uint32 #:uint64 +uint32-mask+
            #:int8 #:int16 #:int32 #:int64
+           #:machine-word #:machine-uword
            #:offset #:address
            #:format-hex-offset #:parse-hex-offset
            #:signed #:unsigned
