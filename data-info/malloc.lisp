@@ -130,7 +130,12 @@
     (do-malloc-chunks (bytes offset limit min-addr)
         (memory chunk-map :int-reader get-int :index cur-idx)
       (loop for pos fixnum from offset below limit by 4
-         do (let ((addr (get-int pos 4)))
+         do (locally (declare (optimize (safety 0)))
+              ;; If cl-simd is available, try to control cache pollution
+              ;; by using a non-temporal prefetch instruction.
+              #+sse2
+              (sse:aref-prefetch-nta bytes (the fixnum (+ pos 64))))
+         do (let* ((addr (get-int pos 4)))
               (unless (logtest addr 3)
                 (multiple-value-bind (idx tgt-offset) (lookup addr)
                   (when idx

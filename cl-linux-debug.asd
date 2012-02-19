@@ -8,6 +8,7 @@
 (defsystem :cl-linux-debug
   :author ("Alexander Gavrilov <angavrilov@gmail.com>")
   :depends-on (:sb-md5
+               #+sb-sse-intrinsics :cl-simd
                :anaphora
                :metabang-bind
                :cffi
