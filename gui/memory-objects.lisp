@@ -194,6 +194,10 @@
 (def (class* e) pointer-object-node (real-memory-object-node lazy-memory-object-node)
   ())
 
+(defmethod col-type-color-of ((node pointer-object-node))
+  (or (state-color-of (ref-value-of node))
+      (call-next-method)))
+
 (defmethod on-lazy-expand-node ((node pointer-object-node))
   (bind ((child (lazy-placeholder-of node))
          (ref (ref-value-of node))
