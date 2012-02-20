@@ -59,6 +59,9 @@
 (defgeneric adjust-mem-ref-type (type ref)
   (:method (type ref) ref))
 
+(defmethod effective-id-string-of ((obj memory-object-ref))
+  (effective-id-string-of (memory-object-ref-type obj)))
+
 (defmethod print-object ((ref memory-object-ref) stream)
   (print-unreadable-object (ref stream :identity t)
     (let ((type (memory-object-ref-type ref)))

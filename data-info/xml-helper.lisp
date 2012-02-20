@@ -28,3 +28,6 @@
   (awhen (lookup-type-in-context global type)
     (cl-linux-debug.data-info::call-helper-if-found
      it $find-instance value aux-value :context-ref global)))
+
+(defun is-status-unchecked (obj)
+  (eq (type-annotation obj :status) :unchecked))
