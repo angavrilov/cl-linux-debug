@@ -115,6 +115,7 @@
            (type (vector uint32) addr-vector val-vector))
   (assert (= (length val-vector) (length addr-vector)))
   (let ((get-cb (%get-bytes-for-addr/fast-cb memory))
+        (size (length addr-vector))
         (mask (make-array (length addr-vector) :element-type 'bit))
         (bytes nil)
         (start 1) (end 0))
@@ -123,13 +124,16 @@
              (type uint32 start end)
              (type (or null (simple-array uint8 (*))) bytes)
              (optimize (speed 3)))
-    (with-vector-array (sv-addr addr-vector uint32 :size size)
+    (with-vector-array (sv-addr addr-vector uint32)
       (with-vector-array (sv-val val-vector uint32)
+        (print size)
         (dotimes (i size)
           (declare (type fixnum i))
           (let ((addr (aref sv-addr i))
                 (val (aref sv-val i)))
             (declare (type uint32 addr val))
+            ;; If the address is not within the current extent,
+            ;; look up a new one.
             (unless (<= start addr end)
               (let ((av addr))
                 (declare (optimize (speed 1) (safety 3)))
@@ -141,6 +145,7 @@
                       (setf start (- addr new-offset)
                             end (+ start (length bytes) -1))
                       (setf start 1 end 0)))))
+            ;; Compare the value, mask changed and update if requested
             (when bytes
               (assert (<= start addr end))
               (let* ((diff (logand (- addr start) +uint32-mask+)))
@@ -156,49 +161,64 @@
     mask))
 
 (def (class* ea) find-change-state ()
-  ((addr-set nil :accessor t)
-   (initial-val-set nil :accessor t)
-   (new-val-set nil :accessor t)
+  ((memory nil :accessor t)
+   (addr-set nil :accessor t)
+   (value-sets nil :accessor t)
    (match-mask nil :accessor t)))
 
 (defmethod print-object ((state find-change-state) stream)
   (print-unreadable-object (state stream :type t :identity t)
-    (format stream "~A candidates, ~A remaining"
+    (format stream "~A candidates, ~A remaining, ~A states"
             (length (addr-set-of state))
             (loop with mask of-type simple-bit-vector = (match-mask-of state)
                for i fixnum from 0 below (length mask)
-               count (/= (aref mask i) 0)))))
+               count (/= (aref mask i) 0))
+            (length (value-sets-of state)))))
 
 (defun begin-find-changes (memory)
   (refresh-memory-mirror memory :save-old-data? t)
   (multiple-value-bind (addrs olds news)
       (list-all-changed-ints memory)
     (make-instance 'find-change-state
-                   :addr-set addrs :initial-val-set olds :new-val-set news
+                   :memory memory
+                   :addr-set addrs :value-sets (list olds news)
                    :match-mask (make-array (length addrs) :element-type 'bit :initial-element 1))))
 
-(defun update-find-changes (changes memory mode)
-  (refresh-memory-mirror memory)
-  (flet ((adjust-mask (mask include-1)
-           (if include-1
-               (bit-and (match-mask-of changes) mask t)
-               (bit-andc2 (match-mask-of changes) mask t))))
-    (let ((addrs (addr-set-of changes))
-          (inits (initial-val-set-of changes))
-          (news (new-val-set-of changes)))
-      (ecase mode
-        (:changed (adjust-mask (filter-changed-ints memory addrs inits) t))
-        (:unchanged (adjust-mask (filter-changed-ints memory addrs inits) nil))
-        (:changed-back (adjust-mask (filter-changed-ints memory addrs news) nil))
-        (:changed-again
-         (adjust-mask (bit-and (filter-changed-ints memory addrs inits)
-                               (filter-changed-ints memory addrs news :update? t)
-                               t) t)))))
-  changes)
+(defun update-find-changes (changes &key state increment)
+  (let* ((memory (memory-of changes))
+         (mask (match-mask-of changes))
+         (addrs (addr-set-of changes))
+         (states (value-sets-of changes))
+         (bstate (or (if state
+                         (nth state states)
+                         (car (last states)))
+                     (error "Invalid state id: ~A" state))))
+    (declare (type (vector uint32) addrs bstate))
+    (flet ((push-state (newst)
+             (nconcf (value-sets-of changes) (list newst))))
+      (refresh-memory-mirror memory)
+      (cond (increment
+             (let* ((newst (make-array (length addrs) :element-type 'uint32)))
+               (loop for i from 0 below (length addrs)
+                  do (setf (aref newst i) (logand (+ (aref bstate i) increment) +uint32-mask+)))
+               (bit-andc2 mask (filter-changed-ints memory addrs newst :update? t) t)
+               (push-state newst)))
+            (state
+             (bit-andc2 mask (filter-changed-ints memory addrs bstate) t))
+            (t
+             (let* ((newst (make-array (length addrs) :element-type 'uint32
+                                       :initial-contents (first states))))
+               (declare (type (vector uint32) newst))
+               (bit-and mask (filter-changed-ints memory addrs newst :update? t) t)
+               (dolist (state (rest states))
+                 (bit-and mask (filter-changed-ints memory addrs state) t))
+               (push-state newst)))))
+    changes))
 
-(defun get-found-changes (changes memory)
+(defun get-found-changes (changes)
   (loop with mask of-type simple-bit-vector = (match-mask-of changes)
      and addrs of-type (vector uint32) = (addr-set-of changes)
+     and memory = (memory-of changes)
      for i fixnum from 0 below (length mask)
      when (/= (aref mask i) 0)
      collect (make-ad-hoc-memory-ref memory (aref addrs i)
