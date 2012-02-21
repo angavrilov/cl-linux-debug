@@ -176,7 +176,7 @@
             (length (value-sets-of state)))))
 
 (defun begin-find-changes (memory)
-  (refresh-memory-mirror memory :save-old-data? t)
+  (call-debug-task #'do-refresh-mirror memory :save-old-data? t)
   (multiple-value-bind (addrs olds news)
       (list-all-changed-ints memory)
     (make-instance 'find-change-state
@@ -196,7 +196,7 @@
     (declare (type (vector uint32) addrs bstate))
     (flet ((push-state (newst)
              (nconcf (value-sets-of changes) (list newst))))
-      (refresh-memory-mirror memory)
+      (call-debug-task #'do-refresh-mirror memory)
       (cond (increment
              (let* ((newst (make-array (length addrs) :element-type 'uint32)))
                (loop for i from 0 below (length addrs)
