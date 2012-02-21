@@ -210,7 +210,14 @@
   (:method (context (obj data-item))
     nil)
   (:method (context (obj virtual-compound-item))
-    (some #'effective-has-pointers? (effective-fields-of obj)))
+    (let ((inherited (effective-inherited-child-of obj)))
+      (loop for field in (effective-fields-of obj)
+         when (and (not (eq field inherited))
+                   (effective-has-pointers? field))
+         return t
+         finally (return
+                   (when (and inherited (effective-has-pointers? inherited))
+                     :inherited)))))
   (:method (context (obj compound-item))
     (and (not (is-union-p obj))
          (call-next-method)))

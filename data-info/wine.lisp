@@ -49,7 +49,7 @@
 
   <struct-type type-name='vtable'>
     <pointer name='type_info' offset='-0x4' type-name='RTTICompleteObjectLocator'/>
-    <static-array name='methods' count='16' type-name='pointer'/>
+    <static-array name='methods' count='64' type-name='pointer'/>
 
     <code-helper name='describe'>
       (fmt "Class: ~A" $.type_info.pTypeDescriptor.name)

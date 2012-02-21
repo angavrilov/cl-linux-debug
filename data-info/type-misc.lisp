@@ -635,6 +635,10 @@
                                 :type-name (vtable-type-by-os *type-context*))))
          (call-next-method)))
 
+(defun %fast-adjust-class (context mem-cb addr)
+  (with-fast-memory (vec base mem-cb addr)
+    (resolve-class-in-context context (vec base 4))))
+
 (defmethod adjust-mem-ref-type ((type class-type) ref)
   (with-bytes-for-ref (vector offset ref 4)
     (let ((context (get-context-of-memory ref)))

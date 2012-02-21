@@ -289,6 +289,21 @@
        finally (when items
                  (return `(progn ,@items))))))
 
+(defmacro with-fast-memory ((vector base memory-cb ptr &key (size-gap 0) (min-o 0) (max-o 4))
+                            &body code)
+  `(multiple-value-bind (,vector ,base)
+       (funcall ,memory-cb ,ptr (+ ,size-gap ,max-o))
+     (declare (type fixnum ,base))
+     (when (and ,vector (>= ,base ,(- min-o)))
+       (let ((,base ,base)
+             (,ptr ,ptr))
+         (declare (type (integer 0 ,(- most-positive-fixnum max-o)) ,base)
+                  (type (integer 0 ,(- (ash 1 32) max-o 1)) ,ptr)
+                  (type (simple-array uint8 (*)) ,vector))
+         (setf ,base ,base ,ptr ,ptr)
+         (with-unsafe-int-read (,vector ,vector)
+           ,@code)))))
+
 (defmacro with-walker-ctx ((memory ptr report-cb node ctx-var &key (size-gap 0)) &body code)
   (with-unique-names (vector base min-o max-o)
     `(with-unique-names (,vector ,base)
@@ -299,18 +314,9 @@
                                              :report-cb ,report-cb
                                              :vector ,vector :base ,base
                                              :min-offset ,min-o :max-offset ,max-o)))
-         `(multiple-value-bind (,,vector ,,base)
-              (funcall ,,memory ,,ptr (+ ,,size-gap ,,max-o))
-            (declare (type fixnum ,,base))
-            (when (and ,,vector (>= ,,base ,(- ,min-o)))
-              (let ((,,base ,,base)
-                    (,,ptr ,,ptr))
-                (declare (type (integer 0 ,(- most-positive-fixnum ,max-o)) ,,base)
-                         (type (integer 0 ,(- (ash 1 32) ,max-o 1)) ,,ptr)
-                         (type (simple-array uint8 (*)) ,,vector))
-                (setf ,,base ,,base ,,ptr ,,ptr)
-                (with-unsafe-int-read (,,vector ,,vector)
-                  ,(progn ,@code)))))))))
+         `(with-fast-memory (,,vector ,,base ,,memory ,,ptr :size-gap ,,size-gap
+                                      :min-o ,,min-o :max-o ,,max-o)
+            ,(progn ,@code))))))
 
 (defun compile-effective-pointer-walker (context node)
   (if (not (effective-has-pointers? node))
@@ -326,13 +332,25 @@
                       #+sbcl (sb-ext:muffle-conditions sb-ext:compiler-note))
              ,n-code)))))
 
-(defun call-pointer-walker (context memory addr tag report-cb)
+(defun get-pointer-walker (context tag)
   (declare (optimize (speed 3)))
   (let* ((none '#:none)
          (walker (tag-attr tag 'pointer-walker none)))
     (when (eq walker none)
-      (setf walker (awhen (compile-effective-pointer-walker context (car tag))
-                     (compile nil it))
+      (setf walker (let* ((type (car tag)))
+                     (case (effective-has-pointers? type)
+                       (:inherited
+                        (get-pointer-walker context
+                                            (effective-tag-of (effective-inherited-child-of type))))
+                       ((nil) nil)
+                       (otherwise
+                        (awhen (compile-effective-pointer-walker context type)
+                          (compile nil it)))))
             (tag-attr tag 'pointer-walker) walker))
+    walker))
+
+(defun call-pointer-walker (context memory addr tag report-cb)
+  (declare (optimize (speed 3)))
+  (let* ((walker (get-pointer-walker context tag)))
     (when walker
       (funcall (the function walker) memory addr report-cb))))
