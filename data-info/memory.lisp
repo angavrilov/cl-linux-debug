@@ -131,7 +131,13 @@
                         (null (data-bytes-of ext)))
                 (setf (slot-value ext 'data-bytes)
                       (make-array msize :element-type 'uint8))
-                (setf (slot-value ext 'length) msize))
+                (when (/= msize (length-of ext))
+                  (setf (slot-value ext 'old-data)
+                        (if save-old-data?
+                            (adjust-array (slot-value ext 'old-data)
+                                          msize :initial-element 0)
+                            nil))
+                  (setf (slot-value ext 'length) msize)))
               (setf (slot-value ext 'mapping) mapping)))))
     (aprog1
         (loop for map in mappings
