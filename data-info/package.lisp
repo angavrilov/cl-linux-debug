@@ -62,6 +62,7 @@
            #:memory-object-ref-parent-key
            #:memory-object-ref-parent-ref
            #:effective-main-type-of
+           #:is-contained-item?
            #:address= #:address- #:value=
            #:format-field-seq
            #:format-ref-value
