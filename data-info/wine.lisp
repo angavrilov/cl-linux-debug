@@ -165,8 +165,8 @@
                               (assert (< cur-addr eaddr))
                               (result-sv/push-extend (logior eaddr 1)))))))))))
       ;; End optimized section
-      (result-sv/push-extend (logior pos/addr 1))
-      (values (+ start-address 4) pos/addr))))
+      (result-sv/push-extend (logior (+ pos/addr 4) 1))
+      (values (+ start-address 4) (+ pos/addr 4)))))
 
 (defun enumerate-wine-large-chunk (memory result-vector start-address limit)
   (declare (ignore memory))
