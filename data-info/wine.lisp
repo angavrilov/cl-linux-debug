@@ -125,8 +125,7 @@
 
 (defun walk-wine-list (list-ref type field)
   (bind ((rtype (lookup-type-in-context (get-context-of-memory list-ref) type))
-         ((bias . rfield) (find-field-by-name rtype field))
-         (offset (+ bias (effective-offset-of rfield))))
+         (offset (field-offset-by-name rtype field)))
     (loop for ref = $list-ref.next then $ref.next
        and i from 0
        until (or (address= ref list-ref)

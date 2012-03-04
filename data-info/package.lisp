@@ -78,6 +78,7 @@
            #:with-bits-for-ref
            #:with-safe-deref
            #:find-by-id
+           #:seq-item-count #:seq-item #:seq-slice #:seq-all-items
            #:make-memory-mirror
            #:check-refresh-context
            #:refresh-memory-mirror

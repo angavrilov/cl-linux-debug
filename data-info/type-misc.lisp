@@ -37,11 +37,11 @@
 (defgeneric get-ref-child-links-by-type (type ref child key)
   (:method-combination append :most-specific-first)
   (:method append (type ref value key) nil)
-  (:method append ((type array-item) ref value (key integer))
+  (:method append ((type sequence-item) ref value (key integer))
     (awhen (call-helper-if-found type $index-refers-to key ref :context-ref ref)
       (list (list $index-refers-to it)))))
 
-(defmethod %memory-ref-@ ((type array-item) ref (key (eql $index-refers-to)))
+(defmethod %memory-ref-@ ((type sequence-item) ref (key (eql $index-refers-to)))
   (lambda (index)
     (call-helper-if-found type $index-refers-to index ref :context-ref ref)))
 
@@ -73,7 +73,7 @@
 (defgeneric describe-ref-child-by-type (type ref child key)
   (:method-combination append :most-specific-first)
   (:method append (type ref value key) nil)
-  (:method append ((type array-item) ref value (key integer))
+  (:method append ((type sequence-item) ref value (key integer))
     (append
      (ensure-list (call-helper-if-found type $describe-item value ref :context-ref ref)))))
 
@@ -427,59 +427,93 @@
 (defmethod format-ref-value-by-type ((type string-field) ref (value string))
   (format nil "~S" value))
 
-;; Abstract array
+;; Abstract sequence
+
+(defstruct lazy-seq
+  (base-ref nil :read-only t)
+  (count 0 :type fixnum)
+  (offset 0 :type fixnum))
+
+(defgeneric seq-item-count (seq)
+  (:method ((seq null)) 0)
+  (:method ((seq vector)) (length seq))
+  (:method ((seq lazy-seq)) (lazy-seq-count seq)))
+
+(defmethod $ ((seq vector) (key (eql $count)))
+  (seq-item-count seq))
+(defmethod $ ((seq lazy-seq) (key (eql $count)))
+  (seq-item-count seq))
+
+(defgeneric seq-item (seq index)
+  (:method ((seq null) index) nil)
+  (:method ((seq vector) index)
+    (when (<= 0 index (length seq))
+      (aref seq index)))
+  (:method :around ((seq lazy-seq) index)
+    (when (<= 0 index (1- (lazy-seq-count seq)))
+      (call-next-method))))
+
+(defmethod @ ((seq vector) (key integer))
+  (seq-item seq key))
+(defmethod @ ((seq lazy-seq) (key integer))
+  (seq-item seq key))
+
+(defgeneric %seq-slice (seq start end)
+  (:method ((seq null) start end)
+    nil)
+  (:method ((seq vector) start end)
+    (make-array (- end start)
+                :displaced-to seq :displaced-index-offset start)))
+
+(defun seq-slice (seq start &optional end)
+  (let* ((cnt (seq-item-count seq))
+         (rend (min (or end cnt) cnt)))
+    (when (<= 0 start cnt)
+      (%seq-slice seq start rend))))
+
+(defgeneric seq-all-items (seq)
+  (:method ((seq null)) #())
+  (:method ((seq vector)) seq)
+  (:method (seq)
+    (loop
+       with cnt = (seq-item-count seq)
+       with vec = (make-array cnt)
+       for i from 0 below cnt
+       do (setf (aref vec i) (seq-item seq i))
+       finally (return vec))))
 
 (defparameter *array-item-internal* nil)
 
-(defgeneric array-base-dimensions (type ref))
+(defgeneric sequence-content-items (type ref))
 
-(defun array-item-ref (type ref index &key (check-bounds? t))
-  (multiple-value-bind (base size)
-      (let ((*array-item-internal* t))
-        (array-base-dimensions type ref))
-    (when (and base
-               (typep size 'fixnum) (>= size 0)
-               (or (< -1 index size)
-                   (not check-bounds?)))
-      (let ((elt-size (effective-element-size-of type)))
-        (values (resolve-offset-ref ref (+ base (* index elt-size))
-                                    (effective-contained-item-of type)
-                                    index)
-                size
-                elt-size)))))
+(defmethod %memory-ref-@ ((type sequence-item) ref (key (eql $_items)))
+  (sequence-content-items type ref))
 
-(defmethod %memory-ref-@ ((type array-item) ref (key integer))
-  (array-item-ref type ref key))
+(defmethod %memory-ref-@ ((type sequence-item) ref (key integer))
+  (seq-item (sequence-content-items type ref) key))
 
-(defmethod %memory-ref-@ ((type array-item) ref (key symbol))
+(defmethod %memory-ref-@ ((type sequence-item) ref (key symbol))
   (aif (and (null *array-item-internal*)
             (get-array-enum-value type key))
        (%memory-ref-@ type ref it)
        (call-next-method)))
 
-(defun all-array-item-refs (type ref)
-  (multiple-value-bind (first size step)
-      (array-item-ref type ref 0)
-    (when first
-      (loop
-         for i from 0 below (min 50000 size)
-         collect (offset-memory-reference first i step)))))
+(defmethod %memory-ref-@ ((type sequence-item) ref (key (eql '*)))
+  (coerce (seq-all-items (sequence-content-items type ref)) 'list))
 
-(defmethod %memory-ref-@ ((type array-item) ref (key (eql '*)))
-  (all-array-item-refs type ref))
+(defmethod %memory-ref-$ ((type sequence-item) ref (key (eql $count)))
+  (seq-item-count (sequence-content-items type ref)))
 
-(defmethod %memory-ref-$ ((type array-item) ref (key (eql $count)))
-  (or (nth-value 1 (array-base-dimensions type ref)) 0))
-
-(defmethod format-ref-value-by-type ((type array-item) ref value)
+(defmethod format-ref-value-by-type ((type sequence-item) ref value)
   (format nil "[~A]"
-          (or (nth-value 1 (array-base-dimensions type ref)) "???")))
+          (aif (sequence-content-items type ref)
+               (seq-item-count it) "???")))
 
-(defmethod describe-ref-value-by-type append ((type array-item) ref value)
+(defmethod describe-ref-value-by-type append ((type sequence-item) ref value)
   (awhen (comment-string-of type)
     (list it)))
 
-(defmethod layout-type-rec :before ((type array-item))
+(defmethod layout-type-rec :before ((type sequence-item))
   (setf (effective-index-enum-tag-of type)
         (awhen (index-enum-of type)
           (effective-tag-of (lookup-type-in-context *type-context* it)))))
@@ -498,6 +532,54 @@
                         ($ item id-field))))
             (setf (gethash kv cache) item))))
       (gethash key cache))))
+
+;; Abstract array
+
+(defstruct (array-item-seq (:include lazy-seq))
+  (extent nil)
+  (elt-size 0 :type real)
+  (elt-type nil)
+  (start-ptr 0 :type uint32))
+
+(defmethod seq-item ((seq array-item-seq) index)
+  (make-memory-ref (array-item-seq-extent seq)
+                   (+ (array-item-seq-start-ptr seq)
+                      (* index (array-item-seq-elt-size seq)))
+                   (array-item-seq-elt-type seq)
+                   :parent (array-item-seq-base-ref seq)
+                   :key index
+                   :local? t))
+
+(defmethod %seq-slice ((seq array-item-seq) start end)
+  (aprog1 (copy-array-item-seq seq)
+    (setf (array-item-seq-count it) (- end start)
+          (array-item-seq-start-ptr it)
+          (+ (array-item-seq-start-ptr seq)
+             (* start (array-item-seq-elt-size seq))))))
+
+(defun wrap-array-item-seq (type ref base size &key (offset 0))
+  (let* ((elt-type (effective-contained-item-of type))
+         (elt-size (effective-element-size-of type))
+         (byte-size (ceiling (* elt-size size))))
+    (when (and (typep size 'fixnum) (>= size 0) (or base (= size 0)))
+      (if (= size 0)
+          (make-array-item-seq :base-ref ref :count 0 :offset offset
+                               :elt-type elt-type :elt-size elt-size)
+          (let ((extent (resolve-extent-for-addr (memory-object-ref-memory ref) base)))
+            (when (and extent
+                       (<= (- base (start-address-of extent))
+                           (- (length-of extent) byte-size)))
+              (make-array-item-seq :base-ref ref :count size :offset offset
+                                   :elt-type elt-type :elt-size elt-size
+                                   :extent extent :start-ptr base)))))))
+
+(defgeneric array-base-dimensions (type ref))
+
+(defmethod sequence-content-items ((type array-item) ref)
+  (multiple-value-bind (base size)
+      (let ((*array-item-internal* t))
+        (array-base-dimensions type ref))
+    (wrap-array-item-seq type ref base size)))
 
 (defgeneric build-set-array-base-dimensions (context node offset ctx ptr-var cnt-var))
 
@@ -519,8 +601,8 @@
                do (locally (declare (optimize (speed 1)))
                     (funcall report-cb pv elt-tag)))))))))
 
-(defmethod build-effective-pointer-walker (context (node array-item) offset ctx)
-  (with-unique-names (a-ptr a-cnt a-idx)
+(defun %build-array-pointer-walker (context node a-ptr a-cnt ctx)
+  (with-unique-names (a-idx)
     (let* ((elt-type (effective-contained-item-of node))
            (e-size (effective-element-size-of node))
            (memory (ptr-walker-ctx-memory ctx))
@@ -536,12 +618,16 @@
                       do ,(build-effective-pointer-walker context elt-type 0 a-ctx)
                       do (setf ,(ptr-walker-ctx-base ctx)
                                (sb-ext:truly-the fixnum (+ ,(ptr-walker-ctx-base ctx) ,e-size))))))))
-      `(let ((,a-ptr 0) (,a-cnt 0))
-         (declare (type fixnum ,a-cnt)
-                  (type uint32 ,a-ptr))
-         ,(build-set-array-base-dimensions context node offset ctx a-ptr a-cnt)
-         (when (< 0 ,a-cnt ,(floor most-positive-fixnum e-size))
-           ,core)))))
+      `(when (< 0 ,a-cnt ,(floor most-positive-fixnum e-size))
+         ,core))))
+
+(defmethod build-effective-pointer-walker (context (node array-item) offset ctx)
+  (with-unique-names (a-ptr a-cnt)
+    `(let ((,a-ptr 0) (,a-cnt 0))
+       (declare (type fixnum ,a-cnt)
+                (type uint32 ,a-ptr))
+       ,(build-set-array-base-dimensions context node offset ctx a-ptr a-cnt)
+       ,(%build-array-pointer-walker context node a-ptr a-cnt ctx))))
 
 ;; Static array
 
@@ -587,18 +673,19 @@
     (let ((field-offset (+ offset (effective-offset-of field))))
       (when (or (eq field name)
                 (eql field-offset name))
-        (return (cons offset field)))
+        (return (cons field-offset field)))
       (if (name-of field)
           (when (eq (name-of field) name)
-            (return (cons offset field)))
+            (return (cons field-offset field)))
           (awhen (find-field-by-name (effective-main-type-of field)
                                      name field-offset)
             (return it))))))
 
-(defun make-field-ref (ref field &optional (bias 0))
-  (resolve-offset-ref ref (+ (memory-object-ref-address ref)
-                             (effective-offset-of field)
-                             bias)
+(defun field-offset-by-name (compound name)
+  (car (find-field-by-name compound name)))
+
+(defun make-field-ref (ref field &optional (offset (effective-offset-of field)))
+  (resolve-offset-ref ref (+ (memory-object-ref-address ref) offset)
                       field (or (name-of field) field)
                       :local? t))
 

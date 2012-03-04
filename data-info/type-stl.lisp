@@ -60,8 +60,8 @@
   (stl-vector-dimensions ref (effective-element-size-of type)))
 
 (defmethod build-set-array-base-dimensions (context (node stl-vector) offset ctx ptr-var cnt-var)
-  `(let* ((start ,(access-walker-int ctx offset 4))
-          (end ,(access-walker-int ctx (+ offset 4) 4))
+  `(let* ((start ,(access-walker-int ctx (+ offset (field-offset-by-name node $start)) 4))
+          (end ,(access-walker-int ctx (+ offset (field-offset-by-name node $end)) 4))
           (diff (logand (- end start) #xFFFFFFFF)))
      (declare (type uint32 start end diff))
      (when (and (<= start end)

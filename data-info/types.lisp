@@ -181,11 +181,19 @@
    (has-bad-pointers nil :accessor t :type boolean))
   (:documentation "An abstract type that points to a set of elements."))
 
-(def (class* eas) array-item (container-item code-helper-mixin)
+(def (class* eas) sequence-item (container-item code-helper-mixin)
   ((index-refers-to nil :accessor t :type string)
    (index-enum nil :accessor t :type $-keyword-namespace)
    (effective-index-enum-tag nil :accessor t))
-  (:documentation "An abstract container that contains an integer-indexed sequence of items."))
+  (:documentation "An abstract container that contains an implicitly ordered sequence of items."))
+
+(defmethod auto-code-helpers append ((item sequence-item))
+  (awhen (index-refers-to-of item)
+    (list (make-instance 'code-helper :name $index-refers-to :content it))))
+
+(def (class* eas) array-item (sequence-item)
+  ()
+  (:documentation "A subtype of sequence-item with elements arranged adjacent in memory."))
 
 (defmethod auto-code-helpers append ((item array-item))
   (awhen (index-refers-to-of item)

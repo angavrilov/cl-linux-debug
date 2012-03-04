@@ -142,7 +142,7 @@
                     (memory-object-ref-type parent))))
     (cond ((integerp key)
            (format nil "[~A]"
-                   (or (awhen (and (typep ptype 'array-item)
+                   (or (awhen (and (typep ptype 'sequence-item)
                                    $(car (effective-index-enum-tag-of ptype)).keys[key])
                          (get-$-field-name it))
                        key)))
@@ -227,30 +227,44 @@
 ;; Array
 
 (def (class* e) array-subgroup-node (memory-object-placeholder-node lazy-memory-object-node)
-  ((items nil :reader t)))
+  ((items nil :reader t)
+   (base-idx 0 :reader t)
+   (level 0 :reader t)))
 
-(defun populate-array-subgroup (parent items master)
-  (dolist (item items)
-    (layout-ref-tree-node parent item master)))
+(defun populate-array-subgroup (parent items master level &optional (basev 0))
+  (let ((num-items (seq-item-count items)))
+    (loop while (and (> level 0) (< (/ num-items (expt 100 level)) 1))
+       do (decf level))
+    (if (<= level 0)
+        (loop for item across (seq-all-items items)
+           do (layout-ref-tree-node parent item master))
+        (loop
+           with step = (expt 100 level)
+           for base from 0 below num-items by step
+           for cnt = (min step (- num-items base))
+           for group = (seq-slice items base (+ base cnt))
+           do (make-array-subgroup parent master group (+ base basev) (1- level))))))
 
 (defmethod on-lazy-expand-node ((node array-subgroup-node))
-  (populate-array-subgroup node (items-of node) (or (master-node-of node) node)))
+  (populate-array-subgroup node (items-of node) (or (master-node-of node) node)
+                           (level-of node) (base-idx-of node)))
 
-(defun item-address-range (items)
-  (if items
-      (let ((start (start-address-of (first items)))
-            (last (car (last items))))
+(defun item-address-range (items &aux (cnt (seq-item-count items)))
+  (if (> cnt 0)
+      (let* ((first (seq-item items 0))
+             (last (seq-item items (1- cnt)))
+             (start (start-address-of first)))
         (values start (- (+ (start-address-of last) (length-of last)) start)))
       (values 0 0)))
 
-(defun make-array-subgroup (parent master items base-idx)
+(defun make-array-subgroup (parent master items base-idx level)
   (multiple-value-bind (start len) (item-address-range items)
     (make-instance 'array-subgroup-node :parent parent
                    :master-node master :items items
                    :start-address start
-                   :length len
+                   :length len :base-idx base-idx :level level
                    :col-name (format nil "~A..~A"
-                                     base-idx (+ base-idx (length items) -1)))))
+                                     base-idx (+ base-idx (seq-item-count items) -1)))))
 
 (def (class* e) array-object-node (real-memory-object-node lazy-memory-object-node)
   ())
@@ -264,21 +278,17 @@
                                     :expanded? t :add-child-index 0
                                     :start-address start :length len)
                      node))
-         (num-items (length items)))
-    (when items
-      (if (<= num-items 100)
-          (progn
-            (setf (start-address-of placeholder) start)
-            (populate-array-subgroup parent items (or master placeholder)))
-          (loop
-             for base from 0 by 100
-             for cnt = (min 100 (- num-items base))
-             and rest = items then (subseq rest cnt)
-             while (< base num-items)
-             do (make-array-subgroup parent master (subseq rest 0 cnt) base))))))
+         (num-items (seq-item-count items))
+         (levels (if (> num-items 1)
+                     (floor (log (1- num-items) 100))
+                     0)))
+    (when (> num-items 0)
+      (setf (start-address-of placeholder)
+            (start-address-of (seq-item items 0)))
+      (populate-array-subgroup parent items (or master placeholder) levels))))
 
 (defmethod on-lazy-expand-node ((node array-object-node))
-  (let* ((items (@ (ref-of node) '*))
+  (let* ((items (@ (ref-of node) $_items))
          (master (if (typep (memory-object-ref-type (ref-of node)) 'static-array)
                      (master-node-of node)
                      nil)))
@@ -303,7 +313,8 @@
 (defmethod on-lazy-expand-node ((node padding-object-node))
   (let ((items (guess-types-by-data (memory-of (view-of node)) (ref-of node))))
     (setf (guessed-items-of node) items)
-    (add-array-contents node items (or (master-node-of node) node))))
+    (add-array-contents node (coerce items 'vector)
+                        (or (master-node-of node) node))))
 
 (def (class* e) bit-padding-object-node (padding-object-node)
   ())
@@ -431,7 +442,7 @@
     (aprog1 (call-next-method)
       (when (ref-value-of it)
         (make-lazy it 'pointer-object-node))))
-  (:method ((type array-item) parent ref master)
+  (:method ((type sequence-item) parent ref master)
     (aprog1 (make-instance 'array-object-node
                            :parent parent
                            :ref ref :master-node master)
