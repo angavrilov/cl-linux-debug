@@ -345,6 +345,11 @@
 
 (defmethod xml:xml-tag-name-symbol ((bv stl-bit-vector)) 'stl-bit-vector)
 
+(def (class* eas) stl-deque (sequence-item unit-item data-field concrete-item)
+  ())
+
+(defmethod xml:xml-tag-name-symbol ((bv stl-deque)) 'stl-deque)
+
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)

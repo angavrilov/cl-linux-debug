@@ -60,14 +60,14 @@
   (stl-vector-dimensions ref (effective-element-size-of type)))
 
 (defmethod build-set-array-base-dimensions (context (node stl-vector) offset ctx ptr-var cnt-var)
-  `(let* ((start ,(access-walker-int ctx (+ offset (field-offset-by-name node $start)) 4))
-          (end ,(access-walker-int ctx (+ offset (field-offset-by-name node $end)) 4))
-          (diff (logand (- end start) #xFFFFFFFF)))
-     (declare (type uint32 start end diff))
-     (when (and (<= start end)
-                (not (logtest diff 3))
-                (< diff most-positive-fixnum))
-       (setf ,ptr-var start ,cnt-var (ash diff -2)))))
+  (with-walker-utils (u ctx offset)
+    `(let* ((start ,(u/field-int node $start 4))
+            (end ,(u/field-int node $end 4))
+            (diff (uint32 (- end start))))
+       (when (and (<= start end)
+                  (not (logtest diff 3))
+                  (< diff most-positive-fixnum))
+         (setf ,ptr-var start ,cnt-var (ash diff -2))))))
 
 ;; STL bit vector
 
@@ -104,4 +104,96 @@
 (defmethod array-base-dimensions ((type stl-bit-vector/windows) ref)
   (stl-vector-dimensions ref 1/8 :size-override $ref.size))
 
+;; STL deque
 
+(def (class* eas) stl-deque/linux (stl-deque)
+  ())
+
+(def (class* eas) stl-deque/windows (stl-deque)
+  ())
+
+(defmethod layout-type-rec :before ((str stl-deque))
+  (case (os-type-of *type-context*)
+    ($windows (change-class str 'stl-deque/windows))
+    (otherwise (change-class str 'stl-deque/linux))))
+
+(defmethod compute-effective-fields ((type stl-deque/linux))
+  (flatten (list
+            (make-instance 'pointer :name $map)
+            (make-instance 'int32_t :name $map-size)
+            (make-instance 'pointer :name $start-cur)
+            (make-instance 'pointer :name $start-first)
+            (make-instance 'pointer :name $start-last)
+            (make-instance 'pointer :name $start-map)
+            (make-instance 'pointer :name $end-cur)
+            (make-instance 'pointer :name $end-first)
+            (make-instance 'pointer :name $end-last)
+            (make-instance 'pointer :name $end-map))))
+
+(defun deque-block-size/linux (elt-size)
+  (if (< elt-size 512)
+      (floor 512 elt-size)
+      1))
+
+(defmethod sequence-content-items ((type stl-deque/linux) ref)
+  (let* ((map $ref.map)
+         (map-size $ref.map-size)
+         (smap $ref.start-map)
+         (scur $ref.start-cur)
+         (emap $ref.end-map)
+         (ecur $ref.end-cur))
+    (when (and map map-size smap scur emap ecur (> map-size 0))
+      (with-bytes-for-ref (vector offset map (* 4 map-size))
+        (flet ((ptr-index (base target &optional (size 4))
+                 (aprog1 (/ (- (start-address-of target) base) size)
+                   (unless (and (typep it 'fixnum) (<= 0 it))
+                     (return-from sequence-content-items nil)))))
+          (let* ((mbase (start-address-of map))
+                 (sidx (ptr-index mbase smap))
+                 (eidx (ptr-index mbase emap))
+                 (elt-size (effective-element-size-of type))
+                 (block-size (deque-block-size/linux elt-size)))
+            (when (<= 0 sidx eidx (1- map-size))
+              (loop for i from sidx to eidx
+                 for ptr = (parse-int vector (+ offset (* i 4)) 4)
+                 for start = (if (= i sidx) (ptr-index ptr scur elt-size) 0)
+                 and end = (if (= i eidx) (ptr-index ptr ecur elt-size) block-size)
+                 collect (cons (+ ptr (* start elt-size)) (- end start))
+                 into chunks
+                 finally (return (wrap-chunked-array-item-seq type ref chunks))))))))))
+
+(defmethod compute-effective-fields ((type stl-deque/windows))
+  (flatten (list
+            (make-instance 'pointer :name $proxy)
+            (make-instance 'pointer :name $map)
+            (make-instance 'int32_t :name $map-size)
+            (make-instance 'int32_t :name $off)
+            (make-instance 'int32_t :name $size)
+            (make-instance 'padding :size 4 :alignment 4))))
+
+(defun deque-block-size/windows (elt-size)
+  (cond ((<= elt-size 1) 16)
+        ((<= elt-size 2) 8)
+        ((<= elt-size 4) 4)
+        ((<= elt-size 8) 2)
+        (t 1)))
+
+(defmethod sequence-content-items ((type stl-deque/windows) ref)
+  (let* ((map $ref.map)
+         (map-size $ref.map-size)
+         (off $ref.off)
+         (size $ref.size))
+    (when (and map map-size off size
+               (> map-size 0) (>= size 0) (>= off 0))
+      (with-bytes-for-ref (vector offset map (* 4 map-size))
+        (let* ((elt-size (effective-element-size-of type))
+               (block-size (deque-block-size/windows elt-size))
+               (sidx (floor off block-size))
+               (eidx (floor (+ off size) block-size)))
+          (loop for i from sidx to eidx
+             for ptr = (parse-int vector (+ offset (* (mod i map-size) 4)) 4)
+             for start = (if (= i sidx) (mod off block-size) 0)
+             and end = (if (= i eidx) (mod (+ off size) block-size) block-size)
+             collect (cons (+ ptr (* start elt-size)) (- end start))
+             into chunks
+             finally (return (wrap-chunked-array-item-seq type ref chunks))))))))

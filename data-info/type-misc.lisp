@@ -463,7 +463,11 @@
     nil)
   (:method ((seq vector) start end)
     (make-array (- end start)
-                :displaced-to seq :displaced-index-offset start)))
+                :displaced-to seq :displaced-index-offset start))
+  (:method :around ((seq lazy-seq) start end)
+    (aprog1 (call-next-method)
+      (setf (lazy-seq-count it) (- end start)
+            (lazy-seq-offset it) (+ (lazy-seq-offset seq) start)))))
 
 (defun seq-slice (seq start &optional end)
   (let* ((cnt (seq-item-count seq))
@@ -481,6 +485,22 @@
        for i from 0 below cnt
        do (setf (aref vec i) (seq-item seq i))
        finally (return vec))))
+
+(defgeneric seq-address-range (seq)
+  (:method (seq) (values nil nil))
+  (:method ((seq vector))
+    (if (= (length seq) 0)
+        (values nil nil)
+        (let* ((saddr (start-address-of (aref seq 0)))
+               (top saddr))
+          (loop
+             for item across seq
+             do (when item
+                  (let ((addr (start-address-of item)))
+                    (when (or (< addr saddr) (> addr (+ top 1024)))
+                      (return-from seq-address-range (values nil nil)))
+                    (setf top (+ addr (length-of item))))))
+          (values saddr (- top saddr))))))
 
 (defparameter *array-item-internal* nil)
 
@@ -547,15 +567,18 @@
                       (* index (array-item-seq-elt-size seq)))
                    (array-item-seq-elt-type seq)
                    :parent (array-item-seq-base-ref seq)
-                   :key index
+                   :key (+ index (array-item-seq-offset seq))
                    :local? t))
 
 (defmethod %seq-slice ((seq array-item-seq) start end)
   (aprog1 (copy-array-item-seq seq)
-    (setf (array-item-seq-count it) (- end start)
-          (array-item-seq-start-ptr it)
+    (setf (array-item-seq-start-ptr it)
           (+ (array-item-seq-start-ptr seq)
              (* start (array-item-seq-elt-size seq))))))
+
+(defmethod seq-address-range ((seq array-item-seq))
+  (values (array-item-seq-start-ptr seq)
+          (* (array-item-seq-count seq) (array-item-seq-elt-size seq))))
 
 (defun wrap-array-item-seq (type ref base size &key (offset 0))
   (let* ((elt-type (effective-contained-item-of type))
@@ -572,6 +595,33 @@
               (make-array-item-seq :base-ref ref :count size :offset offset
                                    :elt-type elt-type :elt-size elt-size
                                    :extent extent :start-ptr base)))))))
+
+(defstruct (chunked-array-item-seq (:include lazy-seq))
+  (chunks (trees:make-binary-tree :red-black #'< :key #'array-item-seq-offset :test #'=))
+  (chunk-list nil))
+
+(defmethod seq-item ((seq chunked-array-item-seq) index)
+  (let ((offidx (+ index (chunked-array-item-seq-offset seq))))
+    (awhen (trees:lower-bound offidx (chunked-array-item-seq-chunks seq))
+      (seq-item it (- offidx (array-item-seq-offset it))))))
+
+(defmethod %seq-slice ((seq chunked-array-item-seq) start end)
+  (copy-chunked-array-item-seq seq))
+
+(defun wrap-chunked-array-item-seq (type ref chunk-list)
+  (let* ((seq (make-chunked-array-item-seq :base-ref ref))
+         (table (chunked-array-item-seq-chunks seq))
+         (clist nil))
+    (loop with off = 0
+       for (base . size) in chunk-list
+       do (when (> size 0)
+            (awhen (wrap-array-item-seq type ref base size :offset off)
+              (trees:insert it table)
+              (push it clist))
+            (incf off size))
+       finally (setf (chunked-array-item-seq-count seq) off
+                     (chunked-array-item-seq-chunk-list seq) (nreverse clist)))
+    seq))
 
 (defgeneric array-base-dimensions (type ref))
 

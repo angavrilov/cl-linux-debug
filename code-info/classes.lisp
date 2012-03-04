@@ -224,4 +224,6 @@
     (mapcar (lambda (x) (wrap-loaded-chunk x wrapper :type 'loaded-region))
             (find-regions-by-name (origin-of wrapper) name)))
   (:method ((exec loaded-executable) name)
-    (mapcan (lambda (x) (find-regions-by-name x name)) (all-images-of exec))))
+    (mapcan (lambda (x) (find-regions-by-name x name))
+            (list* (main-image-of exec)
+                   (remove (main-image-of exec) (reverse (all-images-of exec)))))))

@@ -46,7 +46,7 @@
           (cur (start-address-of node)))
       (cond ((null cur)
              "")
-            ((null master)
+            ((or (null master) (null (start-address-of master)))
              (format-hex-offset cur))
             (t
              (format-hex-offset (- cur (start-address-of master)) :force-sign? t))))))
@@ -249,16 +249,8 @@
   (populate-array-subgroup node (items-of node) (or (master-node-of node) node)
                            (level-of node) (base-idx-of node)))
 
-(defun item-address-range (items &aux (cnt (seq-item-count items)))
-  (if (> cnt 0)
-      (let* ((first (seq-item items 0))
-             (last (seq-item items (1- cnt)))
-             (start (start-address-of first)))
-        (values start (- (+ (start-address-of last) (length-of last)) start)))
-      (values 0 0)))
-
 (defun make-array-subgroup (parent master items base-idx level)
-  (multiple-value-bind (start len) (item-address-range items)
+  (multiple-value-bind (start len) (seq-address-range items)
     (make-instance 'array-subgroup-node :parent parent
                    :master-node master :items items
                    :start-address start
@@ -271,7 +263,7 @@
 
 (defun add-array-contents (node items master)
   (bind ((placeholder (lazy-placeholder-of node))
-         ((:values start len) (item-address-range items))
+         ((:values start len) (seq-address-range items))
          (parent (if (> (length (children-of node)) 1)
                      (make-instance 'memory-object-placeholder-node
                                     :parent node :col-name "<items>"
@@ -283,8 +275,7 @@
                      (floor (log (1- num-items) 100))
                      0)))
     (when (> num-items 0)
-      (setf (start-address-of placeholder)
-            (start-address-of (seq-item items 0)))
+      (setf (start-address-of placeholder) start)
       (populate-array-subgroup parent items (or master placeholder) levels))))
 
 (defmethod on-lazy-expand-node ((node array-object-node))

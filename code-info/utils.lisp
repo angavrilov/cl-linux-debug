@@ -20,6 +20,9 @@
 
 (defconstant +uint32-mask+ (1- (ash 1 32)))
 
+(defmacro uint32 (arg)
+  `(the uint32 (logand ,arg +uint32-mask+)))
+
 (def (structure ea) memory-mapping
   (start-addr 0)
   (end-addr 0)
@@ -253,14 +256,15 @@
        (sb-sys:with-pinned-objects (,vec)
          (let ((,ptr (sb-sys:vector-sap ,vec)))
            (macrolet ((,reader-name (offset size &key signed?)
-                        `(cffi:mem-ref ,',ptr
-                                       ,(nth-value (if signed? 1 0)
-                                                   (ecase size
-                                                     (1 (values :uint8 :int8))
-                                                     (2 (values :uint16 :int16))
-                                                     (4 (values :uint32 :int32))
-                                                     (8 (values :uint64 :int64))))
-                                       ,offset)))
+                        `(the (,(if signed? 'signed-byte 'unsigned-byte) ,(* size 8))
+                           (cffi:mem-ref ,',ptr
+                                         ,(nth-value (if signed? 1 0)
+                                                     (ecase size
+                                                       (1 (values :uint8 :int8))
+                                                       (2 (values :uint16 :int16))
+                                                       (4 (values :uint32 :int32))
+                                                       (8 (values :uint64 :int64))))
+                                         ,offset))))
              ,@code))))))
 
 (defmacro with-binsearch-in-array ((name vector elt-type comparator

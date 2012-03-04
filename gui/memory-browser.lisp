@@ -28,7 +28,8 @@
 
 (defgeneric apply-expand-to-addr (node addr leaf-enum-cb)
   (:method :around ((node memory-object-node) addr leaf-enum-cb)
-    (if (< -1 (- addr (start-address-of node)) (length-of node))
+    (if (and (start-address-of node)
+             (< -1 (- addr (start-address-of node)) (length-of node)))
         (call-next-method)
         0))
   (:method ((node memory-object-node) addr leaf-enum-cb)

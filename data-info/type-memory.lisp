@@ -318,6 +318,14 @@
                                       :min-o ,,min-o :max-o ,,max-o)
             ,(progn ,@code))))))
 
+(defmacro with-walker-utils ((prefix ctx offset) &body code)
+  (once-only (ctx offset)
+    `(macrolet ((,(symbolicate prefix '#:/field-int) (node name size &key signed?)
+                  `(access-walker-int ,',ctx
+                                      (+ ,',offset (field-offset-by-name ,node ,name))
+                                      ,size :signed? ,signed?)))
+       ,@code)))
+
 (defun compile-effective-pointer-walker (context node)
   (if (not (effective-has-pointers? node))
       nil
