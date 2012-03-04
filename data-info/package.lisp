@@ -63,7 +63,7 @@
            #:memory-object-ref-parent-ref
            #:effective-main-type-of
            #:is-contained-item?
-           #:address= #:address- #:value=
+           #:address= #:address- #:value= #:valid-ref?
            #:format-field-seq
            #:format-ref-value
            #:comment-string-of

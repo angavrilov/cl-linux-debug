@@ -197,9 +197,8 @@
   (let ((main-arena (get-glibc-main-arena memory)))
     (values main-arena
             (loop for arena = $main-arena.next then $arena.next
-               until (or (null arena)
-                         (address= arena main-arena)
-                         (= (start-address-of arena) 0))
+               until (or (not (valid-ref? arena))
+                         (address= arena main-arena))
                collect arena))))
 
 (defun find-aux-glibc-heap-chain (memory arena)

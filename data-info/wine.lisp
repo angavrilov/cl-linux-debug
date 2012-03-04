@@ -128,9 +128,8 @@
          (offset (field-offset-by-name rtype field)))
     (loop for ref = $list-ref.next then $ref.next
        and i from 0
-       until (or (address= ref list-ref)
-                 (null ref)
-                 (= (start-address-of ref) 0))
+       until (or (not (valid-ref? ref))
+                 (address= ref list-ref))
        collect (resolve-offset-ref list-ref
                                    (- (start-address-of ref) offset)
                                    rtype i))))
