@@ -582,20 +582,21 @@
           (* (array-item-seq-count seq) (array-item-seq-elt-size seq))))
 
 (defun wrap-array-item-seq (type ref base size &key (offset 0))
-  (let* ((elt-type (effective-contained-item-of type))
-         (elt-size (effective-element-size-of type))
-         (byte-size (ceiling (* elt-size size))))
-    (when (and (typep size 'fixnum) (>= size 0) (or base (= size 0)))
-      (if (= size 0)
-          (make-array-item-seq :base-ref ref :count 0 :offset offset
-                               :elt-type elt-type :elt-size elt-size)
-          (let ((extent (resolve-extent-for-addr (memory-object-ref-memory ref) base)))
-            (when (and extent
-                       (<= (- base (start-address-of extent))
-                           (- (length-of extent) byte-size)))
-              (make-array-item-seq :base-ref ref :count size :offset offset
-                                   :elt-type elt-type :elt-size elt-size
-                                   :extent extent :start-ptr base)))))))
+  (when size
+    (let* ((elt-type (effective-contained-item-of type))
+           (elt-size (effective-element-size-of type))
+           (byte-size (ceiling (* elt-size size))))
+      (when (and (typep size 'fixnum) (>= size 0) (or base (= size 0)))
+        (if (= size 0)
+            (make-array-item-seq :base-ref ref :count 0 :offset offset
+                                 :elt-type elt-type :elt-size elt-size)
+            (let ((extent (resolve-extent-for-addr (memory-object-ref-memory ref) base)))
+              (when (and extent
+                         (<= (- base (start-address-of extent))
+                             (- (length-of extent) byte-size)))
+                (make-array-item-seq :base-ref ref :count size :offset offset
+                                     :elt-type elt-type :elt-size elt-size
+                                     :extent extent :start-ptr base))))))))
 
 (defstruct (chunked-array-item-seq (:include lazy-seq))
   (chunks (trees:make-binary-tree :red-black #'< :key #'array-item-seq-offset :test #'=))

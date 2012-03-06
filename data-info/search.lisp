@@ -243,5 +243,7 @@
              (loop for tag being each hash-key of hash
                 using (hash-value addr)
                 collect (make-memory-ref memory addr (car tag)))))
+      (loop for tag being each hash-key of faulty
+         do (remhash tag correct))
       (values (hash-to-refs correct)
               (hash-to-refs faulty)))))

@@ -56,10 +56,10 @@
 
 (defun invalidate-object-mirror-caches (mirror)
   (precompute-globals mirror)
-  (setf (malloc-chunk-types-of mirror)
-        (if (enumerate-known-objects? mirror)
-            (collect-known-objects mirror (malloc-chunks-of mirror))
-            nil))
+  (setf (malloc-chunk-types-of mirror) nil)
+  (when (enumerate-known-objects? mirror)
+    (setf (malloc-chunk-types-of mirror)
+          (collect-known-objects mirror (malloc-chunks-of mirror))))
   (clrhash (vtable-names-of mirror))
   (clrhash (find-by-id-cache-of mirror)))
 
