@@ -14,7 +14,20 @@
    (global-address-table (make-hash-table :test #'equal) :reader t)
    (executable-hashes nil :accessor t)
    (data-definition-files nil :accessor t)
-   (os-type $linux :accessor t)))
+   (os-context (assoc-value *known-os-contexts* $linux) :accessor t)))
+
+(defmethod os-type-of ((context type-context))
+  (os-type-of (os-context-of context)))
+
+(defmethod (setf os-type-of) (name (context type-context))
+  (aif (assoc-value *known-os-contexts* name)
+       (unless (eq (os-context-of context) it)
+         (setf (os-context-of context) it))
+       (error "Invalid OS context: ~S" name)))
+
+(defmethod initialize-instance :after ((obj type-context) &key (os-type nil ot?))
+  (when ot?
+    (setf (os-type-of obj) os-type)))
 
 (defmethod @ ((context type-context) (key (eql $enum)))
   (lambda (key)
@@ -111,7 +124,7 @@
     (unwind-protect
          (progn
            ;; Layout
-           (layout-type-rec ddef)
+           (layout-type-rec (os-context-of *type-context*) ddef)
            ;;(effective-size-of ddef) ; ensure strong ref on itself
            ;; Assign all tags
            (when old-tag

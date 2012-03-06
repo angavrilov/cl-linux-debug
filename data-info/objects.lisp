@@ -195,7 +195,7 @@
 
 (defmethod get-vtable-class-name ((context object-memory-mirror) address)
   (let* ((vtbl (make-memory-ref context address
-                                (lookup-type-in-context context (vtable-type-by-os context))))
+                                (lookup-type-in-context context (vtable-type-by-os (os-context-of context)))))
          (tptr $vtbl.type_info)
          (tinfo (get-address-info-range context tptr))
          (vinfo (get-address-info-range context $vtbl.methods[0])))
@@ -340,7 +340,7 @@
                       (get-vtable-class-name mirror (second (first infolist))))
             (consume (aif (resolve-class-in-context mirror (second (first infolist)))
                           (make-instance 'global-type-proxy :effective-main-type it)
-                          (make-instance 'pointer :type-name (vtable-type-by-os mirror))))
+                          (make-instance 'pointer :type-name (vtable-type-by-os (os-context-of mirror)))))
             (align))
           (do ((tail infolist (rest tail)))
               ((null tail))

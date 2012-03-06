@@ -29,7 +29,9 @@
     (load-systems :sb-bsd-sockets
                   :sb-introspect
                   :sb-cltl2
+                  :sb-posix
                   :sb-md5
+                  #+sb-sse-intrinsics :cl-simd
                   :trivial-features
                   :trivial-garbage
                   :alexandria

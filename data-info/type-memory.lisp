@@ -269,7 +269,8 @@
               (- (ptr-walker-ctx-max-offset ctx) size)))
   `(,(ptr-walker-ctx-vector ctx) (+ ,(ptr-walker-ctx-base ctx) ,offset) ,size :signed? ,signed?))
 
-(defgeneric build-effective-pointer-walker (context node offset walker-ctx)
+(defgeneric build-effective-pointer-walker (os-context node offset walker-ctx)
+  (:argument-precedence-order node os-context offset walker-ctx)
   (:method (context (node abstract-item) offset walker-ctx)
     nil)
   (:method :around (context (node data-item) offset walker-ctx)
@@ -332,7 +333,7 @@
       (with-unique-names (memory ptr report-cb)
         (let ((n-code
                (with-walker-ctx (memory ptr report-cb node ctx)
-                 (build-effective-pointer-walker context node 0 ctx))))
+                 (build-effective-pointer-walker (os-context-of context) node 0 ctx))))
           `(lambda (,memory ,ptr ,report-cb)
              (declare (optimize (speed 3))
                       (type function ,memory ,report-cb)

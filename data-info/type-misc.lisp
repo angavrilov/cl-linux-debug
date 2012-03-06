@@ -220,7 +220,7 @@
           ((member value '("false") :test #'equalp) nil)
           (t (error "Invalid boolean value: ")))))
 
-(defmethod layout-type-rec ((type enum-attr))
+(defmethod layout-type (context (type enum-attr))
   (setf (effective-table-of type)
         (make-hash-table)
         (effective-base-type-of type)
@@ -230,13 +230,13 @@
     (setf (gethash :default (effective-table-of type))
           (parse-type-value (effective-base-type-of type) it))))
 
-(defmethod layout-fields ((type abstract-enum-item) fields)
+(defmethod layout-fields (context (type abstract-enum-item) fields)
   (let ((val -1)
         (ftable (make-hash-table))
         (ktable (make-hash-table))
         (vtable (make-hash-table)))
     (dolist (attr (enum-attrs-of type))
-      (layout-type-rec attr)
+      (layout-type-rec context attr)
       (setf (gethash (name-of attr) ftable) (effective-table-of attr)))
     (setf (gethash $keys ftable) ktable)
     (setf (gethash $values ftable) vtable)
@@ -282,11 +282,11 @@
 (defmethod base-type-of ((type global-type-proxy-base))
   (or (call-next-method) (base-type-of (effective-main-type-of type))))
 
-(defmethod layout-type-rec :before ((type base-type-item))
+(defmethod layout-type :before (context (type base-type-item))
   (let ((btype (lookup-type-in-context *type-context* (or (base-type-of type) $int32_t))))
     (unless (typep btype 'integer-field)
       (error "Base type must be an integer: ~A" (base-type-of type)))
-    (layout-type-rec btype)
+    (layout-type-rec context btype)
     (setf (effective-base-type-of type) btype
           (effective-int-signed? type) (effective-int-signed? btype))))
 
@@ -418,7 +418,7 @@
                         :limit (min (length vector) (+ size offset)))
           (parse-string vector offset)))))
 
-(defmethod compute-effective-fields ((type ptr-string))
+(defmethod compute-effective-fields (context (type ptr-string))
   (list (make-instance 'pointer :name $ptr :type-name $static-string)))
 
 (defmethod %memory-ref-$ ((type ptr-string) ref (key (eql t)))
@@ -504,7 +504,8 @@
 
 (defparameter *array-item-internal* nil)
 
-(defgeneric sequence-content-items (type ref))
+(defgeneric sequence-content-items (type ref)
+  (:method ((type sequence-item) ref) nil))
 
 (defmethod %memory-ref-@ ((type sequence-item) ref (key (eql $_items)))
   (sequence-content-items type ref))
@@ -533,7 +534,7 @@
   (awhen (comment-string-of type)
     (list it)))
 
-(defmethod layout-type-rec :before ((type sequence-item))
+(defmethod layout-type :before (context (type sequence-item))
   (setf (effective-index-enum-tag-of type)
         (awhen (index-enum-of type)
           (effective-tag-of (lookup-type-in-context *type-context* it)))))
@@ -757,19 +758,21 @@
 
 ;; Class
 
-(defun vtable-type-by-os (mirror)
-  (if (eq (os-type-of mirror) $windows) $wine:vtable $glibc:vtable))
+(defgeneric vtable-type-by-os (context)
+  (:method ((context os-context)) nil)
+  (:method ((context os-context/linux)) $glibc:vtable)
+  (:method ((context os-context/windows)) $wine:vtable))
 
-(defmethod compute-effective-fields ((type inheriting-type))
+(defmethod compute-effective-fields (context (type inheriting-type))
   (nconc (awhen (inherits-from-of type)
            (list (setf (effective-inherited-child-of type)
                        (make-instance 'compound :type-name it))))
          (call-next-method)))
 
-(defmethod compute-effective-fields ((type class-type))
+(defmethod compute-effective-fields (context (type class-type))
   (nconc (when (null (inherits-from-of type))
            (list (make-instance 'pointer :name $_vtable
-                                :type-name (vtable-type-by-os *type-context*))))
+                                :type-name (vtable-type-by-os context))))
          (call-next-method)))
 
 (defun %fast-adjust-class (context mem-cb addr)

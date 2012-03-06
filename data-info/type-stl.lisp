@@ -12,12 +12,13 @@
 (def (class* eas) stl-string/windows (stl-string)
   ())
 
-(defmethod layout-type-rec :before ((str stl-string))
-  (case (os-type-of *type-context*)
-    ($windows (change-class str 'stl-string/windows))
-    (otherwise (change-class str 'stl-string/linux))))
+(defmethod substitute-type-class ((context os-context/windows) (str stl-string))
+  (change-class str 'stl-string/windows))
 
-(defmethod compute-effective-fields ((type stl-string/windows))
+(defmethod substitute-type-class ((context os-context/linux) (str stl-string))
+  (change-class str 'stl-string/linux))
+
+(defmethod compute-effective-fields (context (type stl-string/windows))
   (list (make-instance 'compound :is-union t
                        :fields (list
                                 (make-instance 'static-string :name $buffer :size 16)
@@ -31,13 +32,18 @@
 
 ;; STL vector
 
-(defmethod compute-effective-fields ((type stl-vector))
-  (flatten (list
-            (make-instance 'pointer :name $start)
-            (make-instance 'pointer :name $end)
-            (make-instance 'pointer :name $block-end)
-            (when (eq (os-type-of *type-context*) $windows)
-              (make-instance 'padding :name $pad :size 4 :alignment 4)))))
+(defmethod compute-effective-fields ((context os-context/linux) (type stl-vector))
+  (list
+   (make-instance 'pointer :name $start)
+   (make-instance 'pointer :name $end)
+   (make-instance 'pointer :name $block-end)))
+
+(defmethod compute-effective-fields ((context os-context/windows) (type stl-vector))
+  (list
+   (make-instance 'pointer :name $start)
+   (make-instance 'pointer :name $end)
+   (make-instance 'pointer :name $block-end)
+   (make-instance 'padding :name $pad :size 4 :alignment 4)))
 
 (defun stl-vector-dimensions (ref elt-size &key (size-bias 0) size-override)
   (let* ((s $ref.start)
@@ -77,12 +83,13 @@
 (def (class* eas) stl-bit-vector/windows (stl-bit-vector)
   ())
 
-(defmethod layout-type-rec :before ((str stl-bit-vector))
-  (case (os-type-of *type-context*)
-    ($windows (change-class str 'stl-bit-vector/windows))
-    (otherwise (change-class str 'stl-bit-vector/linux))))
+(defmethod substitute-type-class ((context os-context/windows) (str stl-bit-vector))
+  (change-class str 'stl-bit-vector/windows))
 
-(defmethod compute-effective-fields ((type stl-bit-vector/linux))
+(defmethod substitute-type-class ((context os-context/linux) (str stl-bit-vector))
+  (change-class str 'stl-bit-vector/linux))
+
+(defmethod compute-effective-fields (context (type stl-bit-vector/linux))
   (flatten (list
             (make-instance 'pointer :name $start)
             (make-instance 'int32_t :name $start-bit)
@@ -93,7 +100,7 @@
 (defmethod array-base-dimensions ((type stl-bit-vector/linux) ref)
   (stl-vector-dimensions ref 1/8 :size-bias $ref.end-bit))
 
-(defmethod compute-effective-fields ((type stl-bit-vector/windows))
+(defmethod compute-effective-fields (context (type stl-bit-vector/windows))
   (flatten (list
             (make-instance 'pointer :name $start)
             (make-instance 'pointer :name $end)
@@ -112,12 +119,13 @@
 (def (class* eas) stl-deque/windows (stl-deque)
   ())
 
-(defmethod layout-type-rec :before ((str stl-deque))
-  (case (os-type-of *type-context*)
-    ($windows (change-class str 'stl-deque/windows))
-    (otherwise (change-class str 'stl-deque/linux))))
+(defmethod substitute-type-class ((context os-context/linux) (str stl-deque))
+  (change-class str 'stl-deque/linux))
 
-(defmethod compute-effective-fields ((type stl-deque/linux))
+(defmethod substitute-type-class ((context os-context/windows) (str stl-deque))
+  (change-class str 'stl-deque/windows))
+
+(defmethod compute-effective-fields (context (type stl-deque/linux))
   (flatten (list
             (make-instance 'pointer :name $map)
             (make-instance 'int32_t :name $map-size)
@@ -162,7 +170,7 @@
                  into chunks
                  finally (return (wrap-chunked-array-item-seq type ref chunks))))))))))
 
-(defmethod compute-effective-fields ((type stl-deque/windows))
+(defmethod compute-effective-fields (context (type stl-deque/windows))
   (flatten (list
             (make-instance 'pointer :name $proxy)
             (make-instance 'pointer :name $map)
