@@ -57,11 +57,12 @@
 (defun invalidate-object-mirror-caches (mirror)
   (precompute-globals mirror)
   (setf (malloc-chunk-types-of mirror) nil)
-  (when (enumerate-known-objects? mirror)
-    (setf (malloc-chunk-types-of mirror)
-          (collect-known-objects mirror (malloc-chunks-of mirror))))
   (clrhash (vtable-names-of mirror))
-  (clrhash (find-by-id-cache-of mirror)))
+  (clrhash (find-by-id-cache-of mirror))
+  (when (enumerate-known-objects? mirror)
+    (with-simple-restart (continue "Ignore known objects")
+      (setf (malloc-chunk-types-of mirror)
+            (collect-known-objects mirror (malloc-chunks-of mirror))))))
 
 (defmethod check-refresh-context :after ((mirror object-memory-mirror))
   (invalidate-object-mirror-caches mirror))
@@ -103,6 +104,12 @@
                      :obj-type
                      (awhen (malloc-chunk-types-of mirror)
                        (car (aref it malloc-id)))))))
+
+(defmethod get-heap-chunk-size ((mirror object-memory-mirror) address)
+  (multiple-value-bind (malloc-id malloc-min malloc-max malloc-ok?)
+      (lookup-malloc-object mirror (malloc-chunks-of mirror) (floor address))
+    (when malloc-ok?
+      (values (- malloc-max address) (- address malloc-min) malloc-id))))
 
 (defgeneric get-address-object-info (mirror address)
   (:method (mirror (address null)) nil)

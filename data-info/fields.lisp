@@ -4,9 +4,12 @@
 
 ;; Access generics
 
+(defparameter *in-@-funcall* nil)
+
 (defgeneric @ (obj key) ; lvalue
   (:method ((obj function) key)
-    (funcall obj key))
+    (let ((*in-@-funcall* t))
+      (funcall obj key)))
   (:method ((obj list) key) (assert nil))
   (:method (obj (key list)) (assert nil))
   (:method :around ((obj list) key)
@@ -20,7 +23,8 @@
   (:method (obj (key (eql t)))
     obj)
   (:method ((obj function) key)
-    (funcall obj key))
+    (let ((*in-@-funcall* nil))
+      (funcall obj key)))
   (:method ((obj list) key) (assert nil))
   (:method (obj (key list)) (assert nil))
   (:method :around ((obj list) key)

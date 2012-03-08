@@ -296,13 +296,24 @@
 
 ;; Pointer
 
-(def (class* eas) pointer (unit-item container-item data-field concrete-item)
+(def (class* eas) pointer-item (unit-item container-item data-field)
   ((is-array nil :type boolean))
   (:default-initargs :default-size 4)
+  (:documentation "A superclass of a simple pointer to another object or an array."))
+
+(defmethod public-type-name-of ((name pointer-item))
+  (concatenate 'string (public-type-name-of (effective-contained-item-of name)) "*"))
+
+(def (class* eas) pointer (pointer-item concrete-item)
+  ()
   (:documentation "A simple pointer to another object."))
 
-(defmethod public-type-name-of ((name pointer))
-  (concatenate 'string (public-type-name-of (effective-contained-item-of name)) "*"))
+(def (class* eas) pointer/array (pointer-item array-item)
+  ()
+  (:default-initargs :is-array t)
+  (:documentation "A pointer to an array of objects."))
+
+(defmethod xml-tag-name-symbol ((obj pointer/array)) 'pointer)
 
 ;; String
 

@@ -212,17 +212,7 @@
                                      ref-start it
                                      :parent (ref-of node) :key t)))))
     (setf (start-address-of child) ref-start)
-    (if (and (is-array-p (memory-object-ref-type (ref-of node)))
-             (> (length-of ref) 0))
-        (add-array-contents node
-                            (progn
-                              (setf (memory-object-ref-parent-key ref) 0)
-                              (loop with len = (length-of ref)
-                                 for i from 0 below (floor (- r-len (- ref-start r-start)) len)
-                                 collect (cl-linux-debug.data-info::offset-memory-reference
-                                          ref i len)))
-                            child)
-        (layout-children-in-range node (list ref) child r-start r-len :root? t))))
+    (layout-children-in-range node (list ref) child r-start r-len :root? t)))
 
 ;; Array
 

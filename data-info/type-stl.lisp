@@ -192,7 +192,9 @@
          (off $ref.off)
          (size $ref.size))
     (when (and map map-size off size
-               (> map-size 0) (>= size 0) (>= off 0))
+               (>= map-size 0) (>= size 0) (>= off 0))
+      (when (= map-size 0)
+        (return-from sequence-content-items #()))
       (with-bytes-for-ref (vector offset map (* 4 map-size))
         (let* ((elt-size (effective-element-size-of type))
                (block-size (deque-block-size/windows elt-size))

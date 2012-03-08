@@ -349,7 +349,7 @@
   (aprog1 (make-memory-ref memory ptr type :parent parent :key key)
     (adjust-mem-ref-type (memory-object-ref-type it) it)))
 
-(defmethod %memory-ref-@ ((type pointer) ref (key (eql t)))
+(defmethod %memory-ref-@ ((type pointer-item) ref (key (eql t)))
   (let ((size (effective-size-of type)))
     (let ((ptr (with-bytes-for-ref (vector offset ref size)
                  (parse-int vector offset size))))
@@ -357,45 +357,40 @@
         (make-pointer-ref (memory-object-ref-memory ref)
                           (or ptr 0) (effective-contained-item-of type) ref t)))))
 
-(defmethod (setf %memory-ref-$) ((value integer) (type pointer) ref (key (eql t)))
+(defmethod %memory-ref-@ ((type pointer-item) ref (key (eql $_target)))
+  (%memory-ref-@ type ref t))
+
+(defmethod %memory-ref-$ ((type pointer-item) ref (key (eql $_target)))
+  (%memory-ref-@ type ref t))
+
+(defmethod (setf %memory-ref-$) ((value integer) (type pointer-item) ref (key (eql $_target)))
   (let ((size (effective-size-of type)))
     (with-bytes-for-ref (vector offset ref size)
       (setf (parse-int vector offset size) value)
       (request-memory-write ref 0 size))))
 
-(defmethod (setf %memory-ref-$) ((value memory-object-ref) (type pointer) ref (key (eql t)))
-  (setf (%memory-ref-$ type ref t) (memory-object-ref-address value)))
+(defmethod (setf %memory-ref-$) ((value memory-object-ref) (type pointer-item) ref (key (eql $_target)))
+  (setf (%memory-ref-$ type ref $_target) (memory-object-ref-address value)))
 
-(defmethod (setf %memory-ref-$) ((value null) (type pointer) ref (key (eql t)))
-  (setf (%memory-ref-$ type ref t) 0))
-
-(defmethod %memory-ref-@ ((type pointer) ref (key integer))
-  (if (is-array-p type)
-      (offset-memory-reference (%memory-ref-@ type ref t) key
-                               (effective-element-size-of type))
-      (call-next-method)))
-
-(defmethod %memory-ref-@ ((type pointer) ref (key (eql $value)))
-  (%memory-ref-@ type ref t))
+(defmethod (setf %memory-ref-$) ((value null) (type pointer-item) ref (key (eql $_target)))
+  (setf (%memory-ref-$ type ref $_target) 0))
 
 (defmethod %memory-ref-@ ((type pointer) ref key)
   (@ (%memory-ref-@ type ref t) key))
 
-(defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
-  (%memory-ref-@ type ref t))
-
 (defmethod %memory-ref-$ ((type pointer) ref key)
   ($ (%memory-ref-@ type ref t) key))
 
-(defmethod %memory-ref-$ ((type pointer) ref (key integer))
-  (if (is-array-p type)
-      (%memory-ref-@ type ref key)
-      (call-next-method)))
+(defmethod %memory-ref-$ ((type pointer) ref (key (eql t)))
+  (%memory-ref-@ type ref t))
 
-(defmethod format-ref-value-by-type ((type pointer) ref (value null))
+(defmethod (setf %memory-ref-$) (value (type pointer) ref (key (eql t)))
+  (setf (%memory-ref-$ type ref $_target) value))
+
+(defmethod format-ref-value-by-type ((type pointer-item) ref (value null))
   "NULL")
 
-(defmethod describe-ref-value-by-type append ((type pointer) ref (value memory-object-ref))
+(defmethod describe-ref-value-by-type append ((type pointer-item) ref (value memory-object-ref))
   (when (not (eq ref value))
     (append (describe-ref-value value value)
             (or (describe-address-in-context
@@ -505,7 +500,10 @@
 (defparameter *array-item-internal* nil)
 
 (defgeneric sequence-content-items (type ref)
-  (:method ((type sequence-item) ref) nil))
+  (:method ((type sequence-item) ref) nil)
+  (:method :around (type ref)
+    (let ((*array-item-internal* t))
+      (call-next-method))))
 
 (defmethod %memory-ref-@ ((type sequence-item) ref (key (eql $_items)))
   (sequence-content-items type ref))
@@ -524,6 +522,10 @@
 
 (defmethod %memory-ref-$ ((type sequence-item) ref (key (eql $count)))
   (seq-item-count (sequence-content-items type ref)))
+
+(defmethod %memory-ref-$ ((type sequence-item) ref (key (eql $has-items)))
+  (let ((items (sequence-content-items type ref)))
+    (and items (aand (seq-item-count items) (not (eql it 0))))))
 
 (defmethod format-ref-value-by-type ((type sequence-item) ref value)
   (format nil "[~A]"
@@ -629,8 +631,7 @@
 
 (defmethod sequence-content-items ((type array-item) ref)
   (multiple-value-bind (base size)
-      (let ((*array-item-internal* t))
-        (array-base-dimensions type ref))
+      (array-base-dimensions type ref)
     (wrap-array-item-seq type ref base size)))
 
 (defgeneric build-set-array-base-dimensions (context node offset ctx ptr-var cnt-var))
@@ -717,6 +718,43 @@
 (defun copy-item-def (type)
   (copy-data-definition (effective-contained-item-of type)))
 
+;; Array pointer
+
+(defmethod substitute-type-class (context (type pointer))
+  (if (is-array-p type)
+      (change-class type 'pointer/array)
+      (call-next-method)))
+
+(defmethod array-base-dimensions ((type pointer/array) ref)
+  (awhen (%memory-ref-@ type ref t)
+    (multiple-value-bind (size gap)
+        (get-heap-chunk-size it 0)
+      (when (and size gap)
+        (let* ((msz (floor size (effective-element-size-of type)))
+               (real-size (or (when (= gap 4)
+                                (with-bytes-for-ref (vector offset it 4 -4)
+                                  (parse-int vector offset 4)))
+                              msz)))
+          (values (memory-object-ref-address it)
+                  (min msz real-size)))))))
+
+(defmethod build-set-array-base-dimensions (context (node pointer/array) offset ctx ptr-var cnt-var)
+  `(let* ((addr ,(access-walker-int ctx offset 4)))
+     (when (and (/= addr 0) (not (logtest addr 3)))
+       (setf ,ptr-var addr ,cnt-var 1)
+       (multiple-value-bind (size gap)
+           (get-heap-chunk-size *type-context* addr)
+         (when (and size gap)
+           (let ((msz (floor size ,(effective-element-size-of node)))
+                 (addr4 (uint32 (- addr 4))))
+             (when (<= 0 msz most-positive-fixnum)
+               (if (eql gap 4)
+                   (with-fast-memory (vec base ,(ptr-walker-ctx-memory ctx) addr4)
+                     (let ((v (vec base 4)))
+                       (when (<= 0 v msz)
+                         (setf ,cnt-var v))))
+                   (setf ,cnt-var msz)))))))))
+
 ;; Generic structure
 
 (defun find-field-by-name (compound name &optional (offset 0))
@@ -749,12 +787,13 @@
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql $_fields)))
   (lambda (key)
     (awhen (find-field-by-name type key)
-      (make-field-ref ref (cdr it) (car it)))))
+      (let ((rref (make-field-ref ref (cdr it) (car it))))
+        (if *in-@-funcall* rref ($ rref t))))))
 
 (defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '*)))
   (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
 
-(defmethod %memory-ref-@ :around ((type virtual-compound-item) ref (key (eql '@)))
+(defmethod %memory-ref-@ ((type virtual-compound-item) ref (key (eql '@)))
   (mapcar (lambda (it) (make-field-ref ref it)) (effective-fields-of type)))
 
 ;; Class

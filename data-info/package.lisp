@@ -51,6 +51,7 @@
            *known-types*
            *known-globals*
            *known-symtables*
+           *in-@-funcall*
            #:align-up
            #:get-$-field-name
            #:get-$-field

@@ -52,7 +52,7 @@
         (call-next-method)))
   (:method ((type container-item) root level pname inc-offset &key)
     (let* ((real-elt (effective-contained-item-of type))
-           (elt (if (typep real-elt 'pointer)
+           (elt (if (typep real-elt 'pointer-item)
                     (effective-contained-item-of real-elt)
                     real-elt))
            (anon? (not (or (typep elt 'global-type-proxy-base)
@@ -76,7 +76,7 @@
                  do (progn
                       (unless (typep ct 'static-array)
                         (return (or (typep ct 'primitive-field)
-                                    (typep ct 'pointer))))
+                                    (typep ct 'pointer-item))))
                       (when (effective-index-enum-tag-of ct)
                         (return nil))
                       (unless *csv-merge-nested*

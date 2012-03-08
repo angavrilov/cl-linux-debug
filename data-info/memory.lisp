@@ -69,6 +69,9 @@
     (when (<= 0 offset (- (length-of ext) size))
       (values (data-bytes-of ext) (+ offset bias) (- start bias)))))
 
+(defmethod get-heap-chunk-size ((ext memory-extent) addr)
+  (get-heap-chunk-size (mirror-of ext) addr))
+
 (defmethod %get-bytes-for-addr/fast-cb ((ext memory-extent))
   (%get-bytes-for-addr/fast-cb (mirror-of ext)))
 
