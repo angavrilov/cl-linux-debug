@@ -75,6 +75,37 @@
                   (< diff most-positive-fixnum))
          (setf ,ptr-var start ,cnt-var (ash diff -2))))))
 
+(declaim (ftype (function (function uint8-array (index-fixnum 1 8) t function) (values))
+                %walk-pointer-stl-vector))
+
+(defun %walk-pointer-stl-vector (memory vector offset tag report-cb)
+  (declare (optimize (speed 3)))
+  (with-unsafe-int-read (get-int vector)
+    (let* ((start (get-int offset 4))
+           (end (get-int (+ offset 4) 4))
+           (diff (uint32 (- end start))))
+      (when (and (<= start end)
+                 (not (logtest diff 3))
+                 (< diff most-positive-fixnum))
+        (%walk-pointer-array memory start (floor diff 4) tag report-cb))))
+  (values))
+
+(defmethod build-effective-pointer-walker (context (node stl-vector) offset ctx)
+  (let* ((elt-type (effective-contained-item-of node)))
+    ;; Use a special function for the most common case of a pointer vector
+    (if (and (typep elt-type 'pointer)
+             (= (- (field-offset-by-name node $end)
+                   (field-offset-by-name node $start))
+                4))
+        `(%walk-pointer-stl-vector ,(ptr-walker-ctx-memory ctx)
+                                   ,(ptr-walker-ctx-vector ctx)
+                                   (+ ,(ptr-walker-ctx-base ctx) ,offset
+                                      ,(field-offset-by-name node $start))
+                                   ',(effective-tag-of (effective-contained-item-of elt-type))
+                                   ,(ptr-walker-ctx-report-cb ctx))
+        (call-next-method))))
+
+
 ;; STL bit vector
 
 (def (class* eas) stl-bit-vector/linux (stl-bit-vector)

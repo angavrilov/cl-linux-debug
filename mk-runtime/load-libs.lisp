@@ -31,6 +31,7 @@
                   :sb-cltl2
                   :sb-posix
                   :sb-md5
+                  :sb-sprof
                   #+sb-sse-intrinsics :cl-simd
                   :trivial-features
                   :trivial-garbage

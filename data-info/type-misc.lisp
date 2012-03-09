@@ -636,17 +636,21 @@
 
 (defgeneric build-set-array-base-dimensions (context node offset ctx ptr-var cnt-var))
 
+(declaim (ftype (function (function uint32 (index-fixnum 4) t function) (values))
+                %walk-pointer-array))
+
 (defun %walk-pointer-array (memory ptr cnt elt-tag report-cb)
   (declare (type fixnum cnt)
-           (type function memory report-cb))
+           (type function memory report-cb)
+           (optimize (speed 3)))
   (when (> cnt 0)
     (multiple-value-bind (vec off)
         (funcall memory ptr (* 4 cnt))
       (when vec
         (with-unsafe-int-read (get-int vec)
+          (declare (type fixnum off))
           (let ((limit (+ off (* 4 cnt))))
-            (declare (optimize (speed 3))
-                     (type (integer 0 #.(- most-positive-fixnum 4)) off limit))
+            (declare (type (index-fixnum 1 4) off limit))
             (loop for p fixnum from off by 4 below limit
                and i fixnum from 0 below cnt
                for pv of-type uint32 = (get-int p 4)
@@ -709,7 +713,7 @@
       (setf (ptr-walker-ctx-base a-ctx) a-base)
       `(let* ((,a-base (+ ,(ptr-walker-ctx-base ctx) ,offset))
               (,a-limit (+ ,a-base ,gap)))
-         (declare (type (integer 0 ,(- most-positive-fixnum (effective-max-offset-of elt-type)))
+         (declare (type (index-fixnum 1 ,(effective-max-offset-of elt-type))
                         ,a-base ,a-limit))
          (loop while (<= ,a-base ,a-limit)
             do ,(build-effective-pointer-walker context elt-type 0 a-ctx)

@@ -18,6 +18,11 @@
 
 (deftype machine-word () #+x86-64 'int64 #-x86-64 'int32)
 
+(deftype uint8-array () '(simple-array uint8 (*)))
+
+(deftype index-fixnum (&optional (div 1) (bias 0))
+  `(integer 0 ,(- (floor most-positive-fixnum div) bias)))
+
 (defconstant +uint32-mask+ (1- (ash 1 32)))
 
 (defmacro uint32 (arg)
@@ -255,6 +260,7 @@
        (declare (type (simple-array uint8 (*)) ,vec))
        (sb-sys:with-pinned-objects (,vec)
          (let ((,ptr (sb-sys:vector-sap ,vec)))
+           (declare (ignorable ,ptr))
            (macrolet ((,reader-name (offset size &key signed?)
                         `(the (,(if signed? 'signed-byte 'unsigned-byte) ,(* size 8))
                            (cffi:mem-ref ,',ptr
