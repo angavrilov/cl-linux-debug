@@ -12,15 +12,21 @@
   ((start-offset 0 :reader t)
    (data-bytes :reader t)))
 
+(defstruct indexed-chunks
+  (addrs nil :type (simple-array * (*)))
+  (lengths nil :type simple-vector)
+  (objs nil :type simple-vector))
+
 (macrolet ((frob (elt-type)
              `(progn
                 (defun ,(symbolicate '#:index-chunks/ elt-type) (chunk)
                   (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
                          (cstarts (mapcar #'start-address-of cset)))
-                    (list (make-array (length cset) :element-type ',elt-type :initial-contents cstarts)
-                          (coerce (mapcar #'length-of cset) 'vector)
-                          (coerce cset 'vector))))
-                (declaim (ftype (function (t ,elt-type) (values t fixnum fixnum))
+                    (make-indexed-chunks
+                     :addrs (make-array (length cset) :element-type ',elt-type :initial-contents cstarts)
+                     :lengths (coerce (mapcar #'length-of cset) 'vector)
+                     :objs (coerce cset 'vector))))
+                (declaim (ftype (function ((or indexed-chunks null) ,elt-type) (values t fixnum fixnum))
                                 ,(symbolicate '#:lookup-indexed-chunk/ elt-type)))
                 (defun ,(symbolicate '#:lookup-indexed-chunk/ elt-type) (index address)
                   (declare (type ,elt-type address)
@@ -30,7 +36,9 @@
                         (rgap 0))
                     (declare (type fixnum roff rgap))
                     (when index
-                      (destructuring-bind (addrs lengths objs) index
+                      (let ((addrs (indexed-chunks-addrs index))
+                            (lengths (indexed-chunks-lengths index))
+                            (objs (indexed-chunks-objs index)))
                         (declare (type (simple-array ,elt-type (*)) addrs)
                                  (type simple-vector lengths objs))
                         (with-binsearch-in-array (lookup addrs ,elt-type #'<= :array-var av)
