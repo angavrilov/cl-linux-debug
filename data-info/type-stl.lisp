@@ -222,8 +222,9 @@
          (map-size $ref.map-size)
          (off $ref.off)
          (size $ref.size))
-    (when (and map map-size off size
-               (>= map-size 0) (>= size 0) (>= off 0))
+    (when (and map-size off size
+               (>= map-size 0) (>= size 0) (>= off 0)
+               (or map (= map-size 0)))
       (when (= map-size 0)
         (return-from sequence-content-items #()))
       (with-bytes-for-ref (vector offset map (* 4 map-size))
