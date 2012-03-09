@@ -1,3 +1,6 @@
+;; Profiler library
+(require :sb-sprof)
+
 ;; ASDF libs
 (let* ((dist-dir (merge-pathnames #P"quicklisp/dists/quicklisp/software/"
                                   (user-homedir-pathname)))
@@ -31,7 +34,6 @@
                   :sb-cltl2
                   :sb-posix
                   :sb-md5
-                  :sb-sprof
                   #+sb-sse-intrinsics :cl-simd
                   :trivial-features
                   :trivial-garbage
