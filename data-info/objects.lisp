@@ -92,6 +92,18 @@
          (values (setf (gethash key (find-by-id-cache-of context))
                        (make-hash-table :test #'equal)) nil))))
 
+(defun malloc-object-stats (mirror)
+  (let ((chunks (malloc-chunks-of mirror))
+        (types (malloc-chunk-types-of mirror)))
+    (when chunks
+      (loop for v across (malloc-chunk-map-range-vector chunks)
+         count (not (logtest v 1)) into ok
+         finally (format t "~A malloc chunks.~%" ok))
+      (when types
+        (loop for v across types
+           count v into ok
+           finally (format t "~A known objects.~%" ok))))))
+
 (defun lookup-malloc-chunk-range (mirror address)
   (multiple-value-bind (malloc-id malloc-min malloc-max malloc-ok?)
       (lookup-malloc-object mirror (malloc-chunks-of mirror) (floor address))

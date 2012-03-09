@@ -91,6 +91,7 @@
            #:get-address-object-info #:obj-type-of
            #:get-address-info-ref
            #:get-chunk-range-refs
+           #:malloc-object-stats
            #:compile-helper
            #:call-helper #:call-helper-if-found
            #:describe-address-in-context
