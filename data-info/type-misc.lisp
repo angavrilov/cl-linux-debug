@@ -267,12 +267,12 @@
 (defmethod enum-attrs-of ((type global-type-proxy-base))
   (enum-attrs-of (effective-main-type-of type)))
 
+(defmethod %memory-ref-$ ((type abstract-enum-item) ref (key (eql t)))
+  (let ((iv (call-next-method)))
+    (gethash iv (gethash $keys (lookup-tables-of type)) iv)))
+
 (defmethod %memory-ref-$ ((type abstract-enum-item) ref (key symbol))
-  (case key
-    (t (let ((iv (call-next-method)))
-         (gethash iv (gethash $keys (lookup-tables-of type)) iv)))
-    (otherwise
-     (or $type[key][(%memory-ref-$ type ref t)] (call-next-method)))))
+  (or $type[key][(%memory-ref-$ type ref t)] (call-next-method)))
 
 (defmethod (setf %memory-ref-$) ((value symbol) (type abstract-enum-item) ref (key (eql t)))
   (aif $type.values[value]
