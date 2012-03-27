@@ -14,7 +14,7 @@
    (global-address-table (make-hash-table :test #'equal) :reader t)
    (executable-hashes nil :accessor t)
    (data-definition-files nil :accessor t)
-   (os-context (assoc-value *known-os-contexts* $linux) :accessor t)))
+   (os-context (make-instance 'os-context) :accessor t)))
 
 (defmethod os-type-of ((context type-context))
   (os-type-of (os-context-of context)))
@@ -192,11 +192,13 @@
   (:method (context (type class-type))
     (let ((name (or (original-name-of type)
                     (get-$-field-name (type-name-of type)))))
-      (ecase (os-type-of context)
-        ($windows (or (windows-mangling-of type)
-                      (format nil ".?AV~A@@" name)))
-        ($linux (or (linux-mangling-of type)
-                    (format nil "~A~A" (length name) name)))))))
+      (etypecase (os-context-of context)
+        (os-context/windows
+         (or (windows-mangling-of type)
+             (format nil ".?AV~A@@" name)))
+        (os-context/linux
+         (or (linux-mangling-of type)
+             (format nil "~A~A" (length name) name)))))))
 
 (defun compute-stable-subset (obj-list dep-table)
   (let ((ssubset (make-hash-table))
@@ -222,14 +224,18 @@
             (setf (gethash name hash) def)
             (format t "Would update ~A~%" (get-$-field-name name)))))
 
-(defun rebuild-addr-table (ctx table symtables hashes)
+(defun rebuild-addr-table (ctx hashes &aux (table (global-address-table-of ctx)))
   (clrhash table)
-  (dolist (entry symtables)
+  (dolist (entry *known-symtables*)
     (let ((symtab (cdr entry)))
-      (awhen (aand (equal (os-type-of ctx) (os-type-of symtab))
+      (awhen (aand (or (null (os-type-of ctx))
+                       (equal (os-type-of ctx) (os-type-of symtab)))
                    (loop for ct in (constraints-of symtab)
                       when (assoc-value hashes (value-of ct) :test #'equal)
                       return it))
+        (when (null (os-type-of ctx))
+          (format t "Detected OS type as ~A" (os-type-of symtab))
+          (setf (os-type-of ctx) (os-type-of symtab)))
         (dolist (element (elements-of symtab))
           (etypecase element
             (global-address
@@ -251,6 +257,10 @@
                              (same-pairs (processed-globals-of context) *known-globals*)))
            (ssubset (compute-stable-subset same-objs (strong-dep-table-of context)))
            (changed? nil))
+      ;; Update symbols
+      (when (< (last-symtables-version-of context) *known-symtables-version*)
+        (rebuild-addr-table context (executable-hashes-of context))
+        (setf (last-symtables-version-of context) *known-symtables-version*))
       ;; Update manglings
       (setf (known-classes-of context)
             (loop for (name . type) in *known-types*
@@ -276,11 +286,6 @@
                 (setf changed? t)
                 (lookup-global-in-context context name)))
         (setf (last-globals-version-of context) *known-globals-version*))
-      ;; Update symbols
-      (when (< (last-symtables-version-of context) *known-symtables-version*)
-        (rebuild-addr-table context (global-address-table-of context)
-                            *known-symtables* (executable-hashes-of context))
-        (setf (last-symtables-version-of context) *known-symtables-version*))
       ;; Finalize
       (clrhash (vtable-class-cache-of context)))))
 

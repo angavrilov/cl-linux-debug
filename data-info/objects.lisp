@@ -24,8 +24,8 @@
    (is-code? nil :accessor t)
    (global nil :accessor t)))
 
-(defun get-executable-hashes (executable)
-  (loop for image in (all-images-of executable)
+(defun get-executable-hashes (images)
+  (loop for image in images
      for md5 = (md5-hash-of image)
      and ts = (binary-timestamp-of image)
      and reloc = (relocation-offset-of image)
@@ -35,9 +35,14 @@
 (defmethod initialize-instance :after ((mirror object-memory-mirror) &key)
   (awhen (process-of mirror)
     (setf (executable-hashes-of mirror)
-          (get-executable-hashes (executable-of mirror)))
-    (when (typep (origin-of (main-image-of (executable-of it)))
-                 'pe-executable-image)
+          (get-executable-hashes (all-images-of (executable-of mirror))))
+    ;; detect type from symtables
+    (rebuild-addr-table mirror
+                        (get-executable-hashes (list (main-image-of (executable-of mirror)))))
+    ;; detect type from executable type
+    (when (and (null (os-type-of mirror))
+               (typep (origin-of (main-image-of (executable-of it)))
+                      'pe-executable-image))
       (setf (os-type-of mirror) $windows))))
 
 (defun precompute-globals (mirror)
@@ -222,9 +227,9 @@
                (is-code? vinfo)
                (section-of tinfo)
                (not (is-code? tinfo)))
-      (if (eq (os-type-of context) $windows)
-          $tptr.pTypeDescriptor.name
-          $tptr.class_name))))
+      (typecase (os-context-of context)
+        (os-context/windows $tptr.pTypeDescriptor.name)
+        (os-context/linux $tptr.class_name)))))
 
 (defun detect-garbage (mirror value)
   (awhen (garbage-word-of mirror)
