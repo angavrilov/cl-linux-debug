@@ -562,7 +562,7 @@
   (extent nil)
   (elt-size 0 :type real)
   (elt-type nil)
-  (start-ptr 0 :type uint32))
+  (start-ptr 0))
 
 (defmethod seq-item ((seq array-item-seq) index)
   (make-memory-ref (array-item-seq-extent seq)

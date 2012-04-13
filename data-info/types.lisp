@@ -489,9 +489,18 @@
 
 (def (class* eas) global-address (xml-serializer)
   ((name nil :accessor t :type $-keyword-namespace)
+   (comment nil :accessor t)
    (value nil :accessor t :type address)))
 
 (defmethod add-subobject ((obj symbol-table) (subobj global-address))
+  (nconcf (elements-of obj) (list subobj)))
+
+(def (class* eas) vtable-address (xml-serializer)
+  ((name nil :accessor t :type $-keyword-namespace)
+   (comment nil :accessor t)
+   (value nil :accessor t :type address)))
+
+(defmethod add-subobject ((obj symbol-table) (subobj vtable-address))
   (nconcf (elements-of obj) (list subobj)))
 
 (def (class* eas) data-definition (xml-serializer)

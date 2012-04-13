@@ -241,7 +241,9 @@
             (global-address
              (when (and (name-of element) (value-of element))
                (setf (gethash (name-of element) table)
-                     (+ (value-of element) it))))))))))
+                     (+ (value-of element) it))))
+            (vtable-address
+             nil)))))))
 
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
