@@ -12,6 +12,7 @@
    (known-classes nil :accessor t)
    (last-symtables-version 0 :accessor t)
    (global-address-table (make-hash-table :test #'equal) :reader t)
+   (vtable-address-table (make-hash-table :test #'equal) :reader t)
    (executable-hashes nil :accessor t)
    (data-definition-files nil :accessor t)
    (os-context (make-instance 'os-context) :accessor t)))
@@ -183,7 +184,8 @@
   (multiple-value-bind (rv found) (gethash address (vtable-class-cache-of context))
     (if found rv
         (setf (gethash address (vtable-class-cache-of context))
-              (awhen (aand (get-vtable-class-name context address)
+              (awhen (aand (or (gethash address (vtable-address-table-of context))
+                               (get-vtable-class-name context address))
                            (assoc-value (known-classes-of context) it :test #'equal))
                 (lookup-type-in-context context it))))))
 
@@ -192,13 +194,14 @@
   (:method (context (type class-type))
     (let ((name (or (original-name-of type)
                     (get-$-field-name (type-name-of type)))))
-      (etypecase (os-context-of context)
-        (os-context/windows
-         (or (windows-mangling-of type)
-             (format nil ".?AV~A@@" name)))
-        (os-context/linux
-         (or (linux-mangling-of type)
-             (format nil "~A~A" (length name) name)))))))
+      (values (etypecase (os-context-of context)
+                (os-context/windows
+                 (or (windows-mangling-of type)
+                     (format nil ".?AV~A@@" name)))
+                (os-context/linux
+                 (or (linux-mangling-of type)
+                     (format nil "~A~A" (length name) name))))
+              name))))
 
 (defun compute-stable-subset (obj-list dep-table)
   (let ((ssubset (make-hash-table))
@@ -224,8 +227,11 @@
             (setf (gethash name hash) def)
             (format t "Would update ~A~%" (get-$-field-name name)))))
 
-(defun rebuild-addr-table (ctx hashes &aux (table (global-address-table-of ctx)))
+(defun rebuild-addr-table (ctx hashes &aux
+                           (table (global-address-table-of ctx))
+                           (vatable (vtable-address-table-of ctx)))
   (clrhash table)
+  (clrhash vatable)
   (dolist (entry *known-symtables*)
     (let ((symtab (cdr entry)))
       (awhen (aand (or (null (os-type-of ctx))
@@ -243,7 +249,9 @@
                (setf (gethash (name-of element) table)
                      (+ (value-of element) it))))
             (vtable-address
-             nil)))))))
+             (when (and (name-of element) (value-of element))
+               (setf (gethash (+ (value-of element) it) vatable)
+                     (get-$-field-name (name-of element)))))))))))
 
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
@@ -266,8 +274,10 @@
       ;; Update manglings
       (setf (known-classes-of context)
             (loop for (name . type) in *known-types*
-               for mname = (compute-mangled-name context type)
-               when mname collect (cons mname name)))
+               for (mname oname) = (multiple-value-list
+                                    (compute-mangled-name context type))
+               when mname collect (cons mname name)
+               when oname collect (cons oname name)))
       ;; Check types
       (let ((*new-processed-types* (make-hash-table :test #'equal))
             (types (processed-types-of context)))
