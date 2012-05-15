@@ -58,15 +58,42 @@
          do (setf pos (+ idx (length text-bytes))))
       (nreverse refs))))
 
-(defun get-search-memory-ranges (memory)
-  (append (mapcar (lambda (x)
-                    (list (first x) (second x)))
-                  (malloc-chunk-map-extent-list (malloc-chunks-of memory)))
+(defun find-memory-vectors (memory min-size max-size start-address end-address &key (eltsize 4))
+  (multiple-value-bind (bytes offset base-in)
+      (get-bytes-for-addr memory start-address 12)
+    (with-unsafe-int-read (get-int bytes)
+      (let ((refs nil)
+            (pos offset)
+            (limit (- (min (length bytes) (+ offset (- end-address start-address))) 12)))
+        (loop while (< pos limit)
+           do (let ((a (get-int pos 4))
+                    (b (get-int (+ pos 4) 4))
+                    (c (get-int (+ pos 8) 4)))
+                (when (and (<= a b c) (not (logtest a 3))
+                           (= (mod (- b a) eltsize) 0)
+                           (<= min-size (/ (- b a) eltsize) max-size))
+                  (push (make-ad-hoc-memory-ref memory (+ base-in pos)
+                                                (make-instance 'stl-vector
+                                                               :type-name (case eltsize
+                                                                            (1 $int8_t)
+                                                                            (2 $int16_t)
+                                                                            (otherwise nil)))
+                                                :parent :search)
+                        refs))
+                (setf pos (+ pos 4))))
+        (nreverse refs)))))
+
+(defun get-search-memory-ranges (memory &key (heap? t) (rodata? nil))
+  (append (when heap?
+            (mapcar (lambda (x)
+                      (list (first x) (second x)))
+                    (malloc-chunk-map-extent-list (malloc-chunks-of memory))))
           (mapcan (lambda (section)
                     (mapcar #'rest
                             (memory-extents-for-range
                              memory (start-address-of section) (length-of section))))
-                  (remove-if-not (lambda (section) (writable? (origin-of section)))
+                  (remove-if-not (lambda (section) (and (not (executable? (origin-of section)))
+                                                   (or rodata? (writable? (origin-of section)))))
                                  (sections-of (executable-of memory))))))
 
 (defun find-memory-strings (memory text &key at-end?)
@@ -75,6 +102,13 @@
          (sbytes (make-string-bytes text :null-terminate? at-end?)))
     (dolist (range (get-search-memory-ranges memory))
       (nconcf refs (find-memory-bytes memory sbytes (first range) (second range))))
+    refs))
+
+(defun find-stl-vectors (memory min-size max-size &key (eltsize 4) (heap? nil))
+  (let* ((refs nil))
+    (dolist (range (get-search-memory-ranges memory :heap? heap?))
+      (nconcf refs (find-memory-vectors memory min-size max-size (first range) (second range)
+                                        :eltsize eltsize)))
     refs))
 
 (defun list-changed-ints (extent addr-vector old-vals new-vals)

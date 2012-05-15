@@ -103,7 +103,7 @@
            #:open-annotations
            #:type-annotation
            #:annotate-all
-           #:find-stl-strings #:find-memory-strings
+           #:find-stl-strings #:find-memory-strings #:find-stl-vectors
            #:begin-find-changes #:update-find-changes #:get-found-changes
            #:verify-object-sizes
            #:os-type-of #:os-context-of #:garbage-word-of

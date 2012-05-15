@@ -810,6 +810,10 @@
   (:method ((context os-context/linux)) $glibc:vtable)
   (:method ((context os-context/windows)) $wine:vtable))
 
+(defgeneric destructor-vtbl-size-by-os (context)
+  (:method ((context os-context)) 4)
+  (:method ((context os-context/linux)) 8))
+
 (defmethod compute-effective-fields (context (type inheriting-type))
   (nconc (awhen (inherits-from-of type)
            (list (setf (effective-inherited-child-of type)
