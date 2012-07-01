@@ -39,6 +39,10 @@
 
 (defmethod get-context-of-memory ((context type-context)) context)
 
+(defmethod describe-address-in-context append ((context type-context) addr)
+  (awhen (gethash addr (vtable-address-table-of context))
+    (list (format nil "vtable: ~A" it))))
+
 (defun partition-into-groups (list key)
   "Cut the list into groups that begin with a non-nil key."
   (labels ((pick-nils (list key)
@@ -240,7 +244,7 @@
                       when (assoc-value hashes (value-of ct) :test #'equal)
                       return it))
         (when (null (os-type-of ctx))
-          (format t "Detected OS type as ~A" (os-type-of symtab))
+          (format t "Detected OS type as ~A~%" (os-type-of symtab))
           (setf (os-type-of ctx) (os-type-of symtab)))
         (dolist (element (elements-of symtab))
           (etypecase element
