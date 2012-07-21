@@ -177,6 +177,7 @@
 (def (class* eas) container-item (ref-compound-item)
   ((effective-contained-item :accessor t)
    (effective-element-size :accessor t)
+   (pointer-type nil :accessor t :type $-keyword-namespace)
    (key-field nil :accessor t :type $-keyword)
    (has-bad-pointers nil :accessor t :type boolean))
   (:documentation "An abstract type that points to a set of elements."))
