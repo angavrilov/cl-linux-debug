@@ -36,6 +36,9 @@
    (effective-id-string))
   (:documentation "An abstract base class for all type items."))
 
+(defgeneric inherit-attributes (from to)
+  (:method ((from abstract-item) (to abstract-item))
+    to))
 
 (defmethod add-subobject ((obj abstract-item) (subobj !--))
   ;; Ignore comments
@@ -166,19 +169,34 @@
 
 (defmethod can-add-subfield? ((obj compound-item) (subobj data-field)) t)
 
-(def (class* eas) struct-compound-item (compound-item)
-  ((key-field nil :accessor t :type $-keyword))
+(def (class* eas) struct-attr-mixin ()
+  ((key-field nil :accessor t :type $-keyword)))
+
+(defmethod inherit-attributes :after ((from struct-attr-mixin) (to struct-attr-mixin))
+  (setf (key-field-of to) (key-field-of from)))
+
+(def (class* eas) primitive-attr-mixin ()
+  ((refers-to nil :accessor t :type string)
+   (ref-target nil :accessor t :type $-keyword-namespace)
+   (aux-value nil :accessor t :type string)))
+
+(defmethod inherit-attributes :after ((from primitive-attr-mixin) (to primitive-attr-mixin))
+  (setf (refers-to-of to) (refers-to-of from)
+        (ref-target-of to) (ref-target-of from)
+        (aux-value-of to) (aux-value-of from)))
+
+(def (class* eas) struct-compound-item (compound-item struct-attr-mixin)
+  ()
   (:documentation "An abstract type that contains named fields as part of its own structure."))
 
 (def (class* eas) ref-compound-item (compound-item)
   ((type-name nil :accessor t :type $-keyword-namespace))
   (:documentation "An abstract type that may refer to a global type."))
 
-(def (class* eas) container-item (ref-compound-item)
+(def (class* eas) container-item (ref-compound-item struct-attr-mixin primitive-attr-mixin)
   ((effective-contained-item :accessor t)
    (effective-element-size :accessor t)
    (pointer-type nil :accessor t :type $-keyword-namespace)
-   (key-field nil :accessor t :type $-keyword)
    (has-bad-pointers nil :accessor t :type boolean))
   (:documentation "An abstract type that points to a set of elements."))
 
@@ -223,10 +241,8 @@
 
 ;; Primitive fields
 
-(def (class* eas) primitive-field (data-field unit-item code-helper-mixin)
-  ((refers-to nil :accessor t :type string)
-   (ref-target nil :accessor t :type $-keyword-namespace)
-   (aux-value nil :accessor t :type string))
+(def (class* eas) primitive-field (data-field unit-item code-helper-mixin primitive-attr-mixin)
+  ()
   (:documentation "An abstract type for a primitive field."))
 
 (defmethod auto-code-helpers append ((item primitive-field))

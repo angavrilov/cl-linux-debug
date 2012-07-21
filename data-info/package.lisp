@@ -24,7 +24,7 @@
                 #:offset #:address
                 #:format-hex-offset #:parse-hex-offset)
   (:export #:copy-data-definition #:name-with-namespace
-           #:auto-code-helpers
+           #:auto-code-helpers #:inherit-attributes
            #:name #:value #:os-type #:os-type-of ; to avoid conflict
            #:public-type-name-of
            #:effective-id-string-of

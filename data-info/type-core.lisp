@@ -374,15 +374,17 @@
                    (when (or (fields-of obj)
                              (not (member (type-name-of obj) '(nil $pointer))))
                      (error "Cannot specify both fields/TYPE-NAME and POINTER-TYPE: ~A" obj))
-                   (make-instance 'pointer :syntax-parent obj :type-name it)))
+                   (inherit-attributes
+                    obj (make-instance 'pointer :syntax-parent obj :type-name it))))
                 ((awhen (aand (type-name-of obj)
                               (lookup-type-reference *type-context* obj it))
                    (when (fields-of obj)
                      (error "Cannot specify both fields and TYPE-NAME: ~A" obj))
-                   (make-proxy-field obj it)))
+                   (inherit-attributes
+                    obj (make-proxy-field obj it))))
                 ((rest (fields-of obj))
-                 (make-instance 'compound :syntax-parent obj :fields (fields-of obj)
-                                :key-field (key-field-of obj)))
+                 (inherit-attributes
+                  obj (make-instance 'compound :syntax-parent obj :fields (fields-of obj))))
                 ((fields-of obj)
                  (first (fields-of obj)))
                 (t
