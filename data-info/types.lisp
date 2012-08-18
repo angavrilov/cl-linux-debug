@@ -378,6 +378,11 @@
 
 (defmethod xml:xml-tag-name-symbol ((bv stl-deque)) 'stl-deque)
 
+(def (class* eas) stl-set (sequence-item unit-item data-field concrete-item)
+  ())
+
+(defmethod xml:xml-tag-name-symbol ((bv stl-set)) 'stl-set)
+
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)

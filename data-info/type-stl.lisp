@@ -261,3 +261,31 @@
              collect (cons (+ ptr (* start elt-size)) (- end start))
              into chunks
              finally (return (wrap-chunked-array-item-seq type ref chunks))))))))
+
+;; STL set
+
+(def (class* eas) stl-set/linux (stl-set)
+  ())
+
+(def (class* eas) stl-set/windows (stl-set)
+  ())
+
+(defmethod substitute-type-class ((context os-context/linux) (str stl-set))
+  (change-class str 'stl-set/linux))
+
+(defmethod substitute-type-class ((context os-context/windows) (str stl-set))
+  (change-class str 'stl-set/windows))
+
+(defmethod compute-effective-fields (context (type stl-set/linux))
+  (flatten (list
+            (make-instance 'padding :size 48))))
+
+(defmethod sequence-content-items ((type stl-set/linux) ref)
+  #()) ; TODO
+
+(defmethod compute-effective-fields (context (type stl-set/windows))
+  (flatten (list
+            (make-instance 'padding :size 16))))
+
+(defmethod sequence-content-items ((type stl-set/windows) ref)
+  #()) ; TODO
