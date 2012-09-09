@@ -213,7 +213,7 @@
   (:method ((type abstract-enum-item) value)
     (get-$-field value))
   (:method ((type integer-item) value)
-    (read value))
+    (read-from-string value))
   (:method ((type bool) value)
     (cond ((numberp value) (/= value 0))
           ((member value '("true") :test #'equalp) t)

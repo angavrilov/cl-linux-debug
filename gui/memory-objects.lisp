@@ -321,7 +321,7 @@
                    and l from 0 below (length-of node) by 1/8
                    and i from 0
                    collect (make-memory-ref memory p type :parent ref :key i :local? t))))
-    (add-array-contents node items (master-node-of node))))
+    (add-array-contents node (coerce items 'vector) (master-node-of node))))
 
 ;; Struct
 
