@@ -204,10 +204,16 @@
 (def (class e) os-context/msvc6 (os-context)
   ())
 
+(def (class e) os-context/msvc2005 (os-context)
+  ())
+
 (def (class e) os-context/msvc2010 (os-context)
   ())
 
 (def (class e) os-context/windows/msvc6 (os-context/msvc6 os-context/windows)
+  ())
+
+(def (class e) os-context/windows/msvc2005 (os-context/msvc2005 os-context/windows)
   ())
 
 (def (class e) os-context/windows/msvc2010 (os-context/msvc2010 os-context/windows)
@@ -217,7 +223,8 @@
   (:method ((ctx os-context)) nil)
   (:method ((ctx os-context/linux)) $linux)
   (:method ((ctx os-context/windows)) $windows)
-  (:method ((ctx os-context/windows/msvc6)) $windows-msvc6))
+  (:method ((ctx os-context/windows/msvc6)) $windows-msvc6)
+  (:method ((ctx os-context/windows/msvc2005)) $windows-msvc2005))
 
 (defgeneric os-context-of (context)
   (:method ((ctx os-context)) ctx))
@@ -227,7 +234,8 @@
                `(cons ,name (make-instance ',type))))
     (list (ctx $windows os-context/windows/msvc2010)
           (ctx $linux os-context/linux/gcc)
-          (ctx $windows-msvc6 os-context/windows/msvc6))))
+          (ctx $windows-msvc6 os-context/windows/msvc6)
+          (ctx $windows-msvc2005 os-context/windows/msvc2005))))
 
 ;; Type layout
 

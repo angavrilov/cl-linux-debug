@@ -9,11 +9,17 @@
 (def (class* eas) stl-string/linux (stl-string ptr-string)
   ())
 
+(def (class* eas) stl-string/msvc2005 (stl-string)
+  ())
+
 (def (class* eas) stl-string/msvc2010 (stl-string)
   ())
 
 (def (class* eas) stl-string/msvc6 (stl-string)
   ())
+
+(defmethod substitute-type-class ((context os-context/msvc2005) (str stl-string))
+  (change-class str 'stl-string/msvc2005))
 
 (defmethod substitute-type-class ((context os-context/msvc2010) (str stl-string))
   (change-class str 'stl-string/msvc2010))
@@ -23,6 +29,18 @@
 
 (defmethod substitute-type-class ((context os-context/linux) (str stl-string))
   (change-class str 'stl-string/linux))
+
+(defmethod compute-effective-fields (context (type stl-string/msvc2005))
+  (list (make-instance 'padding :name $pad :size 4)
+        (make-instance 'compound :is-union t
+                       :fields (list
+                                (make-instance 'static-string :name $buffer :size 16)
+                                (make-instance 'pointer :name $ptr :type-name $static-string)))
+        (make-instance 'int32_t :name $length)
+        (make-instance 'int32_t :name $capacity)))
+
+(defmethod %memory-ref-$ ((type stl-string/msvc2005) ref (key (eql t)))
+  (if (< $ref.capacity 16) $ref.buffer $ref.ptr.value))
 
 (defmethod compute-effective-fields (context (type stl-string/msvc2010))
   (list (make-instance 'compound :is-union t
@@ -49,6 +67,13 @@
 
 (defmethod compute-effective-fields ((context os-context/linux) (type stl-vector))
   (list
+   (make-instance 'pointer :name $start)
+   (make-instance 'pointer :name $end)
+   (make-instance 'pointer :name $block-end)))
+
+(defmethod compute-effective-fields ((context os-context/msvc2005) (type stl-vector))
+  (list
+   (make-instance 'padding :name $pad :size 4 :alignment 4)
    (make-instance 'pointer :name $start)
    (make-instance 'pointer :name $end)
    (make-instance 'pointer :name $block-end)))
