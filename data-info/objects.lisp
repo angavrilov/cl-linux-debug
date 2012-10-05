@@ -243,10 +243,12 @@
   (and pad (aif (garbage-word-of mirror) (= it pad) t)))
 
 (defun make-guessed-pointer (info)
-  (make-instance 'pointer
-                 :fields (aif (aand (malloc-chunk-range-of info)
-                                    (obj-type-of it))
-                              (list (make-ad-hoc-type-reference it)))))
+  (aif (aand (malloc-chunk-range-of info)
+             (obj-type-of it))
+       (if (typep it 'global-type-definition)
+           (make-instance 'pointer :type-name (type-name-of it))
+           (make-instance 'pointer :fields (list (make-ad-hoc-type-reference it))))
+       (make-instance 'pointer)))
 
 (defun match-type-by-info (mirror infolist)
   (destructuring-bind (addrv val info start length) (first infolist)
@@ -282,6 +284,10 @@
                           (#b1111 (make-instance 'padding :size 4))
                           (#b1110 (list (make-instance 'int8_t) (make-instance 'padding :size 3)))
                           (#b1100 (list (make-instance 'int16_t) (make-instance 'padding :size 2)))
+                          (#b1000 (list (make-instance 'int16_t) (make-instance 'int8_t)
+                                        (make-instance 'padding :size 1)))
+                          (#b0010 (list (make-instance 'int8_t) (make-instance 'padding :size 1)
+                                        (make-instance 'int16_t)))
                           (otherwise (make-instance 'int32_t)))))
                   (dolist (v (rest infolist))
                     (if (= (second v) val)
@@ -321,12 +327,17 @@
                 (elt-type (cond ((and ds de (= ds ptr))
                                  (make-guessed-pointer pv-info))
                                 ((logtest size 1)
-                                 (make-instance 'int8_t))
+                                 $int8_t)
                                 ((logtest size 2)
-                                 (make-instance 'int16_t))
+                                 $int16_t)
                                 (t
-                                 (make-instance 'int32_t)))))
-           (make-instance 'stl-vector :fields (list elt-type))))
+                                 $int32_t))))
+           (cond ((typep elt-type 'symbol)
+                  (make-instance 'stl-vector :type-name elt-type))
+                 ((and (typep elt-type 'pointer) (type-name-of elt-type))
+                  (make-instance 'stl-vector :pointer-type (type-name-of elt-type)))
+                 (t
+                  (make-instance 'stl-vector :fields (list elt-type))))))
         ;; random pointer
         (t
          (make-guessed-pointer info))))))
