@@ -83,6 +83,36 @@
                 (setf pos (+ pos 4))))
         (nreverse refs)))))
 
+(defun find-heap-words (memory value &key
+                        (mask nil) (min-offset 0) (max-offset nil) (step 4) (type 'int32_t))
+  "Find uint32 values inside heap objects."
+  (let* ((rmask (or mask +uint32-mask+))
+         (rvalue (logand value rmask))
+         (roffset min-offset)
+         (eoffset (or max-offset 0))
+         (rstep step)
+         (refs nil))
+    (declare (type fixnum roffset eoffset)
+             (type (integer 0 4) rstep)
+             (type uint32 rmask rvalue))
+    (do-malloc-chunks (bytes offset limit min-addr)
+        (memory (malloc-chunks-of memory) :int-reader get-int)
+      (when (> (- limit offset) roffset)
+        (let* ((coff (+ offset roffset))
+               (eoff (if max-offset (+ offset eoffset) limit))
+               (climit (min (the fixnum (- limit rstep)) eoff)))
+          (declare (type fixnum coff climit))
+          (loop while (<= coff climit)
+             do (progn
+                  (when (= (logand (get-int coff 4) rmask) rvalue)
+                    (push (make-ad-hoc-memory-ref memory
+                                                  (logand +uint32-mask+ (+ min-addr (- coff offset)))
+                                                  (make-instance type)
+                                                  :parent :search)
+                          refs))
+                  (setf coff (+ coff rstep)))))))
+    refs))
+
 (defun get-search-memory-ranges (memory &key (heap? t) (rodata? nil))
   (append (when heap?
             (mapcar (lambda (x)
@@ -96,11 +126,11 @@
                                                    (or rodata? (writable? (origin-of section)))))
                                  (sections-of (executable-of memory))))))
 
-(defun find-memory-strings (memory text &key at-end?)
+(defun find-memory-strings (memory text &key at-end? (heap? t) (rodata? nil))
   "Find strings anywhere in memory."
   (let* ((refs nil)
          (sbytes (make-string-bytes text :null-terminate? at-end?)))
-    (dolist (range (get-search-memory-ranges memory))
+    (dolist (range (get-search-memory-ranges memory :heap? heap? :rodata? rodata?))
       (nconcf refs (find-memory-bytes memory sbytes (first range) (second range))))
     refs))
 
@@ -110,6 +140,10 @@
       (nconcf refs (find-memory-vectors memory min-size max-size (first range) (second range)
                                         :eltsize eltsize)))
     refs))
+
+(defun find-obj-by-vtable (memory obj-class)
+  (awhen (gethash obj-class (vtable-name-table-of memory))
+    (find-heap-words memory it :max-offset 4 :type 'padding)))
 
 (defun list-changed-ints (extent addr-vector old-vals new-vals)
   (let ((bytes (data-bytes-of extent))

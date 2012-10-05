@@ -13,6 +13,7 @@
    (last-symtables-version 0 :accessor t)
    (global-address-table (make-hash-table :test #'equal) :reader t)
    (vtable-address-table (make-hash-table :test #'equal) :reader t)
+   (vtable-name-table (make-hash-table :test #'equal) :reader t)
    (executable-hashes nil :accessor t)
    (data-definition-files nil :accessor t)
    (os-context (make-instance 'os-context) :accessor t)))
@@ -233,7 +234,8 @@
 
 (defun rebuild-addr-table (ctx hashes &aux
                            (table (global-address-table-of ctx))
-                           (vatable (vtable-address-table-of ctx)))
+                           (vatable (vtable-address-table-of ctx))
+                           (vntable (vtable-name-table-of ctx)))
   (clrhash table)
   (clrhash vatable)
   (dolist (entry *known-symtables*)
@@ -255,7 +257,9 @@
             (vtable-address
              (when (and (name-of element) (value-of element))
                (setf (gethash (+ (value-of element) it) vatable)
-                     (get-$-field-name (name-of element)))))))))))
+                     (get-$-field-name (name-of element))
+                     (gethash (name-of element) vntable)
+                     (+ (value-of element) it))))))))))
 
 (defgeneric check-refresh-context (context)
   (:method :around ((context type-context))
