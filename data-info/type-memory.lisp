@@ -217,6 +217,8 @@
     nil)
   (:method (type ref (key (eql $_parent)))
     (memory-object-ref-parent-ref ref))
+  (:method (type ref (key (eql $_upglobal)))
+    (@ (memory-object-ref-parent-ref ref) $_global))
   (:method ((type global-type-definition) ref (key (eql $_global)))
     ref)
   (:method (type ref (key (eql $_global)))
