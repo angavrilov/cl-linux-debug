@@ -44,7 +44,8 @@
                            (get-address-object-info memory (start-address-of obj))
                            (start-address-of obj)))
        for vfmt = (if (typep val 'memory-object-ref)
-                      (format-hex-offset (start-address-of val))
+                      (format nil "<~A>"
+                              (format-hex-offset (start-address-of val)))
                       (format-ref-value obj val))
        and vinfo = (format nil "~{~A~^; ~}" (append (describe-ref-value obj val) obj-info))
        do (list-store-insert-with-values
