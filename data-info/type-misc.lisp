@@ -13,7 +13,7 @@
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
               bool static-string ptr-string stl-string
-              s-float
+              s-float d-float
               flag-bit
               pointer))
 
@@ -179,6 +179,21 @@
       (cffi:with-foreign-object (tmp :uint32)
         (setf (cffi:mem-ref tmp :float) (float value))
         (setf (parse-int vector offset 4) (cffi:mem-ref tmp :uint32)))
+      (request-memory-write ref 0 size))))
+
+(defmethod %memory-ref-$ ((type d-float) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (cffi:with-foreign-object (tmp :uint64)
+        (setf (cffi:mem-ref tmp :uint64) (parse-int vector offset 8))
+        (cffi:mem-ref tmp :double)))))
+
+(defmethod (setf %memory-ref-$) ((value real) (type d-float) ref (key (eql t)))
+  (let ((size (effective-size-of type)))
+    (with-bytes-for-ref (vector offset ref size)
+      (cffi:with-foreign-object (tmp :uint64)
+        (setf (cffi:mem-ref tmp :double) (float value 1.0d0))
+        (setf (parse-int vector offset 8) (cffi:mem-ref tmp :uint64)))
       (request-memory-write ref 0 size))))
 
 ;; Enum

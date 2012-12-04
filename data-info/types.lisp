@@ -285,6 +285,11 @@
   (:default-initargs :default-size 4)
   (:documentation "A float field."))
 
+(def (class* eas) d-float (primitive-field concrete-item)
+  ()
+  (:default-initargs :default-size 8)
+  (:documentation "A double field."))
+
 ;; Bit
 
 (def (class* eas) bit-item (primitive-field)
