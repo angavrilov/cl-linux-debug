@@ -1634,21 +1634,24 @@
   (read-return-value
    (multiple-value-bind (Symbol String)
                         (read-xmlisp-name Stream)
+     (declare (special |$xml-filename$| |$xml-stream$|))
+     (assert (eq Stream |$xml-stream$|))
      (let ((Element-Class-Name (element-class-name Symbol))
-           (Original-Case-Symbol (find-symbol String)))
+           (Original-Case-Symbol (find-symbol String))
+           (File-Name |$xml-filename$|))
        (cond
         ;; 1) lookup element class name table
         (Element-Class-Name
          ;; if this name is in the table we should interpret lack of class to be an error
          (if (find-class Element-Class-Name nil)
-           (make-instance Element-Class-Name :is-created-by-xml-reader t :file (pathname-from-stream Stream))
+           (make-instance Element-Class-Name :is-created-by-xml-reader t :file File-Name)
            (error "element \"~A\" cannot produce instance of class \"~A\" because that class does not exist" String Element-Class-Name)))
         ;; 2) Original Case matches class name
         ((and Original-Case-Symbol (find-class Original-Case-Symbol nil))
-         (make-instance Original-Case-Symbol :is-created-by-xml-reader t :file (pathname-from-stream Stream)))
+         (make-instance Original-Case-Symbol :is-created-by-xml-reader t :file File-Name))
         ;; 3) readtable translated case matches class name
         ((find-class Symbol nil)
-         (make-instance Symbol :is-created-by-xml-reader t :file (pathname-from-stream Stream)))
+         (make-instance Symbol :is-created-by-xml-reader t :file File-Name))
         ;; 4) xml-content
         (t
          (make-instance 
@@ -1658,7 +1661,7 @@
                (error "cannot find class \"~A\" ~%XMlisp is trying to create an instance of this class while reading \"<~A ...\"" Symbol String))
            :name Symbol
            :is-created-by-xml-reader t
-           :file (pathname-from-stream Stream))))))))
+           :file File-Name)))))))
 
 
 (defun READ-WHITE-SPACE (Stream)
@@ -2147,8 +2150,9 @@
     (unread-char Next-Char Stream))
   ;; lets read XML
   (skip-xml-header Stream)   ;; this only needs to be done once
-  (let ((|$xml-stream$| Stream))
-    (declare (special |$xml-stream$|))
+  (let ((|$xml-stream$| Stream)
+        (|$xml-filename$| (pathname-from-stream Stream)))
+    (declare (special |$xml-stream$| |$xml-filename$|))
     (read-name-and-make-instance Stream)))
 
 
