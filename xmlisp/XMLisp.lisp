@@ -751,12 +751,13 @@
 ;; names and print names
 
 (defmethod XML-TAG-NAME-SYMBOL ((Self xml-serializer))
-  (or (class-element-name (type-of Self))
-      (type-of Self)))
+  (let ((cname (class-name (class-of Self))))
+    (or (class-element-name cname)
+        cname)))
 
 
 (defmethod XML-TAG-NAME-STRING ((Self xml-serializer))
-  (string-downcase (symbol-name (xml-tag-name-symbol Self))))
+  (xmlisp-symbol-name (xml-tag-name-symbol Self)))
 
 
 ;; map objects into their components
@@ -1286,8 +1287,12 @@
 ; Symbol functions            |
 ;_____________________________
 
+(defvar *XMLisp-Symbol-Name-Table* (make-hash-table :test #'eq) "cached symbol print names")
+
 (defun XMLISP-SYMBOL-NAME (Symbol)
-  (string-downcase (symbol-name Symbol)))
+  (or (gethash Symbol *XMLisp-Symbol-Name-Table*)
+      (setf (gethash Symbol *XMLisp-Symbol-Name-Table*)
+            (string-downcase (symbol-name Symbol)))))
 
 
 (defun READTABLE-STRING (Name) "
@@ -1520,10 +1525,13 @@
    and the newline character becomes \"&#10;\""
   ;; should use *XML-ENTITY-REFERENCE-TABLE*
   (unless (stringp String) (setq String (write-to-string String))) ;; just in case
-  (let ((Output (make-array 40 :fill-pointer 0 :element-type 'character :adjustable t)))
-    (with-input-from-string (Input String)
-      (loop
-        (let ((Char (or (read-char Input nil nil) (return Output))))
+  (let ((Output (make-array (length String) :fill-pointer 0 :element-type 'character :adjustable t)))
+    (declare (type string String)
+             (optimize (speed 1)))
+    (prog1
+        Output
+      (dotimes (i (length String))
+        (let ((Char (elt String i)))
           (case Char
             (#\<
              (vector-push-extend #\& Output)
@@ -1964,9 +1972,13 @@
   (dotimes (I Level)
     (princ "  " Stream)))
 
+(defun %FORMAT-ATTRIBUTE-NAME (Name Stream)
+  (write-char #\  Stream)
+  (write-string (xmlisp-symbol-name Name) Stream)
+  (write-char #\= Stream))
 
 (defmethod PRINT-SLOT-NAME-VALUE-TYPE-AS-ATTRIBUTE ((Self xml-serializer) Name Value Type Stream)
-  (format Stream " ~A=" (string-downcase (symbol-name Name)))
+  (%format-attribute-name Name Stream)
   (print-typed-attribute-value Value Type Stream))
 
 
