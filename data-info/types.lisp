@@ -82,7 +82,7 @@
   (unless (typep obj 'concrete-item)
     (error "Could not instantiate an abstract type class: ~S" obj)))
 
-(defmethod print-slots ((obj abstract-item))
+(defun %compute-print-slots (slot-list)
   (stable-sort
    (remove-if (lambda (x &aux
                   (sym (closer-mop:slot-definition-name x))
@@ -90,12 +90,19 @@
                 (or (starts-with-subseq "EFFECTIVE-" name)
                     (starts-with-subseq "SYNTAX-" name)
                     (member sym '(xml::is-created-by-xml-reader file copy-origin default-size))))
-              (class-slots (class-of obj)))
+              slot-list)
    #'< :key (lambda (x &aux (name (closer-mop:slot-definition-name x)))
               (or (position name '(name type-name is-union count offset size alignment))
-                  (if (eq name 'comment)
-                      (if (stringp (comment-of obj)) 100 -1))
+                  (if (eq name 'comment) 100)
                   99))))
+
+(defparameter *print-slots-cache* (make-hash-table :test #'eq :weakness :key))
+
+(defmethod print-slots ((obj abstract-item))
+  (let ((slots (class-slots (class-of obj))))
+    (or (gethash slots *print-slots-cache*)
+        (setf (gethash slots *print-slots-cache*)
+              (%compute-print-slots slots)))))
 
 (defgeneric copy-data-definition (obj)
   (:method ((obj t)) obj)
