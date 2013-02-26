@@ -1304,8 +1304,7 @@
      ((every #'lower-case-p Name) (string-upcase Name))
      (t Name)))))
 
-
-(defun MAKE-XMLISP-SYMBOL (Name) "
+(defun %DO-MAKE-XMLISP-SYMBOL (Name) "
   in:  Name string.
   out: Symbol symbol.
   Turn <Name> into <Symbol> taking into account the current readtable's case."
@@ -1319,6 +1318,16 @@
         (find-package (intern (readtable-string (subseq Name 0 Colon-Position))))
         (error "trying to read XML name \"~A\" but contains reference to non existing package." Name)))
       (intern (readtable-string Name)))))
+
+(defvar *XMLisp-Symbol-Table* (make-hash-table :test #'equal) "cached symbol identities")
+
+(defun MAKE-XMLISP-SYMBOL (Name) "
+  in:  Name string.
+  out: Symbol symbol.
+  Turn <Name> into <Symbol> taking into account the current readtable's case."
+  (or (gethash Name *XMLisp-Symbol-Table*)
+      (setf (gethash Name *XMLisp-Symbol-Table*)
+            (%do-make-xmlisp-symbol Name))))
 
 ;_____________________________
 ; Pathname conversion         |
