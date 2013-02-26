@@ -2044,7 +2044,7 @@
        (class-slots (class-of Self))
        (mapcar
         #'(lambda (Slot-Name)
-            (or (find-slot-definition Self Slot-Name)
+            (or (and (symbolp Slot-Name) (find-slot-definition Self Slot-Name))
                 ;; if slot definition is not found return slot-name, caller could try to find accessor function
                 Slot-Name))
         Slot-Names)))))
