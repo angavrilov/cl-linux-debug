@@ -726,15 +726,19 @@
   Return the class name."
  (gethash Element-Name *XMLISP-Element-Class-Names*))
 
+(defvar *XMLISP-Class-Element-Names* (make-hash-table :test #'eq))
 
 (defun CLASS-ELEMENT-NAME (Class-Name) "
   in:  Class-Name symbol.
   out: Element-Name symbol.
   Return the element-name matching <class-name>."
- (maphash
-  #'(lambda (Key Value)
-      (when (eq Class-Name Value) (return-from class-element-name Key)))
-  *XMLISP-Element-Class-Names*))
+  (or (gethash Class-Name *XMLISP-Class-Element-Names*)
+      (progn
+        (clrhash *XMLISP-Class-Element-Names*)
+        (maphash
+         #'(lambda (Key Value)
+             (setf (gethash Value *XMLISP-Class-Element-Names*) Key))
+         *XMLISP-Element-Class-Names*))))
 
 
 ;____________________________
