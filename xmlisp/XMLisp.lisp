@@ -834,7 +834,9 @@
 
 (defmethod XML-PRINTABLE-AS-ATTRIBUTE-VALUE-P ((Self symbol))    t)
 
-(defmethod XML-PRINTABLE-AS-ATTRIBUTE-VALUE-P ((Self list))    t)
+; using list+symbol somehow confuses sbcl's dispatch code and forces
+; it to take the completely unoptimized path on NIL argument:
+(defmethod XML-PRINTABLE-AS-ATTRIBUTE-VALUE-P ((Self cons))    t)
 
 (defmethod XML-PRINTABLE-AS-ATTRIBUTE-VALUE-P ((Self pathname))    t)
 
