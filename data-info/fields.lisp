@@ -70,6 +70,21 @@
 (defun init-$-field (sym)
   (unless (get sym 'is-$-var?)
     (setf (get sym 'is-$-var?) t)
+    ;; Running eval for every identifier turns out to be very slow
+    #+sbcl
+    (progn
+      (setf (fdefinition sym)
+            (lambda (arg)
+              ($ arg sym))
+            (compiler-macro-function sym)
+            (lambda (whole env)
+              (declare (ignore env))
+              (if (and (eq (first whole) sym)
+                       (= (length whole) 2))
+                  `($ ,(second whole) ',sym)
+                  whole)))
+      (sb-c::%define-symbol-macro sym `(quote ,sym) (sb-c:source-location)))
+    #-sbcl
     (eval `(progn
              (declaim (inline ,sym))
              (defun ,sym (arg)
