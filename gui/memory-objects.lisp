@@ -158,7 +158,7 @@
   (public-type-name-of (ref-type-of node)))
 
 (defmethod col-value-of ((node real-memory-object-node))
-  (ensure-string (format-ref-value (ref-of node) (ref-value-of node))))
+  (sanitize-string (ensure-string (format-ref-value (ref-of node) (ref-value-of node)))))
 
 (defun format-hex-info (ref count &key ellipsis? address? (length (length-of ref)))
   (when (integerp (start-address-of ref))
@@ -167,7 +167,7 @@
                        and j from offset below (length vector)
                        collect (aref vector j)))
              (chars (loop for c in bytes
-                       collect (if (>= c 32) (code-char c) #\?))))
+                       collect (if (and (>= c 32) (< c 128)) (code-char c) #\?))))
         (format nil "~@[~A: ~]~{~2,'0X~^ ~}~A (~A)"
                 (if address? (format-hex-offset (start-address-of ref)))
                 bytes (if (and ellipsis? (> length count)) "..." "")
@@ -185,7 +185,7 @@
             (format-ref-value (ref-of node) (ref-prev-value-of node)))))
 
 (defmethod col-info-of ((node real-memory-object-node))
-  (format nil "~{~A~^; ~}" (ref-info-of node)))
+  (sanitize-string (format nil "~{~A~^; ~}" (ref-info-of node))))
 
 ;; Specific node types
 

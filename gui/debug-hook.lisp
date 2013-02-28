@@ -12,6 +12,14 @@
 (defun ensure-string (data)
   (if (stringp data) data (format nil "~S" data)))
 
+(defun sanitize-string (data)
+  (let ((str (make-array (length data) :element-type 'character :initial-contents data)))
+    (declare (optimize (speed 3)))
+    (dotimes (i (length str) str)
+      (let* ((code (char-code (elt str i))))
+        (when (or (< code 32) (>= code 128))
+          (setf (elt str i) #\?))))))
+
 ;;; Query dialog and streams
 
 (defun run-query-dialog (request &key no-text? init-text)
