@@ -113,6 +113,7 @@
   ((:high "HighPosition")))
 
 (cenum (arg-access :base-type :int32)
+  ((:none "0"))
   ((:read "READ"))
   ((:write "WRITE")))
 

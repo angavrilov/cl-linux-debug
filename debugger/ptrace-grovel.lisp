@@ -13,7 +13,7 @@
 
 ;; Signals
 
-(cstruct siginfo_t "struct siginfo"
+(cstruct siginfo_t "siginfo_t"
          (si_pid "si_pid" :type :int)
          (si_status "si_status" :type :int)
          (si_code "si_code" :type :int))
