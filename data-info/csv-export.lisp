@@ -91,7 +91,9 @@
                (virtual-methods-of type))
       (let* ((vroot (format nil "~A::vtable" root))
              (voffset 0)
-             (dsize (destructor-vtbl-size-by-os (os-context-of *csv-context*))))
+             (dsize (destructor-vtbl-size-by-os (os-context-of *csv-context*)))
+             (dargs (destructor-extra-args-by-os (os-context-of *csv-context*)))
+             (margs (method-extra-args-by-os (os-context-of *csv-context*))))
         (loop for method in (methods-of (virtual-methods-of type)) and i from 0
            for size = (if (is-destructor-p method) dsize 4)
            and rtype = (awhen (ret-type-of method)
@@ -101,12 +103,17 @@
            and eitem = (cond ((typep rtype 'enum-field)
                               (type-name-of rtype))
                              ((typep rtype 'symbol) rtype))
+           and asize = (loop for arg in (fields-of method)
+                          sum (if (typep arg 'd-float) 8 4))
            do (progn
                 ; multiple-value-bind (item list-cb)
                 ;  (compute-container-entry nil #+() (when (typep ertype 'pointer)
                 ;                             (effective-contained-item-of ertype)))
                 (format *csv-stream* "\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\",\"~A\"~%"
-                        vroot 1 (format-hex-offset voffset) (format-hex-offset size) "vmethod"
+                        vroot 1 (format-hex-offset voffset) (format-hex-offset size)
+                        (format nil "vmethod(~A/~A)"
+                                (length (fields-of method))
+                                (+ asize (if (is-destructor-p method) dargs margs)))
                         (or (subname nil (name-of method))
                             (if (is-destructor-p method) (format nil "~~~A" root)
                                 (format nil "vmethod~A" i)))

@@ -829,6 +829,14 @@
   (:method ((context os-context)) 4)
   (:method ((context os-context/linux)) 8))
 
+(defgeneric method-extra-args-by-os (context)
+  (:method ((context os-context)) 4)
+  (:method ((context os-context/windows)) 0))
+
+(defgeneric destructor-extra-args-by-os (context)
+  (:method ((context os-context)) 4)
+  (:method ((context os-context/windows)) 4))
+
 (defmethod compute-effective-fields (context (type inheriting-type))
   (nconc (awhen (inherits-from-of type)
            (list (setf (effective-inherited-child-of type)
