@@ -12,7 +12,7 @@
                      collect `(defmethod %memory-ref-$ ((type ,name) ref (key (eql $_type))) ,kwd)))))
   (primitives int8_t uint8_t int16_t uint16_t
               int32_t uint32_t int64_t uint64_t
-              bool static-string ptr-string stl-string
+              bool static-string ptr-string stl-string stl-fstream
               s-float d-float
               flag-bit
               pointer))

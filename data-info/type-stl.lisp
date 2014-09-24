@@ -314,3 +314,13 @@
 
 (defmethod sequence-content-items ((type stl-set/windows) ref)
   #()) ; TODO
+
+;; STL fstream
+
+(defmethod compute-effective-fields ((context os-context/linux) (type stl-fstream))
+  (list
+   (make-instance 'padding :name $data :size 284 :alignment 4)))
+
+(defmethod compute-effective-fields ((context os-context/msvc2010) (type stl-fstream))
+  (list
+   (make-instance 'padding :name $data :size 184 :alignment 8)))

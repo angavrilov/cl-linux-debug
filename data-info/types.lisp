@@ -395,6 +395,12 @@
 
 (defmethod xml:xml-tag-name-symbol ((bv stl-set)) 'stl-set)
 
+(def (class* eas) stl-fstream (virtual-compound-item primitive-field concrete-item)
+  ()
+  (:documentation "An STL file stream object."))
+
+(defmethod xml:xml-tag-name-symbol ((bv stl-fstream)) 'stl-fstream)
+
 ;; Enums
 
 (def (class* eas) abstract-enum-item (data-item abstract-real-compound-item)
