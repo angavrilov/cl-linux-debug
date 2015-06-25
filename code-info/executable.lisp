@@ -4,7 +4,7 @@
 
 (defvar *executables* nil)
 
-(defvar *shared-executables* '("/usr/bin/wine" "/usr/bin/wine-preloader")
+(defvar *shared-executables* '("/usr/bin/wine" "/usr/bin/wine-preloader" "/usr/bin/wine32" "/usr/bin/wine32-preloader")
   "Executables to treat as shared libraries.")
 
 (defun get-executable-image (path)
