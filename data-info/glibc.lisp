@@ -165,27 +165,33 @@
       (result-sv/push-extend (logior pos/addr 1))
       (values start-address pos/addr))))
 
+(defun try-disassemble-glibc-main-arena (memory funcname)
+  (multiple-value-bind (insns got reloc)
+      (disassemble-function (executable-of (process-of memory)) funcname)
+    (when insns
+      (bind ((offset nil))
+            (dolist (insn insns)
+              (let ((arg (x86-instruction-argument1 insn)))
+                ;; Search for lock cmpxchg [ebx+*],*
+                (when (and (eq (x86-instruction-mnemonic insn) :cmpxchg)
+                           (assoc :lock (x86-instruction-prefixes insn))
+                           (typep arg 'x86-argument-memory)
+                           (eq (x86-argument-memory-base-reg arg) :ebx)
+                           (eq (x86-argument-memory-index-reg arg) nil))
+                  (let ((xoffset (x86-argument-memory-displacement arg)))
+                    (if offset
+                        (assert (= offset xoffset))
+                        (setf offset xoffset))))))
+            (when offset
+              (+ reloc got offset))))))
+
 (defun get-glibc-main-arena-address (memory)
   (let ((val (load-time-value (list nil))))
     (or (car val)
         (setf (car val)
-              (multiple-value-bind (insns got reloc)
-                  (disassemble-function (executable-of (process-of memory)) "mallinfo")
-                (when insns
-                  (bind ((offset nil))
-                    (dolist (insn insns)
-                      (let ((arg (x86-instruction-argument1 insn)))
-                        (when (and (eq (x86-instruction-mnemonic insn) :cmpxchg)
-                                   (assoc :lock (x86-instruction-prefixes insn))
-                                   (typep arg 'x86-argument-memory)
-                                   (eq (x86-argument-memory-base-reg arg) :ebx)
-                                   (eq (x86-argument-memory-index-reg arg) nil))
-                          (let ((xoffset (x86-argument-memory-displacement arg)))
-                            (if offset
-                                (assert (= offset xoffset))
-                                (setf offset xoffset))))))
-                    (assert (and offset got))
-                    (+ reloc got offset))))))))
+              (loop for fn in (list "mallinfo" "mallopt")
+                 when (try-disassemble-glibc-main-arena memory fn)
+                 return it)))))
 
 (defun get-glibc-main-arena (memory)
   (or (get-memory-global memory $glibc:main_arena)
