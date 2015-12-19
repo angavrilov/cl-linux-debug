@@ -319,7 +319,7 @@
                (when expander?
                  (setf (tree-view-expander-column view) column))
                column)))
-      (add-column 0 "Address" 80 1.0 nil)
+      (add-column 0 "Address" 80 1.0 nil :color-col 9)
       (add-column 1 "Name" 150 0.0 t :weight? t :expander? t)
       (add-column 2 "Type" 100 0.0 nil :color-col 8)
       (add-column 3 "Value" 100 0.0 nil)

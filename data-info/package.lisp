@@ -96,6 +96,7 @@
            #:call-helper #:call-helper-if-found
            #:describe-address-in-context
            #:get-address-info-range
+           #:memory-object-info-range
            #:guess-types-by-data
            #:load-data-definition
            #:register-data-definition

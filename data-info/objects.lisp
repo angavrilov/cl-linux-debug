@@ -196,14 +196,16 @@
 (defmethod describe-address-in-context append ((mirror object-memory-mirror) addr)
   (describe-address-in-context (get-address-object-info mirror addr) addr))
 
+(defun memory-object-info-range (info &key (use-defs? t))
+  (awhen (and info
+              (or (malloc-chunk-range-of info)
+                  (region-of info)
+                  (and use-defs? (global-of info))))
+    (values (start-address-of it) (length-of it))))
+
 (defun get-address-info-range (memory addr)
   (bind ((info (get-address-object-info memory addr))
-         ((:values r-start r-len)
-          (awhen (and info
-                      (or (malloc-chunk-range-of info)
-                          (region-of info)
-                          (global-of info)))
-            (values (start-address-of it) (length-of it)))))
+         ((:values r-start r-len) (memory-object-info-range info)))
     (values info r-start r-len)))
 
 (defgeneric get-address-info-ref (mirror info)

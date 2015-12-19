@@ -26,19 +26,34 @@
 
 ;; Core widget and node classes
 
+(defvar *no-value* '#:no-value)
+
 (def (class* e) memory-object-tree (object-tree-view)
   ((memory :reader t))
   (:default-initargs
       :column-types
       '("gchararray" "gchararray" "gchararray" "gchararray" "gchararray"
-        "gchararray" "gchararray" "gint" "gchararray")
+        "gchararray" "gchararray" "gint" "gchararray" "gchararray")
       :column-accessors
       '(col-offset-of col-name-of col-type-of col-value-of col-info-of
-        col-comment-of col-row-color-of col-name-weight-of col-type-color-of)))
+        col-comment-of col-row-color-of col-name-weight-of
+        col-type-color-of col-offset-color-of)))
 
 (def (class* e) memory-object-node (object-node address-chunk)
-  ((master-node nil :reader t))
+  ((master-node nil :reader t)
+   (memory-info *no-value* :documentation "cached get-address-object-info data"))
   (:default-initargs :start-address nil :length 0))
+
+(defgeneric memory-info-of (node)
+  (:method ((node memory-object-node))
+    (aif (master-node-of node)
+         (memory-info-of it)
+         (with-slots (memory-info) node
+           (if (eq memory-info *no-value*)
+               (setf memory-info
+                     (awhen (start-address-of node)
+                       (get-address-object-info (memory-of (view-of node)) it)))
+               memory-info)))))
 
 (defgeneric col-offset-of (node)
   (:method ((node memory-object-node))
@@ -60,6 +75,20 @@
 (defgeneric col-row-color-of (node)
   (:method ((node memory-object-node)) "black"))
 
+(defgeneric col-offset-color-of (node)
+  (:method ((node memory-object-node))
+    (let ((cur (start-address-of node))
+          (len (or (length-of node) 1/8)))
+      (when cur
+        (bind (((:values r-start r-len)
+                (memory-object-info-range (memory-info-of node) :use-defs? nil)))
+          (when (and r-start
+                     (not (<= r-start cur (+ cur len) (+ r-start r-len))))
+            "#FF4000")))))
+  (:method :around ((node memory-object-node))
+    (or (call-next-method)
+        (col-row-color-of node))))
+
 (defgeneric col-type-color-of (node)
   (:method ((node memory-object-node))
     nil)
@@ -72,7 +101,10 @@
 
 (defgeneric refresh-node-values (node)
   (:method ((node memory-object-node))
-    (map nil #'refresh-node-values (children-of node))))
+    (map nil #'refresh-node-values (children-of node)))
+  (:method :around ((node memory-object-node))
+    (setf (slot-value node 'memory-info) *no-value*)
+    (call-next-method)))
 
 (def (class* e) memory-object-placeholder-node (memory-object-node)
   ((col-name "Processing..." :accessor t)
@@ -89,8 +121,6 @@
   (apply #'change-class node class :lazy-placeholder-class 'memory-object-placeholder-node args))
 
 ;; Real reference
-
-(defvar *no-value* '#:no-value)
 
 (def (class* e) real-memory-object-node (memory-object-node)
   ((ref :reader t)
@@ -211,7 +241,8 @@
           (setf ref (make-memory-ref (memory-object-ref-memory ref)
                                      ref-start it
                                      :parent (ref-of node) :key t)))))
-    (setf (start-address-of child) ref-start)
+    (setf (start-address-of child) ref-start
+          (slot-value child 'memory-info) info)
     (layout-children-in-range node (list ref) child r-start r-len :root? t)))
 
 ;; Array
@@ -452,6 +483,7 @@
          (master (make-instance 'memory-object-placeholder-node :view view
                                 :col-name "ROOT"
                                 :start-address (start-address-of base-ref)
+                                :memory-info info
                                 :length (max (length-of base-ref)
                                              (if (and r-start r-len)
                                                  (- (+ r-start r-len) (start-address-of base-ref))
