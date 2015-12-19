@@ -6,11 +6,13 @@
 
 (def (class* e) address-chunk ()
   ((start-address :accessor t)
-   (length :accessor t)))
+   (length :accessor t))
+  (:documentation "Chunk of an address space with start and length."))
 
 (def (class* e) data-chunk (address-chunk)
-  ((start-offset 0 :reader t)
-   (data-bytes :reader t)))
+  ((start-offset 0 :reader t :documentation "Offset within the data buffer")
+   (data-bytes :reader t))
+  (:documentation "Mapped executable memory chunk with contained data"))
 
 (defstruct indexed-chunks
   (addrs nil :type (simple-array * (*)))
@@ -62,11 +64,12 @@
    (section-name :reader t)
    (loaded? :reader t)
    (writable? :reader t)
-   (executable? :reader t)))
+   (executable? :reader t))
+  (:documentation "Executable section, i.e. code, data, bss etc"))
 
 (def (class* e) section-set ()
   ((sections nil :reader t)
-   (section-map (make-chunk-table) :reader t)))
+   (section-map (make-chunk-table) :reader t :documentation "Binary tree for lookup by address")))
 
 (defgeneric find-section-by-name (executable name)
   (:method ((exec section-set) name)
@@ -82,8 +85,9 @@
    (binary-timestamp :reader t :initform nil)
    (entry-address :reader t)
    (shared-lib? :reader t)
-   (region-map (make-chunk-table) :reader t)
-   (region-name-map (make-hash-table :test #'equal) :reader t)))
+   (region-map (make-chunk-table) :reader t :documentation "Symbol table data")
+   (region-name-map (make-hash-table :test #'equal) :reader t))
+  (:documentation "Information about an on-disk executable image"))
 
 (defun set-executable-sections (exec sections)
   (setf (slot-value exec 'sections) sections)
@@ -115,7 +119,8 @@
 
 (def (class* e) executable-region (data-chunk)
   ((section :reader t)
-   (symbol-name nil :reader t)))
+   (symbol-name nil :reader t))
+  (:documentation "Part of an executable image associated with a symbol"))
 
 (defmethod image-of ((obj executable-region))
   (image-of (section-of obj)))
@@ -144,8 +149,9 @@
 ;; Loaded executable
 
 (def (class* e) loaded-object ()
-  ((origin :reader t)
-   (relocation-offset :reader t)))
+  ((origin :reader t :documentation "Non-relocated object instance")
+   (relocation-offset :reader t))
+  (:documentation "Part of an executable relocated and mapped into memory"))
 
 (defgeneric relocated? (obj)
   (:method ((obj loaded-object))
@@ -164,14 +170,16 @@
                      :data-bytes (data-bytes-of base)))))
 
 (def (class* e) loaded-section (data-chunk loaded-object)
-  ((loaded-image :reader t)
-   (mapping :reader t)))
+  ((loaded-image :reader t :documentation "parent")
+   (mapping :reader t))
+  (:documentation "Relocated section of an image"))
 
 (defmethod section-name-of ((section loaded-section))
   (section-name-of (origin-of section)))
 
 (def (class* e) loaded-image (section-set loaded-object)
-  ((executable :reader t)))
+  ((executable :reader t))
+  (:documentation "Relocated executable/library image"))
 
 (defmethod md5-hash-of ((image loaded-object))
   (md5-hash-of (origin-of image)))
@@ -186,7 +194,8 @@
 (def (class* e) loaded-executable (section-set)
   ((main-image nil :reader t)
    (all-images nil :accessor t)
-   (function-map (make-chunk-table) :reader t)))
+   (function-map (make-chunk-table) :reader t))
+  (:documentation "Data of all images comprising a loaded program"))
 
 (defgeneric detect-image-relocation (image executable mappings))
 
@@ -199,6 +208,7 @@
   (symbol-name-of (origin-of lrgn)))
 
 (defgeneric find-region-by-address (executable addr &key next?)
+  (:documentation "Returns the executable symbol region associated with the given address")
   (:method ((image null) addr &key next?)
     (declare (ignore next?))
     nil)
@@ -222,6 +232,7 @@
       (find-region-by-address (loaded-image-of it) addr :next? next?))))
 
 (defgeneric find-regions-by-name (executable name)
+  (:documentation "Returns all symbols with the given name in the given executable")
   (:method ((image null) name)
     nil)
   (:method (image (name null))
