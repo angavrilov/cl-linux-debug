@@ -283,6 +283,10 @@
   (def-simple-int int32_t 4 t)
   (def-simple-int uint64_t 8 nil)
   (def-simple-int int64_t 8 t)
+  (def-simple-int ulong 4 nil)
+  (def-simple-int long 4 t)
+  (def-simple-int uintptr_t 4 nil)
+  (def-simple-int intptr_t 4 t)
   (def-simple-int bool 1 nil))
 
 ;; Float

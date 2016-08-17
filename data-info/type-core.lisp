@@ -210,6 +210,9 @@
 (def (class e) os-context/msvc2010 (os-context)
   ())
 
+(def (class e) os-context/msvc2015 (os-context)
+  ())
+
 (def (class e) os-context/windows/msvc6 (os-context/msvc6 os-context/windows)
   ())
 
@@ -219,12 +222,16 @@
 (def (class e) os-context/windows/msvc2010 (os-context/msvc2010 os-context/windows)
   ())
 
+(def (class e) os-context/windows/msvc2015 (os-context/msvc2015 os-context/windows)
+  ())
+
 (defgeneric os-type-of (context)
   (:method ((ctx os-context)) nil)
   (:method ((ctx os-context/linux)) $linux)
   (:method ((ctx os-context/windows)) $windows)
   (:method ((ctx os-context/windows/msvc6)) $windows-msvc6)
-  (:method ((ctx os-context/windows/msvc2005)) $windows-msvc2005))
+  (:method ((ctx os-context/windows/msvc2005)) $windows-msvc2005)
+  (:method ((ctx os-context/windows/msvc2010)) $windows-msvc2010))
 
 (defgeneric os-context-of (context)
   (:method ((ctx os-context)) ctx))
@@ -232,10 +239,11 @@
 (defparameter *known-os-contexts*
   (macrolet ((ctx (name type)
                `(cons ,name (make-instance ',type))))
-    (list (ctx $windows os-context/windows/msvc2010)
+    (list (ctx $windows os-context/windows/msvc2015)
           (ctx $linux os-context/linux/gcc)
           (ctx $windows-msvc6 os-context/windows/msvc6)
-          (ctx $windows-msvc2005 os-context/windows/msvc2005))))
+          (ctx $windows-msvc2005 os-context/windows/msvc2005)
+          (ctx $windows-msvc2010 os-context/windows/msvc2010))))
 
 ;; Type layout
 

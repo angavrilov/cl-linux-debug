@@ -15,6 +15,9 @@
 (def (class* eas) stl-string/msvc2010 (stl-string)
   ())
 
+(def (class* eas) stl-string/msvc2015 (stl-string)
+  ())
+
 (def (class* eas) stl-string/msvc6 (stl-string)
   ())
 
@@ -23,6 +26,9 @@
 
 (defmethod substitute-type-class ((context os-context/msvc2010) (str stl-string))
   (change-class str 'stl-string/msvc2010))
+
+(defmethod substitute-type-class ((context os-context/msvc2015) (str stl-string))
+  (change-class str 'stl-string/msvc2015))
 
 (defmethod substitute-type-class ((context os-context/msvc6) (str stl-string))
   (change-class str 'stl-string/msvc6))
@@ -52,6 +58,17 @@
         (make-instance 'padding :name $pad :size 4)))
 
 (defmethod %memory-ref-$ ((type stl-string/msvc2010) ref (key (eql t)))
+  (if (< $ref.capacity 16) $ref.buffer $ref.ptr.value))
+
+(defmethod compute-effective-fields (context (type stl-string/msvc2015))
+  (list (make-instance 'compound :is-union t
+                       :fields (list
+                                (make-instance 'static-string :name $buffer :size 16)
+                                (make-instance 'pointer :name $ptr :type-name $static-string)))
+        (make-instance 'int32_t :name $length)
+        (make-instance 'int32_t :name $capacity)))
+
+(defmethod %memory-ref-$ ((type stl-string/msvc2015) ref (key (eql t)))
   (if (< $ref.capacity 16) $ref.buffer $ref.ptr.value))
 
 (defmethod compute-effective-fields (context (type stl-string/msvc6))
@@ -84,6 +101,12 @@
    (make-instance 'pointer :name $end)
    (make-instance 'pointer :name $block-end)
    (make-instance 'padding :name $pad :size 4 :alignment 4)))
+
+(defmethod compute-effective-fields ((context os-context/msvc2015) (type stl-vector))
+  (list
+   (make-instance 'pointer :name $start)
+   (make-instance 'pointer :name $end)
+   (make-instance 'pointer :name $block-end)))
 
 (defmethod compute-effective-fields ((context os-context/msvc6) (type stl-vector))
   (list
@@ -161,8 +184,14 @@
 (def (class* eas) stl-bit-vector/windows (stl-bit-vector)
   ())
 
+(def (class* eas) stl-bit-vector/msvc2015 (stl-bit-vector)
+  ())
+
 (defmethod substitute-type-class ((context os-context/windows) (str stl-bit-vector))
   (change-class str 'stl-bit-vector/windows))
+
+(defmethod substitute-type-class ((context os-context/windows/msvc2015) (str stl-bit-vector))
+  (change-class str 'stl-bit-vector/msvc2015))
 
 (defmethod substitute-type-class ((context os-context/linux) (str stl-bit-vector))
   (change-class str 'stl-bit-vector/linux))
@@ -187,6 +216,16 @@
             (make-instance 'int32_t :name $size))))
 
 (defmethod array-base-dimensions ((type stl-bit-vector/windows) ref)
+  (stl-vector-dimensions ref 1/8 :size-override $ref.size))
+
+(defmethod compute-effective-fields (context (type stl-bit-vector/msvc2015))
+  (flatten (list
+            (make-instance 'pointer :name $start)
+            (make-instance 'pointer :name $end)
+            (make-instance 'pointer :name $block-end)
+            (make-instance 'int32_t :name $size))))
+
+(defmethod array-base-dimensions ((type stl-bit-vector/msvc2015) ref)
   (stl-vector-dimensions ref 1/8 :size-override $ref.size))
 
 ;; STL deque
@@ -322,5 +361,9 @@
    (make-instance 'padding :name $data :size 284 :alignment 4)))
 
 (defmethod compute-effective-fields ((context os-context/msvc2010) (type stl-fstream))
+  (list
+   (make-instance 'padding :name $data :size 184 :alignment 8)))
+
+(defmethod compute-effective-fields ((context os-context/msvc2015) (type stl-fstream))
   (list
    (make-instance 'padding :name $data :size 184 :alignment 8)))

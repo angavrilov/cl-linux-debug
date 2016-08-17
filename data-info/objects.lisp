@@ -257,13 +257,15 @@
     (declare (ignore addrv))
     (bind (((&optional next nnext item3 item4 item5 item6 &rest tail) (rest infolist))
            (section (section-of info))
-           (os (os-type-of mirror)))
+           (os (os-type-of mirror))
+           (os-ctx (os-context-of mirror)))
       (declare (ignore item3 tail))
       (cond
         ;; string
         ((if (eq os $linux)
              (eql (- val #xC) start)
-             (and (is-possible-garbage? mirror (second item6))
+             (and (or (typep os-ctx 'os-context/msvc2015)
+                      (is-possible-garbage? mirror (second item6)))
                   (bind ((len (second item4))
                          (cap (second item5)))
                     (and
@@ -298,7 +300,7 @@
                           (setf ahead (second v))
                           (return))))
                   ;; Detect empty Windows vectors
-                  (when (and (= val 0) (eq os $windows)
+                  (when (and (= val 0) (typep os-ctx 'os-context/msvc2010)
                              (>= cnt 3)
                              (eql ahead (garbage-word-of mirror)))
                     (incf cnt -3)
