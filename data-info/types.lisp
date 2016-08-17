@@ -30,6 +30,7 @@
 
 (def (class* eas) abstract-item (xml-serializer)
   ((comment nil :accessor t)
+   (since nil :accessor t)
    (copy-origin nil :accessor t)
    (effective-finalized? nil :accessor t)
    (effective-tag :accessor t)

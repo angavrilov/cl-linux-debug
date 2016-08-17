@@ -211,9 +211,10 @@
                 (coerce chars 'string))))))
 
 (defmethod col-comment-of ((node real-memory-object-node))
-  (format nil "~A~%~{~A~%~}~A~@[~%Old value: ~A~]"
+  (format nil "~A~%~{~A~%~}~@[Since version: ~A~%~]~A~@[~%Old value: ~A~]"
           (format-hex-info (ref-of node) 16 :address? t)
           (ref-info-of node)
+          (since-of (effective-main-type-of (ref-of node)))
           (atypecase (comment-of (effective-main-type-of (ref-of node)))
             (comment (xml::content it))
             (null "No comment specified.")
