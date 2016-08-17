@@ -106,12 +106,18 @@
 (defgeneric resolve-extent-for-addr (extent address))
 
 (defgeneric get-bytes-for-addr (extent address size)
+  (:documentation
+   "Finds the memory data buffer for address with size bytes guaranteed.
+Returns: buffer, offset of address in array, address of array start; or NIL")
   (:method ((ref memory-object-ref) address size)
     (get-bytes-for-addr (memory-object-ref-memory ref)
                         (+ (memory-object-ref-address ref) address)
                         size)))
 
 (defgeneric get-heap-chunk-size (extent address)
+  (:documentation
+   "Retrieves the malloc chunk dimensions for the address.
+Returns: length of chunk after address, offset in chunk, chunk id; or NIL")
   (:method ((ref memory-object-ref) address)
     (get-heap-chunk-size (memory-object-ref-memory ref)
                          (+ (memory-object-ref-address ref) address)))
@@ -119,10 +125,16 @@
     (values nil nil nil)))
 
 (defgeneric %get-bytes-for-addr/fast-cb (extent)
+  (:documentation
+   "Returns a function for mass lookup of memory data buffers.
+Callback args: ADDRESS SIZE
+Callback returns: buffer, address offset; or NIL")
   (:method ((ref memory-object-ref))
     (%get-bytes-for-addr/fast-cb (memory-object-ref-memory ref))))
 
 (defmacro with-bytes-for-ref ((vector-var offset-var ref size &optional (offset 0)) &body code)
+  "Retrieves the byte buffer and offset to access SIZE bytes of REF+OFFSET.
+Executes body if successful, or returns NIL."
   `(multiple-value-bind (,vector-var ,offset-var)
        (get-bytes-for-addr ,ref ,offset ,size)
      (when ,vector-var

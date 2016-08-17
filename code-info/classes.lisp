@@ -22,6 +22,7 @@
 (macrolet ((frob (elt-type)
              `(progn
                 (defun ,(symbolicate '#:index-chunks/ elt-type) (chunk)
+                  "Create a binary search index for lookup-indexed-chunk/* from sequence chunk."
                   (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
                          (cstarts (mapcar #'start-address-of cset)))
                     (make-indexed-chunks
@@ -31,6 +32,8 @@
                 (declaim (ftype (function ((or indexed-chunks null) ,elt-type) (values t fixnum fixnum))
                                 ,(symbolicate '#:lookup-indexed-chunk/ elt-type)))
                 (defun ,(symbolicate '#:lookup-indexed-chunk/ elt-type) (index address)
+                  "Look up a chunk by address in a binary search index.
+Returns: object, start->address offset, address->end distance."
                   (declare (type ,elt-type address)
                            (optimize (speed 3)))
                   (let ((robj nil)

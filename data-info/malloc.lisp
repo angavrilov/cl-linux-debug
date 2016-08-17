@@ -5,6 +5,12 @@
 (defconstant +num-extents+ (/ (ash 1 32) +max-glibc-heap-size+))
 
 (defstruct malloc-chunk-map
+  "A table of malloc chunks as a sorted address vector for binsearch.
+Fields:
+  range-vector - ordered address vector; value = (start-4)|(1 if unused)
+  extent-list - areas as (start-addr end-addr start-idx end-idx)
+  extent-tbl - table of (start-idx end-idx) by addr/+max-glibc-heap-size+
+  extent-handler-tbl - table of lists of extra info handlers"
   (range-vector (make-binsearch-uint32-vec 1048576))
   (extent-list nil)
   (extent-tbl (make-array +num-extents+ :initial-element nil))
@@ -48,6 +54,10 @@
     chunk-map))
 
 (defmacro with-malloc-chunk-lookup ((name chunk-map &key (range-vec (gensym))) &body code)
+  "Defines lookup function for search by address in CHUNK-MAP.
+RANGE-VEC may be used to access the address vector as simple-array.
+Function:
+  (NAME addr) returns: chunk id or NIL, offset within chunk"
   (with-unique-names (etbl csearch)
     (once-only (chunk-map)
       `(let ((,etbl (malloc-chunk-map-extent-tbl ,chunk-map)))
@@ -74,6 +84,8 @@
              ,@code))))))
 
 (defun malloc-chunk-range (memory chunk-map id &optional address)
+  "Retrieves the address range of malloc chunk ID from the map.
+Returns: min-addr, max-addr, address is in range?"
   (when id
     (let ((vec (malloc-chunk-map-range-vector chunk-map)))
       (let* ((start (aref vec id))
@@ -87,6 +99,8 @@
         (values min max (if address (<= min address max)))))))
 
 (defun lookup-malloc-object (memory chunk-map address)
+  "Looks up address in malloc chunk map.
+Returns: chunk id, min addr, max addr, address is within range?"
   (with-malloc-chunk-lookup (lookup chunk-map)
     (awhen (lookup address)
       (multiple-value-bind (min max ok?)

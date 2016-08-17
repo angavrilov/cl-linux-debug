@@ -33,11 +33,11 @@
   (:default-initargs
       :column-types
       '("gchararray" "gchararray" "gchararray" "gchararray" "gchararray"
-        "gchararray" "gchararray" "gint" "gchararray" "gchararray")
+        "gchararray" "gchararray" "gint" "gchararray" "gchararray" "gchararray")
       :column-accessors
       '(col-offset-of col-name-of col-type-of col-value-of col-info-of
         col-comment-of col-row-color-of col-name-weight-of
-        col-type-color-of col-offset-color-of)))
+        col-type-color-of col-offset-color-of col-name-color-of)))
 
 (def (class* e) memory-object-node (object-node address-chunk)
   ((master-node nil :reader t)
@@ -98,6 +98,13 @@
 
 (defgeneric col-name-weight-of (node)
   (:method ((node memory-object-node)) 400))
+
+(defgeneric col-name-color-of (node)
+  (:method ((node memory-object-node))
+    nil)
+  (:method :around ((node memory-object-node))
+    (or (call-next-method)
+        (col-row-color-of node))))
 
 (defgeneric refresh-node-values (node)
   (:method ((node memory-object-node))

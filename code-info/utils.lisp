@@ -206,8 +206,12 @@
 (defun make-binsearch-uint32-vec (&optional (size 0) &rest flags)
   (apply #'make-array size :element-type 'uint32 :fill-pointer 0 :adjustable t flags))
 
+(declaim (ftype (function (vector) (values (simple-array * (*)) fixnum))
+                get-vector-simple-array))
+
 (defun get-vector-simple-array (vector)
-  (sb-kernel:with-array-data ((dv vector) (sv) (ev))
+  (declare (optimize (speed 3) (space 0) (sb-c::insert-array-bounds-checks 0)))
+  (sb-kernel:with-array-data ((dv vector) (sv) (ev) :force-inline t)
     (assert (= sv 0))
     (values dv ev)))
 
@@ -220,6 +224,11 @@
      ,@code))
 
 (defmacro with-simple-vector-fill ((sv-var fill-vector elt-type) &body code)
+  "Implements optimized mass insertion of values into a fill-pointer vector
+of ELT-TYPE. Note that fill-pointer is not valid inside the body code.
+Defines locals:
+  SV-VAR/size: current allocated size of the vector
+  (SV-VAR/push-extend value): optimized vector-push-extend"
   (let ((size-var (symbolicate sv-var '#:/size))
         (push-extend (symbolicate sv-var '#:/push-extend)))
     (with-unique-names (fill-ptr fill-vec real-push)
@@ -255,6 +264,8 @@
                (setf (fill-pointer ,fill-vec) ,fill-ptr))))))))
 
 (defmacro with-unsafe-int-read ((reader-name vector) &body code)
+  "Defines a local macro (READER-NAME offset size &key :signed?) to read int
+values from the uint8 vector VECTOR via cffi without any runtime checks."
   (with-unique-names (vec ptr)
     `(let ((,vec ,vector))
        (declare (type (simple-array uint8 (*)) ,vec))
@@ -275,6 +286,12 @@
 
 (defmacro with-binsearch-in-array ((name vector elt-type comparator
                                          &key array-var right-edge?) &body code)
+  "Defines a local function for binary search in VECTOR of ELT-TYPE using COMPARATOR.
+ARRAY-VAR may be used to access the simple-array with the data. Depending on RIGHT-EDGE?
+the search either looks for leftmost right index or rightmost left index that compares
+true to the key.
+Function:
+  (NAME key &optional min-bound max-bound) - searches [min-bound, max-bound)"
   (with-unique-names (arr-size)
     (let ((arr (or array-var (gensym "ARR")))
           (key-tmp-type (unless (eq elt-type '*)
