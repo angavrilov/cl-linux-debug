@@ -28,6 +28,21 @@
 (defmacro uint32 (arg)
   `(the uint32 (logand ,arg +uint32-mask+)))
 
+;; Address data type
+
+(deftype address-int () #+x86-64 'fixnum #-x86-64 'uint32)
+
+(defconstant +min-address+ #+x86-64 most-negative-fixnum #-x86-64 0)
+(defconstant +max-address+ #+x86-64 most-positive-fixnum #-x86-64 +uint32-mask+)
+
+(defmacro address-int (arg)
+  #+x86-64
+  `(the address-int (sb-c::mask-signed-field #.(1+ (integer-length most-positive-fixnum)) ,arg))
+  #-x86-64
+  `(the address-int (logand ,arg +max-address+)))
+
+;; Mapping
+
 (def (structure ea) memory-mapping
   (start-addr 0)
   (end-addr 0)
@@ -41,9 +56,10 @@
 ;; Offsets
 
 (deftype offset () '(or signed-byte ratio null))
-(deftype address () '(or unsigned-byte ratio null))
+(deftype address () '(or address-int ratio null))
 
 (defun format-hex-offset (offset &key force-sign? (prefix "0x"))
+  "Convert an integer or fractional address to hex representation."
   (multiple-value-bind (int rest) (floor offset 1)
     (string-downcase
      (format nil "~@[~A~]~A~X~@[.~A~]"
@@ -56,6 +72,7 @@
                ((1/8 2/8 3/8 4/8 5/8 6/8 7/8) (* 8 rest)))))))
 
 (defun parse-hex-offset (offset)
+  "Parse a possibly signed or fractional hex string to a number."
   (or (cl-ppcre:register-groups-bind (sign? body tail)
           ("([-+])?0x([0-9a-fA-F]+)(?:.([0-7]))?" offset)
         (check-type body string)
@@ -71,9 +88,13 @@
 (declaim (inline signed unsigned))
 
 (defun unsigned (value &optional (bits 32))
+  "Clamp the value to an unsigned number with the specified bit size."
   (logand value (1- (ash 1 bits))))
 
 (defun signed (value &optional (bits 32))
+  #+sbcl
+  (sb-c::mask-signed-field bits value)
+  #-sbcl
   (if (logbitp (1- bits) value)
       (dpb value (byte bits 0) -1)
       value))
@@ -84,11 +105,15 @@
 (defgeneric length-of (object))
 
 (defun make-chunk-table ()
+  "Create a binary tree keyed by start-address-of."
   (make-binary-tree :red-black #'<
                     :key #'start-address-of
                     :test #'=))
 
 (defun lookup-chunk (table address)
+  "Find the specified address in a tree keyed by start-address-of,
+verifying that the address fits within length-of.
+Returns: found-object offset"
   (awhen (lower-bound address table)
     (let ((offset (- address (start-address-of it))))
       (values (if (or (null (length-of it))
@@ -97,6 +122,7 @@
               offset))))
 
 (defun lookup-next-chunk (table address)
+  "Find the closest object after the address in tree keyed by start-address-of."
   (upper-bound (1+ address) table))
 
 ;; Binary data parsing
@@ -105,6 +131,8 @@
   (make-array size :element-type 'uint8))
 
 (defun parse-int (vector start size-bytes &key signed? &aux (result 0))
+  "Parse an integer from a byte vector, starting at offset start.
+Returns: value, size-bytes"
   (declare (type (vector uint8) vector))
   (loop for i from 0 below size-bytes
      and j from start
@@ -116,6 +144,7 @@
           size-bytes))
 
 (defun (setf parse-int) (value vector start size-bytes)
+  "Write an integer to a byte vector in binary, starting at offset start."
   (loop for i from 0 below size-bytes
      and j from start
      do (setf (aref vector j)
@@ -151,15 +180,19 @@
                         ,size-bytes)))))))
 
 (defmacro parsef (cmd vector pos &rest args)
+  "Parse a value from vector starting and pos using cmd, and increment pos by size."
   (with-unique-names (rv size)
     `(multiple-value-bind (,rv ,size) (,cmd ,vector ,pos ,@args)
        (incf ,pos ,size)
        ,rv)))
 
 (defmacro parse-intf (vector pos size &rest flags)
+  "Parse an integer from vector starting at pos, and increment pos."
   `(parsef parse-int ,vector ,pos ,size ,@flags))
 
 (defun parse-string (vector start &key (limit (length vector)))
+  "Parse a null terminated string from vector at start with limited length.
+Returns: string, size"
   (declare (type (vector uint8) vector))
   (let* ((length (loop for i from start
                     when (or (>= i limit)
@@ -171,9 +204,12 @@
     (values str (1+ length))))
 
 (defmacro parse-stringf (vector pos)
+  "Parse a null terminated string from VECTOR at POS and increment POS."
   `(parsef parse-string ,vector ,pos))
 
 (defun parse-leb128 (vector start &key signed?)
+  "Parse a LEB128-encoded integer from byte vector.
+Returns: value, size"
   (declare (type (vector uint8) vector))
   (let ((value 0))
     (declare (type unsigned-byte value))
@@ -189,9 +225,12 @@
                         (1+ j))))))))
 
 (defmacro parse-leb128f (vector pos &rest flags)
+  "Parse a LEB128-encoded integer from byte VECTOR and increment POS."
   `(parsef parse-leb128 ,vector ,pos ,@flags))
 
 (defun parse-bytes (vector start size)
+  "Extract a sub-vector from a byte vector of given dimensions.
+Returns: vector, size"
   (declare (type (vector uint8) vector))
   (let ((buf (make-array size :element-type 'uint8)))
     (loop for i from 0 below size and j from start
@@ -199,23 +238,34 @@
     (values buf size)))
 
 (defmacro parse-bytesf (vector pos size)
+  "Extract a sub-vector from a byte VECTOR and advance POS."
   `(parsef parse-bytes ,vector ,pos ,size))
 
 ;; Binary search
 
 (defun make-binsearch-uint32-vec (&optional (size 0) &rest flags)
+  "Allocate an array for use as uint32 binsearch key."
   (apply #'make-array size :element-type 'uint32 :fill-pointer 0 :adjustable t flags))
+
+#+x86-64
+(defun make-binsearch-addr64-vec (&optional (size 0) &rest flags)
+  "Allocate an array for use as 64-bit address binsearch key."
+  (apply #'make-array size :element-type 'address-int :fill-pointer 0 :adjustable t flags))
 
 (declaim (ftype (function (vector) (values (simple-array * (*)) fixnum))
                 get-vector-simple-array))
 
 (defun get-vector-simple-array (vector)
+  "Unwrap the simple array backing an adjustable vector.
+Returns: backing-vector end-index"
   (declare (optimize (speed 3) (space 0) (sb-c::insert-array-bounds-checks 0)))
   (sb-kernel:with-array-data ((dv vector) (sv) (ev) :force-inline t)
     (assert (= sv 0))
     (values dv ev)))
 
 (defmacro with-vector-array ((sv-var vector elt-type &key (size (gensym))) &body code)
+  "Bind SV-VAR to the simple array backing adjustable VECTOR of ELT-TYPE.
+Optionally bind SIZE to the adjusted size."
   `(multiple-value-bind (,sv-var ,size)
        (get-vector-simple-array ,vector)
      (declare (type (simple-array ,elt-type (*)) ,sv-var)
@@ -284,6 +334,20 @@ values from the uint8 vector VECTOR via cffi without any runtime checks."
                                          ,offset))))
              ,@code))))))
 
+(defmacro with-unsafe-pointer-read ((reader-name int-reader is-64bit?) &body code)
+  "Defines a local function for reading a pointer via with-unsafe-int-read INT-READER.
+The function appropriately reads a 32 or 64-bit pointer depending on is-64bit?.
+Function:
+  (READER-NAME offset)"
+  (with-unique-names (is-64? offset)
+    `(let ((,is-64? ,is-64bit?))
+       (flet ((,reader-name (,offset)
+                (if ,is-64?
+                    (address-int (,int-reader ,offset 8 :signed? t))
+                    (,int-reader ,offset 4 :signed? nil))))
+         (declare (inline ,reader-name))
+         ,@code))))
+
 (defmacro with-binsearch-in-array ((name vector elt-type comparator
                                          &key array-var right-edge?) &body code)
   "Defines a local function for binary search in VECTOR of ELT-TYPE using COMPARATOR.
@@ -335,6 +399,9 @@ Function:
            ,@code)))))
 
 (defmacro def-binsearch-fun (name &key (elt-type '*) (comparator 'cmp cmp-p))
+  "Define function for binary search in a vector of specified element type.
+Function:
+  (NAME vector key [&key comparator]) -> index?"
   `(defun ,name (bs-vector key ,@(unless cmp-p '(&key (cmp #'<))))
      (declare ,@(unless cmp-p `((type function cmp)))
               #+sbcl (sb-ext:muffle-conditions sb-ext:compiler-note))
@@ -345,4 +412,8 @@ Function:
 (def-binsearch-fun binsearch-uint32-< :elt-type uint32 :comparator #'<)
 (def-binsearch-fun binsearch-uint32-<= :elt-type uint32 :comparator #'<=)
 
+#+x86-64
+(def-binsearch-fun binsearch-addr64-< :elt-type address-int :comparator #'<)
+#+x86-64
+(def-binsearch-fun binsearch-addr64-<= :elt-type address-int :comparator #'<=)
 

@@ -14,13 +14,18 @@
    (data-bytes :reader t))
   (:documentation "Mapped executable memory chunk with contained data"))
 
+;; Binary search index for chunks
+
 (defstruct indexed-chunks
   (addrs nil :type (simple-array * (*)))
   (lengths nil :type simple-vector)
-  (objs nil :type simple-vector))
+  (objs nil :type simple-vector)
+  (lookup-fn nil :type (function (* *) (values t fixnum fixnum))))
 
-(macrolet ((frob (elt-type)
+(macrolet ((frob (elt-type size-mask)
              `(progn
+                (declaim (ftype (function ((or indexed-chunks null) ,elt-type) (values t fixnum fixnum))
+                                ,(symbolicate '#:lookup-indexed-chunk/ elt-type)))
                 (defun ,(symbolicate '#:index-chunks/ elt-type) (chunk)
                   "Create a binary search index for lookup-indexed-chunk/* from sequence chunk."
                   (let* ((cset (stable-sort chunk #'< :key #'start-address-of))
@@ -28,9 +33,8 @@
                     (make-indexed-chunks
                      :addrs (make-array (length cset) :element-type ',elt-type :initial-contents cstarts)
                      :lengths (coerce (mapcar #'length-of cset) 'vector)
-                     :objs (coerce cset 'vector))))
-                (declaim (ftype (function ((or indexed-chunks null) ,elt-type) (values t fixnum fixnum))
-                                ,(symbolicate '#:lookup-indexed-chunk/ elt-type)))
+                     :objs (coerce cset 'vector)
+                     :lookup-fn #',(symbolicate '#:lookup-indexed-chunk/ elt-type))))
                 (defun ,(symbolicate '#:lookup-indexed-chunk/ elt-type) (index address)
                   "Look up a chunk by address in a binary search index.
 Returns: object, start->address offset, address->end distance."
@@ -51,13 +55,31 @@ Returns: object, start->address offset, address->end distance."
                             (let* ((base (aref addrs it))
                                    (size (svref lengths it))
                                    (obj (svref objs it))
-                                   (diff (logand (- address base) #xFFFFFFFF)))
+                                   (diff (logand (- address base) ,size-mask)))
                               (declare (type (integer 0 #.most-positive-fixnum) size)
                                        (type ,elt-type base diff))
                               (when (< diff size)
                                 (setq robj obj roff (the fixnum diff) rgap (- size diff))))))))
                     (values robj roff rgap))))))
-  (frob uint32))
+  (frob uint32 +uint32-mask+)
+  #+x86-64
+  (frob address-int +max-address+))
+
+(defun index-chunks (chunks &key is-64bit?)
+  "Create a binary search index for lookup-indexed-chunk from sequence chunks."
+  #-x86-64
+  (declare (ignore is-64bit?))
+  (cond #+x86-64
+        (is-64bit? (index-chunks/address-int chunks))
+        (t         (index-chunks/uint32 chunks))))
+
+(declaim (ftype (function ((or indexed-chunks null) *) (values t fixnum fixnum)) lookup-indexed-chunk)
+         (inline lookup-indexed-chunk))
+
+(defun lookup-indexed-chunk (index address)
+  "Lookup a chunk in the given index, using the address as key.
+Returns: object, start->address offset, address->end distance."
+  (funcall (indexed-chunks-lookup-fn index) index address))
 
 ;; On-disk executable
 
@@ -88,6 +110,7 @@ Returns: object, start->address offset, address->end distance."
    (binary-timestamp :reader t :initform nil)
    (entry-address :reader t)
    (shared-lib? :reader t)
+   (is-64bit? :reader t)
    (region-map (make-chunk-table) :reader t :documentation "Symbol table data")
    (region-name-map (make-hash-table :test #'equal) :reader t))
   (:documentation "Information about an on-disk executable image"))
@@ -184,6 +207,9 @@ Returns: object, start->address offset, address->end distance."
   ((executable :reader t))
   (:documentation "Relocated executable/library image"))
 
+(defmethod is-64bit? ((image loaded-image))
+  (is-64bit? (origin-of image)))
+
 (defmethod md5-hash-of ((image loaded-object))
   (md5-hash-of (origin-of image)))
 
@@ -199,6 +225,9 @@ Returns: object, start->address offset, address->end distance."
    (all-images nil :accessor t)
    (function-map (make-chunk-table) :reader t))
   (:documentation "Data of all images comprising a loaded program"))
+
+(defmethod is-64bit? ((image loaded-executable))
+  (is-64bit? (main-image-of image)))
 
 (defgeneric detect-image-relocation (image executable mappings))
 

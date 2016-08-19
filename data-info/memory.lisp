@@ -40,8 +40,8 @@
 (defmethod resolve-extent-for-addr ((mirror memory-mirror) addr)
   (with-slots (lock extent-idx section-idx null-extent) mirror
     (with-recursive-lock-held (lock)
-      (or (lookup-indexed-chunk/uint32 extent-idx (floor addr))
-          (lookup-indexed-chunk/uint32 section-idx (floor addr))
+      (or (lookup-indexed-chunk extent-idx (floor addr))
+          (lookup-indexed-chunk section-idx (floor addr))
           null-extent))))
 
 (defmethod resolve-extent-for-addr ((ext memory-extent) addr)
@@ -81,11 +81,11 @@
     (lambda (addr size)
       (declare (type fixnum size))
       (multiple-value-bind (ext off sz)
-          (lookup-indexed-chunk/uint32 extent-idx addr)
+          (lookup-indexed-chunk extent-idx addr)
         (if (and ext (< size sz))
             (values (data-bytes-of ext) off)
             (multiple-value-bind (ext off sz)
-                (lookup-indexed-chunk/uint32 section-idx addr)
+                (lookup-indexed-chunk section-idx addr)
               (if (and ext (< size sz))
                   (values (data-bytes-of ext) off)
                   (values nil 0))))))))
@@ -151,8 +151,8 @@
            collect (ensure-memory-extent mirror map))
       (setf (extents-of mirror) it)
       (with-slots (extent-idx section-idx) mirror
-        (setf extent-idx (index-chunks/uint32 it)
-              section-idx (index-chunks/uint32
+        (setf extent-idx (index-chunks it)
+              section-idx (index-chunks
                            (loop for sect in (sections-of (executable-of mirror))
                               unless (null (data-bytes-of sect))
                               collect (ensure-section-extent mirror sect))))))))
